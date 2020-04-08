@@ -27,7 +27,7 @@ traindir = datadir + 'train/'
 validdir = datadir + 'val/'
 testdir = datadir + 'test/'
 # Change to fit hardware
-batch_size = 48
+batch_size = 256
 
 # Check if GPU avalaible
 train_on_gpu = cuda.is_available()
@@ -55,12 +55,12 @@ model = VAE(zdim=3)
 if train_on_gpu:
     model.cuda()
 
-print(model)
+#print(model)
 summary(model,input_size=(4,128,128),batch_size=128)
 
 optimizer = optim.Adam(model.parameters(), lr=1e-4)
 
-epochs = 40
+epochs = 500
 
 model, history = train_VAE_model(epochs, model, optimizer, dataloader, train_on_gpu)
 
@@ -69,11 +69,11 @@ plot_train_result(history)
 #SAVE TRAINED MODEL and history
 history_save = 'outputs/plot_history/'+f'loss_evo_toytrain_{datetime.date.today()}.pkl'
 #Save Training history
-#with open(history_save, 'wb') as f:
-#    pkl.dump(history, f, protocol=pkl.HIGHEST_PROTOCOL)
+with open(history_save, 'wb') as f:
+    pkl.dump(history, f, protocol=pkl.HIGHEST_PROTOCOL)
 
-#save_model_path = 'outputs/saves/'+f'VAE_toytrain_{datetime.date.today()}.pth'
-#save_checkpoint(model,save_model_path)
+save_model_path = 'outputs/saved_models/'+f'VAE_toytrain_{datetime.date.today()}.pth'
+save_checkpoint(model,save_model_path)
 
 
 ##########################################################
@@ -92,8 +92,8 @@ plot_train_result(history)
 # %% Load an existing model and continue to train it (or make pred)
 ##########################################################
 
-date = '2020-04-06'
-load_model_path = 'outputs/saves/'+f'VAE_toytrain_{date}.pth'
+date = '2020-04-09'
+load_model_path = 'outputs/saved_models/'+f'VAE_toytrain_{date}.pth'
 
 model = VAE(zdim=3) ## TODO: Modularize that to have the network built inside the load function
 if train_on_gpu:
@@ -102,4 +102,4 @@ model, optimizer = load_checkpoint(model,load_model_path)
 
 # %%
 #SEE THE RECONSTRUCTION FOR RANDOM SAMPLE OF VAL DATASET
-inference_recon(model, dataloader['val'], 16, train_on_gpu)
+inference_recon(model, dataloader['train'], 16, train_on_gpu)

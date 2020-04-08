@@ -46,8 +46,9 @@ def train(epoch, model, optimizer, train_loader, train_on_gpu):
                        100. * batch_idx / len(train_loader),
                        loss.item() / len(data)),end='\r')
 
-    print('==========> Epoch: {} ==========> Average loss: {:.4f}'.format(epoch, train_loss / len(train_loader.dataset)))
-    print(f'{timer() - start:.2f} seconds elapsed in epoch.')
+    if epoch % 10 == 0:
+        print('==========> Epoch: {} ==========> Average loss: {:.4f}'.format(epoch, train_loss / len(train_loader.dataset)))
+        print(f'{timer() - start:.2f} seconds elapsed in epoch.')
     return train_loss / len(train_loader.dataset)
 
 def test(epoch, model, optimizer, test_loader, train_on_gpu):
@@ -69,7 +70,8 @@ def test(epoch, model, optimizer, test_loader, train_on_gpu):
             test_loss += model.loss_function(recon_batch, data, mu, logvar).item()
 
         test_loss /= len(test_loader.dataset)
-        print('====> Test set loss: {:.4f}'.format(test_loss))
+        if epoch % 10 == 0:
+            print('====> Test set loss: {:.4f}'.format(test_loss))
 
     return test_loss
 
@@ -123,15 +125,18 @@ def inference_recon(model, inference_loader, num_img, train_on_gpu):
 
         recon, _, _ = model(features)
         # TODO: WARNING, we show only 3 first channel to plot, but find a better option !
-        show(make_grid(features[:num_img,:1,:,:],nrow=int(np.sqrt(num_img))))
-        show(make_grid(recon[:num_img,:1,:,:],nrow=int(np.sqrt(num_img))))
+        show(make_grid(features[:num_img,:1,:,:],nrow=int(np.sqrt(num_img))),train_on_gpu)
+        show(make_grid(recon[:num_img,:1,:,:],nrow=int(np.sqrt(num_img))),train_on_gpu)
 
         #To save the img, use save_image from torch utils
 
 
 
-def show(img):
-    npimg = img.numpy()
+def show(img, train_on_gpu):
+    if train_on_gpu:
+        npimg = img.cpu().numpy()
+    else:
+        npimg = img.numpy()
     plt.figure(figsize=(10,10))
     plt.imshow(np.transpose(npimg, (1,2,0)), interpolation='nearest')
 
