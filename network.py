@@ -2,8 +2,8 @@
 # @Date:   2020-04-02T12:15:22+11:00
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning Methods for Cell Profiling
-# @Last modified by:   sachahaidinger
-# @Last modified time: 2020-04-06T16:03:09+10:00
+# @Last modified by:   sachahai
+# @Last modified time: 2020-04-10T17:36:02+10:00
 
 '''
 File containing VAE architecture, to reconstruct 4x128x128 single cell images,
@@ -38,16 +38,16 @@ class VAE(nn.Module):
         self.bn4 = nn.BatchNorm2d(256)
 
         #mu
-        self.fc11 = nn.Linear(8*8*256,256) #Feature extraction of 100 Features
-        self.fc12 = nn.Linear(256,self.zdim)
+        self.fc11 = nn.Linear(8*8*256,512) #Feature extraction of 100 Features
+        self.fc12 = nn.Linear(512,self.zdim)
 
         #logvar
-        self.fc21 = nn.Linear(8*8*256,256) #Feature extraction of 100 Features
-        self.fc22 = nn.Linear(256,self.zdim)
+        self.fc21 = nn.Linear(8*8*256,512) #Feature extraction of 100 Features
+        self.fc22 = nn.Linear(512,self.zdim)
 
         ##### Decoding Layers #####
-        self.fc3 = nn.Linear(self.zdim,256)
-        self.fc4 = nn.Linear(256,8*8*256)
+        self.fc3 = nn.Linear(self.zdim,512)
+        self.fc4 = nn.Linear(512,8*8*256)
 
         self.deconv1 = nn.ConvTranspose2d(in_channels=256, out_channels=128, kernel_size=4, padding=1, stride=2)
         self.bn5 = nn.BatchNorm2d(128)
@@ -116,7 +116,7 @@ class VAE(nn.Module):
         return x_rec, mu_z, logvar_z
 
 
-    def loss_function(self, x_recon, x, mu, logvar):
+    def loss_function(self, x_recon, x, mu, logvar, beta):
 
         kl = - 0.5 * (1 + logvar - mu.pow(2) - logvar.exp())
         kl_loss = kl.sum() / x.size(0) #divide by batch size
@@ -124,6 +124,6 @@ class VAE(nn.Module):
         recon = 0.5 * (x_recon - x).pow(2)
         recon_loss = recon.sum() / x.size(0)
 
-        loss = kl_loss + recon_loss
+        loss = beta*kl_loss + recon_loss
 
-        return loss
+        return loss, kl_loss, recon_loss

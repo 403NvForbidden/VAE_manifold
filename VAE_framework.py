@@ -2,8 +2,8 @@
 # @Date:   2020-04-03T09:27:00+11:00
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning Methods for Cell Profiling
-# @Last modified by:   sachahaidinger
-# @Last modified time: 2020-04-07T17:58:04+10:00
+# @Last modified by:   sachahai
+# @Last modified time: 2020-04-10T22:03:03+10:00
 
 ##########################################################
 # %% imports
@@ -27,7 +27,7 @@ traindir = datadir + 'train/'
 validdir = datadir + 'val/'
 testdir = datadir + 'test/'
 # Change to fit hardware
-batch_size = 256
+batch_size = 128
 
 # Check if GPU avalaible
 train_on_gpu = cuda.is_available()
@@ -51,28 +51,30 @@ _,_ = imshow_tensor(features[0])
 # %% Build custom VAE Model
 ##########################################################
 
-model = VAE(zdim=3)
+model = VAE(zdim=500)
 if train_on_gpu:
     model.cuda()
 
 #print(model)
-summary(model,input_size=(4,128,128),batch_size=128)
+#summary(model,input_size=(4,128,128),batch_size=128)
 
 optimizer = optim.Adam(model.parameters(), lr=1e-4)
 
-epochs = 500
+epochs = 50
 
 model, history = train_VAE_model(epochs, model, optimizer, dataloader, train_on_gpu)
 
 plot_train_result(history)
 
+model_name = '4chan_50e_500z_KL0to1_20e'
+
 #SAVE TRAINED MODEL and history
-history_save = 'outputs/plot_history/'+f'loss_evo_toytrain_{datetime.date.today()}.pkl'
+history_save = 'outputs/plot_history/'+f'loss_evo_{model_name}_{datetime.date.today()}.pkl'
 #Save Training history
 with open(history_save, 'wb') as f:
     pkl.dump(history, f, protocol=pkl.HIGHEST_PROTOCOL)
 
-save_model_path = 'outputs/saved_models/'+f'VAE_toytrain_{datetime.date.today()}.pth'
+save_model_path = 'outputs/saved_models/'+f'VAE_{model_name}_{datetime.date.today()}.pth'
 save_checkpoint(model,save_model_path)
 
 
@@ -92,8 +94,8 @@ plot_train_result(history)
 # %% Load an existing model and continue to train it (or make pred)
 ##########################################################
 
-date = '2020-04-09'
-load_model_path = 'outputs/saved_models/'+f'VAE_toytrain_{date}.pth'
+date = '2020-04-10'
+load_model_path = 'outputs/saved_models/'+f'VAE_4chan_3z_40e_{date}.pth'
 
 model = VAE(zdim=3) ## TODO: Modularize that to have the network built inside the load function
 if train_on_gpu:
@@ -101,5 +103,13 @@ if train_on_gpu:
 model, optimizer = load_checkpoint(model,load_model_path)
 
 # %%
+####Continue to train it
+epochs = 40
+
+model, history = train_VAE_model(epochs, model, optimizer, dataloader, train_on_gpu)
+
+plot_train_result(history)
+
+# %%
 #SEE THE RECONSTRUCTION FOR RANDOM SAMPLE OF VAL DATASET
-inference_recon(model, dataloader['train'], 16, train_on_gpu)
+inference_recon(model, dataloader['val'], 16, train_on_gpu)

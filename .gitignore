@@ -15,7 +15,9 @@ single_cell_image/*
 datadir/*
 OLD/*
 data/*
-outputs/saved_models
+outputs/*
+outputs
+single_cell_processed/*
 
 ### macOS ###
 # General

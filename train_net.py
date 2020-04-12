@@ -2,8 +2,8 @@
 # @Date:   2020-04-06T12:15:33+10:00
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning Methods for Cell Profiling
-# @Last modified by:   sachahaidinger
-# @Last modified time: 2020-04-07T18:17:08+10:00
+# @Last modified by:   sachahai
+# @Last modified time: 2020-04-10T17:36:58+10:00
 
 '''
 File containing main function to train the VAE with proper single cell images dataset
@@ -17,10 +17,12 @@ from timeit import default_timer as timer
 from torch import cuda
 from torchvision.utils import save_image, make_grid
 
-def train(epoch, model, optimizer, train_loader, train_on_gpu):
+def train(epoch, model, optimizer, train_loader, train_on_gpu, beta):
     # toggle model to train mode
     model.train()
     train_loss = 0
+    kl_loss = 0
+    recon_loss = 0
 
     start = timer()
 
@@ -35,28 +37,34 @@ def train(epoch, model, optimizer, train_loader, train_on_gpu):
         recon_batch, mu, logvar = model(data)
 
         # calculate scalar loss
-        loss = model.loss_function(recon_batch, data, mu, logvar)
+        loss, kl_lo, recon_lo = model.loss_function(recon_batch, data, mu, logvar, beta)
 
         loss.backward()
         train_loss += loss.item()
+        kl_loss += kl_lo.item()
+        recon_loss += recon_lo.item()
         optimizer.step()
         if batch_idx % 2 == 0:
             print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                 epoch, batch_idx * len(data), len(train_loader.dataset),
                        100. * batch_idx / len(train_loader),
                        loss.item() / len(data)),end='\r')
-
+    train_loss /= len(train_loader.dataset)
+    kl_loss /= len(train_loader.dataset)
+    recon_loss /= len(train_loader.dataset)
     if epoch % 10 == 0:
-        print('==========> Epoch: {} ==========> Average loss: {:.4f}'.format(epoch, train_loss / len(train_loader.dataset)))
+        print('==========> Epoch: {} ==========> Average loss: {:.4f}'.format(epoch, train_loss))
         print(f'{timer() - start:.2f} seconds elapsed in epoch.')
-    return train_loss / len(train_loader.dataset)
+    return train_loss, kl_loss, recon_loss
 
-def test(epoch, model, optimizer, test_loader, train_on_gpu):
+def test(epoch, model, optimizer, test_loader, train_on_gpu, beta):
     # toggle model to test / inference mode
 
     with torch.no_grad():
         model.eval()
         test_loss = 0
+        kl_loss = 0
+        recon_loss = 0
 
         # each data is of BATCH_SIZE (default 128) samples
         for i, (data, _) in enumerate(test_loader):
@@ -67,13 +75,29 @@ def test(epoch, model, optimizer, test_loader, train_on_gpu):
             # we're only going to infer, so no autograd at all required
             data = Variable(data, requires_grad=False)
             recon_batch, mu, logvar = model(data)
-            test_loss += model.loss_function(recon_batch, data, mu, logvar).item()
+            loss, kl, recon = model.loss_function(recon_batch, data, mu, logvar, beta)
+            test_loss += loss.item()
+            kl_loss += kl.item()
+            recon_loss += recon.item()
 
         test_loss /= len(test_loader.dataset)
+        kl_loss /= len(test_loader.dataset)
+        recon_loss /= len(test_loader.dataset)
         if epoch % 10 == 0:
             print('====> Test set loss: {:.4f}'.format(test_loss))
 
-    return test_loss
+    return test_loss, kl_loss, recon_loss
+
+def beta_set(max_val, interval, epoch):
+    '''Return the beta weighting factor that reduce the weight of KL loss
+    during first epochs.
+    Beta takes value 0 to max_val, linearly between epoch 0 to interval
+    '''
+    beta = 0
+    if epoch <= interval :
+        return (max_val/interval)*(epoch-1)
+    else :
+        return max_val
 
 
 def train_VAE_model(epochs, model, optimizer, dataloader, train_on_gpu):
@@ -88,17 +112,19 @@ def train_VAE_model(epochs, model, optimizer, dataloader, train_on_gpu):
 
     history = []
     overall_start = timer()
-    for epoch in range(1,epochs+1):
+    for epoch in range(model.epochs+1,model.epochs+epochs+1):
 
-        tr_loss = train(epoch, model, optimizer, dataloader['train'], train_on_gpu)
-        te_loss = test(epoch, model, optimizer, dataloader['val'], train_on_gpu)
-        history.append([tr_loss,te_loss])
+        # TODO: Set value for beta evolution outside
+        beta = beta_set(max_val=1.0,interval=20,epoch=epoch)
+        tr_loss, tr_kl, tr_recon = train(epoch, model, optimizer, dataloader['train'], train_on_gpu, beta)
+        te_loss, te_kl, te_recon = test(epoch, model, optimizer, dataloader['val'], train_on_gpu, beta)
+        history.append([tr_loss, tr_kl, tr_recon, te_loss, te_kl, te_recon, beta])
 
         model.epochs += 1
 
     history = pd.DataFrame(
         history,
-        columns=['train_loss', 'valid_loss'])
+        columns=['train_loss','train_kl','train_recon','valid_loss','val_kl','val_recon','beta'])
 
     total_time = timer() - overall_start
     print(
@@ -125,8 +151,8 @@ def inference_recon(model, inference_loader, num_img, train_on_gpu):
 
         recon, _, _ = model(features)
         # TODO: WARNING, we show only 3 first channel to plot, but find a better option !
-        show(make_grid(features[:num_img,:1,:,:],nrow=int(np.sqrt(num_img))),train_on_gpu)
-        show(make_grid(recon[:num_img,:1,:,:],nrow=int(np.sqrt(num_img))),train_on_gpu)
+        show(make_grid(features[:num_img,:3,:,:],nrow=int(np.sqrt(num_img))),train_on_gpu)
+        show(make_grid(recon[:num_img,:3,:,:],nrow=int(np.sqrt(num_img))),train_on_gpu)
 
         #To save the img, use save_image from torch utils
 
@@ -153,18 +179,24 @@ def plot_train_result(history):
     --------
 
     """
-    plt.figure(figsize=(8, 6))
+    plt.figure(figsize=(20, 20))
+    fig, ((ax1 ,ax2),(ax3 ,ax4)) = plt.subplots(2,2)
     #for c in ['train_loss', 'valid_loss']:
     #    plt.plot(
     #        history[c], label=c)
-    plt.plot(history['train_loss'],color='dodgerblue',label='train_loss')
-    plt.plot(history['valid_loss'],color='lightsalmon',label='valid_loss')
-    plt.legend()
-    plt.xlabel('Epoch')
-    plt.ylabel('Average Negative Log Likelihood')
-    plt.title('Training and Validation Losses')
-    plt.savefig('outputs/loss_evo_run1.png')
+    ax1.plot(history['train_loss'],color='dodgerblue',label='train_loss')
+    ax1.plot(history['valid_loss'],color='lightsalmon',label='valid_loss')
+    ax1.set_title('General Loss')
+    ax2.plot(history['train_kl'],color='dodgerblue',label='train KL loss')
+    ax2.plot(history['val_kl'],color='lightsalmon',label='valid KL loss')
+    ax2.set_title('KL Loss')
+    ax3.plot(history['train_recon'],color='dodgerblue',label='train RECON loss')
+    ax3.plot(history['val_recon'],color='lightsalmon',label='valid RECON loss')
+    ax3.set_title('Reconstruction Loss')
+    ax4.plot(history['beta'],color='dodgerblue',label='Beta')
+    ax4.set_title('KL Cost Weight')
 
+    plt.legend()
 
 
 def save_checkpoint(model, path):

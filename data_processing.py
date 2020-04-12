@@ -2,8 +2,8 @@
 # @Date:   2020-04-03T11:51:36+11:00
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning Methods for Cell Profiling
-# @Last modified by:   sachahaidinger
-# @Last modified time: 2020-04-06T13:01:15+10:00
+# @Last modified by:   sachahai
+# @Last modified time: 2020-04-09T19:22:07+10:00
 
 '''
 This file contains classes and function that are usefull to load the raw data,
@@ -13,13 +13,14 @@ organize it throughout batch, and preprocess it to be fed to a VAE network
 from torchvision import datasets
 from torch.utils.data import DataLoader
 from skimage import io
-from skimage.util import img_as_ubyte, pad
+from skimage.util import img_as_float, pad
 from PIL import Image
 from torchvision import transforms
 from skimage.transform import resize
 
 import matplotlib.pyplot as plt
 import numpy as np
+import random
 
 def get_dataloader(root_dir,img_transforms,batchsize):
     """
@@ -53,23 +54,14 @@ def get_dataloader(root_dir,img_transforms,batchsize):
 #Need to specify custom loader for a DataSetFolder, Because ImageFolder CAN'T be used,
 #because it opens image as PIL object, which do not support uint16...
 class load_from_path(object):
-    """Load an image from its path"""
+    """Load an image from its path
+    Samples are returned as ndarray, float64 0-1"""
 
     def __call__(self, path):
 
         sample = io.imread(path,plugin='tifffile') #load H x W x 4 tiff files
-        #Single cell image are already in uint8 (PIL supported format)
-        #sample = img_as_ubyte(sample) # uint8 0-255
-
-        #plt.imshow(sample)
-        #plt.title(f'Raw 1-channel (actin) single image, shape : {sample.shape}')
-        #plt.show()
-
-        #Mimic the 4 channels data that we will have in the end (# TODO: REMOVE)
-        img_4chan = np.repeat(sample[:,:,np.newaxis], repeats=4, axis=2)
-        #convert it to PIL image to allow PyTorch transforms manipulation
-        sample = Image.fromarray(img_4chan) #uint 0-255
-
+        #Single cell image are in uint8
+        sample = img_as_float(sample) # float64 0-1
 
         return sample
 
@@ -98,29 +90,29 @@ def image_tranforms():
         # Train uses data augmentation
         'train':
         transforms.Compose([
-            #Data arrive as HxWx4 uint8 (0-255) image, open with PIL
+            #Data arrive as HxWx4 float64 0-1 ndarray
             # 1) Rescale and Pad to fixed
             zPad_or_Rescale(),
-            # 2) Data augmentation with Pil image
-            transforms.RandomHorizontalFlip(),
+            # 2) Data augmentation
+            RandomHandVFlip(),
             # ROTATION ? WARP ? NOISE ?
-            # 2) Data augmentation with Pil image
             transforms.ToTensor(), #Will rescale to 0-1 Float32
+            Double_to_Float()
 
         ]),
         # Validation does not use augmentation
         'val':
         transforms.Compose([
             zPad_or_Rescale(),
-            transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
+            Double_to_Float()
         ]),
         # Test does not use augmentation
         'test':
         transforms.Compose([
             zPad_or_Rescale(),
-            transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
+            Double_to_Float()
         ]),
     }
 
@@ -131,11 +123,12 @@ def image_tranforms():
 class zPad_or_Rescale(object):
     """Resize all data to fixed size of 128x128
     if any dimension is bigger than 128 -> RESCALE
-    if both dimension are smaller than 128 -> Zero Pad"""
+    if both dimension are smaller than 128 -> Zero Pad
+
+    Image is returned as an ndarray float64 0-1"""
 
     def __call__(self, sample):
-        img = sample #PIL img
-        img_arr = np.array(img) #HxWx4
+        img_arr = sample #HxWx4
 
         h = img_arr.shape[0]
         w = img_arr.shape[1]
@@ -156,13 +149,30 @@ class zPad_or_Rescale(object):
 
         assert img_resized[:,:,0].shape == fixed_size, "Error in padding / rescaling"
 
-        #go back to unint8 to be able to open as a PIL image
-        img_resized = img_as_ubyte(img_resized) # uint8 0-255
-        # TODO:  REALLY consider if using PIL is necessary... data augm can be performed easily by hand !
-        #Retur to PIL img
-        img_pil = Image.fromarray(img_resized)
+        return img_resized
 
-        return img_pil
+
+class RandomHandVFlip(object):
+    """Data augmentation
+    Randomly flip the image verticallz or horizontally"""
+
+    def __call__(self, sample):
+
+        if random.random() < 0.5:
+            sample = np.fliplr(sample)
+
+        if random.random() < 0.5:
+            sample = np.flipud(sample)
+
+        ### TODO:  Do the same with np.rot() ???
+
+        return np.ascontiguousarray(sample)
+
+class Double_to_Float(object):
+
+    def __call__(self, sample):
+
+        return sample.float()
 
 
 def imshow_tensor(tensor_img, ax = None, tittle = None):
@@ -188,7 +198,7 @@ def imshow_tensor(tensor_img, ax = None, tittle = None):
     # Set the color channel as the third dimension
     image = tensor_img.numpy().transpose((1, 2, 0))
 
-    ax.imshow(image[:,:,0])
+    ax.imshow(image[:,:,0:3])
     plt.title('Single_cell image resized to (128x128)')
     #plt.axis('off')
 
