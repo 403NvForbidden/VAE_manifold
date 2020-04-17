@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning Methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-04-10T17:36:58+10:00
+# @Last modified time: 2020-04-14T16:52:15+10:00
 
 '''
 File containing main function to train the VAE with proper single cell images dataset
@@ -55,6 +55,30 @@ def train(epoch, model, optimizer, train_loader, train_on_gpu, beta):
     if epoch % 10 == 0:
         print('==========> Epoch: {} ==========> Average loss: {:.4f}'.format(epoch, train_loss))
         print(f'{timer() - start:.2f} seconds elapsed in epoch.')
+
+
+    # visualize reconstrunction and synthesis
+    if (epoch%15==14):
+        img_grid = make_grid(torch.cat((data[:4,:3,:,:],recon_batch[:4,:3,:,:])), nrow=4, padding=12, pad_value=1)
+
+        plt.figure(figsize=(10,5))
+        plt.imshow(img_grid.detach().cpu().permute(1,2,0))
+        plt.axis('off')
+        plt.title(f'Example data and its reconstruction - epoch {epoch}')
+        plt.show()
+
+        samples = torch.randn(8, 512, 1, 1)
+        samples = Variable(samples,requires_grad=False).cuda()
+        recon = model.decode(samples)
+        img_grid = make_grid(recon[:,:3,:,:], nrow=4, padding=12, pad_value=1)
+
+        plt.figure(figsize=(10,5))
+        plt.imshow(img_grid.detach().cpu().permute(1,2,0))
+        plt.axis('off')
+        plt.title(f'Random generated samples - epoch {epoch}')
+        plt.show()
+
+
     return train_loss, kl_loss, recon_loss
 
 def test(epoch, model, optimizer, test_loader, train_on_gpu, beta):

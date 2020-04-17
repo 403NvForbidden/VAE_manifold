@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning Methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-04-10T22:03:03+10:00
+# @Last modified time: 2020-04-14T16:53:09+10:00
 
 ##########################################################
 # %% imports
@@ -27,7 +27,7 @@ traindir = datadir + 'train/'
 validdir = datadir + 'val/'
 testdir = datadir + 'test/'
 # Change to fit hardware
-batch_size = 128
+batch_size = 32
 
 # Check if GPU avalaible
 train_on_gpu = cuda.is_available()
@@ -51,22 +51,23 @@ _,_ = imshow_tensor(features[0])
 # %% Build custom VAE Model
 ##########################################################
 
-model = VAE(zdim=500)
+### ATTENTION CHANGER AUSSI ZDIM THAN TRAIN RANDOM SAMPLE
+model = VAE(zdim=512,channels=4,base=16,loss='MSE',layer_count=2)
 if train_on_gpu:
     model.cuda()
 
 #print(model)
-#summary(model,input_size=(4,128,128),batch_size=128)
+#summary(model,input_size=(4,256,256),batch_size=32)
 
 optimizer = optim.Adam(model.parameters(), lr=1e-4)
 
-epochs = 50
+epochs = 105
 
 model, history = train_VAE_model(epochs, model, optimizer, dataloader, train_on_gpu)
 
 plot_train_result(history)
 
-model_name = '4chan_50e_500z_KL0to1_20e'
+model_name = '4chan_105e_512z_model2'
 
 #SAVE TRAINED MODEL and history
 history_save = 'outputs/plot_history/'+f'loss_evo_{model_name}_{datetime.date.today()}.pkl'
@@ -82,7 +83,7 @@ save_checkpoint(model,save_model_path)
 # %% Visualize training history
 ##########################################################
 
-history_load = 'outputs/plot_history/'+f'loss_evo_toytrain_2020-04-06.pkl'
+history_load = 'outputs/plot_history/'+f'loss_evo_{model_name}_{datetime.date.today()}.pkl'
 with open(history_load, 'rb') as f:
     history = pkl.load(f)
 

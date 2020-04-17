@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning Methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-04-09T19:22:07+10:00
+# @Last modified time: 2020-04-13T16:06:13+10:00
 
 '''
 This file contains classes and function that are usefull to load the raw data,
@@ -39,8 +39,8 @@ def get_dataloader(root_dir,img_transforms,batchsize):
     #Create DataIterator, yield batch of img and label easily and in time, to not load full heavy set
     # Dataloader iterators
     dataloaders = {
-        'train': DataLoader(data['train'], batch_size=batchsize, shuffle=True),
-        'val': DataLoader(data['val'], batch_size=batchsize, shuffle=True),
+        'train': DataLoader(data['train'], batch_size=batchsize, shuffle=True, drop_last=True),
+        'val': DataLoader(data['val'], batch_size=batchsize, shuffle=True, drop_last=True),
         #'test': DataLoader(data['test'], batch_size=batchsize, shuffle=True)
     }
 
@@ -60,8 +60,9 @@ class load_from_path(object):
     def __call__(self, path):
 
         sample = io.imread(path,plugin='tifffile') #load H x W x 4 tiff files
-        #Single cell image are in uint8
-        sample = img_as_float(sample) # float64 0-1
+        #Single cell image are in uint8, 0-255
+
+        sample = img_as_float(sample) # float64 0 - 1.0
 
         return sample
 
@@ -90,7 +91,7 @@ def image_tranforms():
         # Train uses data augmentation
         'train':
         transforms.Compose([
-            #Data arrive as HxWx4 float64 0-1 ndarray
+            #Data arrive as HxWx4 float64 0 - 1.0 ndarray
             # 1) Rescale and Pad to fixed
             zPad_or_Rescale(),
             # 2) Data augmentation
@@ -121,9 +122,9 @@ def image_tranforms():
 
 #Create callable class to have custom tranform of our data
 class zPad_or_Rescale(object):
-    """Resize all data to fixed size of 128x128
-    if any dimension is bigger than 128 -> RESCALE
-    if both dimension are smaller than 128 -> Zero Pad
+    """Resize all data to fixed size of 256x256
+    if any dimension is bigger than 256 -> RESCALE
+    if both dimension are smaller than 256 -> Zero Pad
 
     Image is returned as an ndarray float64 0-1"""
 
@@ -133,7 +134,7 @@ class zPad_or_Rescale(object):
         h = img_arr.shape[0]
         w = img_arr.shape[1]
 
-        fixed_size = (128,128)
+        fixed_size = (256,256)
 
         if ((h > fixed_size[0]) or (w > fixed_size[1])):
             # Resize
@@ -199,7 +200,7 @@ def imshow_tensor(tensor_img, ax = None, tittle = None):
     image = tensor_img.numpy().transpose((1, 2, 0))
 
     ax.imshow(image[:,:,0:3])
-    plt.title('Single_cell image resized to (128x128)')
+    plt.title('Single_cell image resized to (256x256)')
     #plt.axis('off')
 
     return ax, image
