@@ -1,19 +1,20 @@
-# @Author: Sacha Haidinger <sachahaidinger>
-# @Date:   2020-04-03T09:27:00+11:00
+# @Author: Sacha Haidinger <sachahai>
+# @Date:   2020-04-30T11:43:21+10:00
 # @Email:  sacha.haidinger@epfl.ch
-# @Project: Learning Methods for Cell Profiling
+# @Project: Learning methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-05-07T13:52:20+10:00
+# @Last modified time: 2020-05-05T23:17:30+10:00
+
 
 ##########################################################
 # %% imports
 ##########################################################
 
-from networks import VAE, Skip_VAE
+from infoMAX_VAE import CNN_VAE, MLP_MI_estimator
 from torchsummary import summary
 from torch import cuda, optim
 from data_processing import get_dataloader, image_tranforms, imshow_tensor
-from train_net import train_VAE_model, inference_recon
+from train_net import train_InfoMAX_model, inference_recon
 from helpers import plot_train_result, save_checkpoint, load_checkpoint, save_brute, load_brute, plot_latent_space
 import torch
 import datetime
@@ -57,26 +58,25 @@ _,_ = imshow_tensor(features[0])
 # %% Build custom VAE Model
 ##########################################################
 
+VAE = CNN_VAE(zdim=128, alpha=0, beta=1, base_enc=32, base_dec=32, depth_factor_dec=2)
+MLP = MLP_MI_estimator(zdim=128)
 
-#model = VAE(zdim=2,channels=4,base=16,loss='MSE',layer_count=2,input_size=input_size)
-model = Skip_VAE(zdim=128, beta=1, base_enc=32, base_dec=32, depth_factor_dec=2)
+opti_VAE = optim.Adam(VAE.parameters(), lr=0.001, betas=(0.9, 0.999))
+opti_MLP = optim.Adam(MLP.parameters(), lr=0.0001, betas=(0.9, 0.999))
+
 if train_on_gpu:
-    model.cuda()
+    VAE.cuda()
+    MLP.cuda()
 
-#print(model)
-summary(model,input_size=(4,input_size,input_size),batch_size=32)
+summary(VAE,input_size=(4,64,64),batch_size=32)
 
-optimizer = optim.Adam(model.parameters(), lr=1e-4)
+epochs = 60
 
-epochs = 30
 
-# KL annealing parameter : [max_value, start_increace, reach_max_value]
-#beta_init = [1.0,5,55]
-model, history = train_VAE_model(epochs, model, optimizer, dataloader, train_on_gpu)
+VAE, MLP, history = train_InfoMAX_model(epochs, VAE, MLP, opti_VAE, opti_MLP, dataloader, train_on_gpu)
 
-fig = plot_train_result(history, only_train_data=True)
+fig = plot_train_result(history, infoMAX = True, only_train_data=True)
 fig.show()
-
 #model_name = '4chan_105e_512z_model2'
 #model_name = '4chan_1000e_2z_model2'
 
@@ -113,11 +113,6 @@ model_name = 'testMODEL_z2_e300'
 load_model_path = 'outputs/saved_models/'+f'VAE_{model_name}_{date}.pth'
 
 model = load_brute(load_model_path)
-
-
-# %%
-#SEE THE RECONSTRUCTION FOR RANDOM SAMPLE OF VAL DATASET
-inference_recon(model, dataloader['val'], 16, train_on_gpu)
 
 
 # %%

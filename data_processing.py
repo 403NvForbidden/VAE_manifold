@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning Methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-04-13T16:06:13+10:00
+# @Last modified time: 2020-04-20T09:09:57+10:00
 
 '''
 This file contains classes and function that are usefull to load the raw data,
@@ -66,7 +66,7 @@ class load_from_path(object):
 
         return sample
 
-def image_tranforms():
+def image_tranforms(input_size):
     """
     Basic preprocessing that will be apply on data throughout dataloader.
     Apply this pipeline if dataset is already in PATCH (64,64), or other.
@@ -76,7 +76,7 @@ def image_tranforms():
 
     Parameters
     ----------
-    None
+    input_size (int) : Image will be reshaped C x input_size x input_size
 
     Returns
     -------
@@ -93,7 +93,7 @@ def image_tranforms():
         transforms.Compose([
             #Data arrive as HxWx4 float64 0 - 1.0 ndarray
             # 1) Rescale and Pad to fixed
-            zPad_or_Rescale(),
+            zPad_or_Rescale(input_size),
             # 2) Data augmentation
             RandomHandVFlip(),
             # ROTATION ? WARP ? NOISE ?
@@ -104,14 +104,14 @@ def image_tranforms():
         # Validation does not use augmentation
         'val':
         transforms.Compose([
-            zPad_or_Rescale(),
+            zPad_or_Rescale(input_size),
             transforms.ToTensor(),
             Double_to_Float()
         ]),
         # Test does not use augmentation
         'test':
         transforms.Compose([
-            zPad_or_Rescale(),
+            zPad_or_Rescale(input_size),
             transforms.ToTensor(),
             Double_to_Float()
         ]),
@@ -127,6 +127,9 @@ class zPad_or_Rescale(object):
     if both dimension are smaller than 256 -> Zero Pad
 
     Image is returned as an ndarray float64 0-1"""
+    def __init__(self, input_size):
+        self.input_size = input_size
+
 
     def __call__(self, sample):
         img_arr = sample #HxWx4
@@ -134,7 +137,7 @@ class zPad_or_Rescale(object):
         h = img_arr.shape[0]
         w = img_arr.shape[1]
 
-        fixed_size = (256,256)
+        fixed_size = (self.input_size,self.input_size)
 
         if ((h > fixed_size[0]) or (w > fixed_size[1])):
             # Resize
@@ -200,7 +203,8 @@ def imshow_tensor(tensor_img, ax = None, tittle = None):
     image = tensor_img.numpy().transpose((1, 2, 0))
 
     ax.imshow(image[:,:,0:3])
-    plt.title('Single_cell image resized to (256x256)')
+    inSize = image.shape[0]
+    plt.title(f'Single_cell image resized to ({inSize}x{inSize})')
     #plt.axis('off')
 
     return ax, image

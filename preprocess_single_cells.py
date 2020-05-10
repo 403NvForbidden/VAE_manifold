@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-04-09T18:11:57+10:00
+# @Last modified time: 2020-04-17T16:24:10+10:00
 '''
 CellProfiler output single_cell images (from segmentation) in a given folder architecture :
 a separate folder for each Well_XY_channel
@@ -26,7 +26,22 @@ non_matching_files = 0
 #All the full_size_images
 all_subfolders = [f for f in os.listdir(root_path) if not f.startswith('.')]
 
-counter = 0
+all_well = [subfolder.split('_')[0] for subfolder in all_subfolders]
+
+unique_well = np.unique(all_well) #Our different GT clusters
+counter_unique_well = np.zeros(len(unique_well))
+print(f'There are {len(unique_well)} different true cluster in this dataset')
+
+
+#make a folder for all true cluster
+#overwrite if the folder already exist
+for well in unique_well:
+    saving_folder = f'{saving_path}{well}'
+    if os.path.exists(saving_folder):
+        shutil.rmtree(saving_folder)
+    os.makedirs(saving_folder)
+
+
 for subfolder in all_subfolders:
     # name of subfolder are of type WellXX_SlideXX_CondtionXX_XYxx_ChannelXX
 
@@ -34,23 +49,16 @@ for subfolder in all_subfolders:
 
     #Consider only subfolder with channel1 (regroup image only one time)
     if infos[4] == 'Channel1':
-        counter += 1
-        print(f'Processing unique condition {counter} over {len(all_subfolders)/4}')
+        print(f'Working on folder {subfolder}')
         channels = ['Channel1','Channel2','Channel3','Channel4']
         sep = '_'
         name = f'{sep.join(infos[0:4])}'
 
-        #Overwrite saving folder if it alreadz exist
-        saving_folder = f'{saving_path}{name}'
-        if os.path.exists(saving_folder):
-            shutil.rmtree(saving_folder)
-        os.makedirs(saving_folder)
+        well = infos[0]
+        print(f'Saved to well {well}')
 
-        #loop over each single_cell_file for that specific condition
-        c = 0
         #Channel1 folder exist for sure because we entered the if statement
         for cell_bodies in [f for f in os.listdir(f'{root_path}{name}_{channels[0]}') if not f.startswith('.')]:
-            c += 1
 
             ##Sometimes all 4channel does not exist for a given cel; -> count that error but continue
             try:
@@ -61,7 +69,10 @@ for subfolder in all_subfolders:
                 final_array = np.stack(array_list,axis=2)  #of shape HxWx4
 
                 #SAVE THE IMAGE (in tiff because 4 channel)
-                io.imsave(f'{saving_folder}/cell{c}.tif',final_array)
+                c = counter_unique_well[np.where(unique_well==well)].astype(np.int).item()
+                io.imsave(f'{saving_path}{well}/cell{c}.tif',final_array)
+
+                counter_unique_well[np.where(unique_well==well)]+=1
 
             except FileNotFoundError:
                 non_matching_files += 1

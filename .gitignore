@@ -18,6 +18,7 @@ data/*
 outputs/*
 outputs
 single_cell_processed/*
+DataSets/*
 
 ### macOS ###
 # General

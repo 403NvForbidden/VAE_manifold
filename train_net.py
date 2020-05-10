@@ -3,21 +3,24 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning Methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-04-14T16:52:15+10:00
+# @Last modified time: 2020-05-07T10:19:00+10:00
 
 '''
 File containing main function to train the VAE with proper single cell images dataset
 '''
 import torch
 from torch.autograd import Variable
+from torch import nn
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from timeit import default_timer as timer
 from torch import cuda
 from torchvision.utils import save_image, make_grid
+from networks import VAE
+from helpers import plot_latent_space, show
 
-def train(epoch, model, optimizer, train_loader, train_on_gpu, beta):
+def train(epoch, model, optimizer, train_loader, train_on_gpu):
     # toggle model to train mode
     model.train()
     train_loss = 0
@@ -25,6 +28,8 @@ def train(epoch, model, optimizer, train_loader, train_on_gpu, beta):
     recon_loss = 0
 
     start = timer()
+
+    criterion_recon = nn.BCEWithLogitsLoss(size_average=False).cuda()
 
     # each `data` is of BATCH_SIZE samples and has shape [batch_size, 4, 128, 128]
     for batch_idx, (data, _) in enumerate(train_loader):
@@ -34,10 +39,13 @@ def train(epoch, model, optimizer, train_loader, train_on_gpu, beta):
         optimizer.zero_grad()
 
         # push whole batch of data through VAE.forward() to get recon_loss
-        recon_batch, mu, logvar = model(data)
+        recon_batch, mu, logvar, _ = model(data)
 
         # calculate scalar loss
-        loss, kl_lo, recon_lo = model.loss_function(recon_batch, data, mu, logvar, beta)
+        recon_lo = criterion_recon(recon_batch,data)
+        recon_lo.div(data.size(0))
+        kl_lo = model.kl_divergence(mu,logvar)
+        loss = recon_lo + model.beta * kl_lo
 
         loss.backward()
         train_loss += loss.item()
@@ -48,18 +56,29 @@ def train(epoch, model, optimizer, train_loader, train_on_gpu, beta):
             print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                 epoch, batch_idx * len(data), len(train_loader.dataset),
                        100. * batch_idx / len(train_loader),
-                       loss.item() / len(data)),end='\r')
+                       loss.item() / len(data) ),end='\r')
     train_loss /= len(train_loader.dataset)
     kl_loss /= len(train_loader.dataset)
     recon_loss /= len(train_loader.dataset)
-    if epoch % 10 == 0:
+    if epoch % 1 == 0:
         print('==========> Epoch: {} ==========> Average loss: {:.4f}'.format(epoch, train_loss))
         print(f'{timer() - start:.2f} seconds elapsed in epoch.')
+        print(f'Reconstruction loss : {recon_loss:.4f}, KL loss : {kl_loss:.4f}')
 
 
-    # visualize reconstrunction and synthesis
-    if (epoch%15==14):
-        img_grid = make_grid(torch.cat((data[:4,:3,:,:],recon_batch[:4,:3,:,:])), nrow=4, padding=12, pad_value=1)
+    # visualize reconstrunction, synthesis, and latent space
+    if (epoch%1==0) or (epoch == 1):
+
+        fig, ax, fig2, ax2 = plot_latent_space(model,train_loader,train_on_gpu)
+        if ax != None and ax2 != None:
+            ax.set_title(f'2D Latent Space after {epoch} epochs, 1 color = 1 Well = 1 condition \n Reconstruction loss : {recon_loss:.4f}, KL loss : {kl_loss:.4f}')
+            ax2.set_title(f'2D Latent Space after {epoch} epochs,\n Ground truth clusters\' center of mass and 0.7std (51.6%) confidence ellipse are plotted')
+        if fig != None :
+            fig.show()
+        if fig2 != None :
+            fig2.show()
+
+        img_grid = make_grid(torch.cat((data[:4,:3,:,:],nn.Sigmoid()(recon_batch[:4,:3,:,:]))), nrow=4, padding=12, pad_value=1)
 
         plt.figure(figsize=(10,5))
         plt.imshow(img_grid.detach().cpu().permute(1,2,0))
@@ -67,10 +86,10 @@ def train(epoch, model, optimizer, train_loader, train_on_gpu, beta):
         plt.title(f'Example data and its reconstruction - epoch {epoch}')
         plt.show()
 
-        samples = torch.randn(8, 512, 1, 1)
+        samples = torch.randn(8, model.zdim, 1, 1)
         samples = Variable(samples,requires_grad=False).cuda()
         recon = model.decode(samples)
-        img_grid = make_grid(recon[:,:3,:,:], nrow=4, padding=12, pad_value=1)
+        img_grid = make_grid(nn.Sigmoid()(recon[:,:3,:,:]), nrow=4, padding=12, pad_value=1)
 
         plt.figure(figsize=(10,5))
         plt.imshow(img_grid.detach().cpu().permute(1,2,0))
@@ -112,20 +131,24 @@ def test(epoch, model, optimizer, test_loader, train_on_gpu, beta):
 
     return test_loss, kl_loss, recon_loss
 
-def beta_set(max_val, interval, epoch):
+def beta_set(max_val, start, reach, epoch):
     '''Return the beta weighting factor that reduce the weight of KL loss
     during first epochs.
     Beta takes value 0 to max_val, linearly between epoch 0 to interval
     '''
-    beta = 0
-    if epoch <= interval :
-        return (max_val/interval)*(epoch-1)
+    if epoch <= start:
+        return 0
+    if epoch <= reach :
+        return (max_val/(reach-start))*(epoch-1) - (start*max_val/(reach-start))
     else :
         return max_val
 
 
 def train_VAE_model(epochs, model, optimizer, dataloader, train_on_gpu):
-
+    '''
+    Params :
+        beta_init ([int]) : [max_value, start, reach]
+    '''
 
     # Number of epochs already trained (if using loaded in model weights)
     try:
@@ -139,16 +162,16 @@ def train_VAE_model(epochs, model, optimizer, dataloader, train_on_gpu):
     for epoch in range(model.epochs+1,model.epochs+epochs+1):
 
         # TODO: Set value for beta evolution outside
-        beta = beta_set(max_val=1.0,interval=20,epoch=epoch)
-        tr_loss, tr_kl, tr_recon = train(epoch, model, optimizer, dataloader['train'], train_on_gpu, beta)
-        te_loss, te_kl, te_recon = test(epoch, model, optimizer, dataloader['val'], train_on_gpu, beta)
-        history.append([tr_loss, tr_kl, tr_recon, te_loss, te_kl, te_recon, beta])
+        #beta = beta_set(max_val=beta_init[0],start=beta_init[1],reach=beta_init[2],epoch=epoch)
+        tr_loss, tr_kl, tr_recon = train(epoch, model, optimizer, dataloader['train'], train_on_gpu)
+        #te_loss, te_kl, te_recon = test(epoch, model, optimizer, dataloader['val'], train_on_gpu, beta)
+        history.append([tr_loss, tr_kl, tr_recon])#, te_loss, te_kl, te_recon])
 
         model.epochs += 1
 
     history = pd.DataFrame(
         history,
-        columns=['train_loss','train_kl','train_recon','valid_loss','val_kl','val_recon','beta'])
+        columns=['train_loss','train_kl','train_recon'])#,'valid_loss','val_kl','val_recon'])
 
     total_time = timer() - overall_start
     print(
@@ -160,6 +183,155 @@ def train_VAE_model(epochs, model, optimizer, dataloader, train_on_gpu):
     model.optimizer = optimizer
 
     return model, history
+
+
+#####################################
+### Training of InfoMax
+####################################
+def train_infoM_epoch(epoch, VAE, MLP, opti_VAE, opti_MLP, train_loader, train_on_gpu):
+    '''Train the infoMAX model for one epoch'''
+    # toggle model to train mode
+    VAE.train()
+    global_VAE_loss = 0
+    MI_estimation = 0
+    MI_estimator_loss = 0
+    kl_loss = 0
+    recon_loss = 0
+
+    start = timer()
+
+    criterion_recon = nn.BCEWithLogitsLoss(size_average=False).cuda() #more stable than handmade sigmoid as last layer and BCELoss
+
+    # each `data` is of BATCH_SIZE samples and has shape [batch_size, 4, 128, 128]
+    for batch_idx, (data, _) in enumerate(train_loader):
+        data = Variable(data)
+        if train_on_gpu:
+            data = data.cuda()
+
+        #data feed to CNN-VAE
+        x_recon, mu_z, logvar_z, z = VAE(data)
+        t_xz = MLP(data,z)
+        z_perm = VAE.permute_dims(z)
+        t_xz_tilda = MLP(data,z_perm)
+
+        #Estimation of the Mutual Info between X and Z
+        MI_xz = (t_xz.mean() - (torch.exp(t_xz_tilda -1).mean()))
+
+        loss_recon = criterion_recon(x_recon,data)
+        loss_recon.div(data.size(0))
+        loss_kl = VAE.kl_divergence(mu_z,logvar_z)
+
+        loss_VAE = loss_recon + VAE.beta * loss_kl - VAE.alpha * MI_xz
+
+        # Step 1 : Optimization of VAE based on the estimation of MI
+        opti_VAE.zero_grad()
+        loss_VAE.backward(retain_graph=True) #Important argument, we backpropagated two times over MI_xz
+        opti_VAE.step()
+
+        MI_loss = -MI_xz
+
+        global_VAE_loss += loss_VAE.item()
+        recon_loss += loss_recon.item()
+        kl_loss += loss_kl.item()
+        MI_estimation += MI_xz.item()
+        MI_estimator_loss += MI_loss.item()
+
+        # Step 2 : Optimization of the MLP to improve the MI estimation
+        opti_MLP.zero_grad()
+        MI_loss.backward()
+        opti_MLP.step()
+
+
+        if batch_idx % 2 == 0:
+            print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
+                epoch, batch_idx * len(data), len(train_loader.dataset),
+                       100. * batch_idx / len(train_loader),
+                       loss_VAE.item() ),end='\r')
+    global_VAE_loss /= len(train_loader)
+    recon_loss /= len(train_loader)
+    kl_loss /= len(train_loader)
+    MI_estimation /= len(train_loader)
+    MI_estimator_loss /= len(train_loader)
+    if epoch % 1 == 0:
+        print('==========> Epoch: {} ==========> Average loss: {:.4f}'.format(epoch, global_VAE_loss))
+        print(f'{timer() - start:.2f} seconds elapsed in epoch.')
+        print(f'Reconstruction loss : {recon_loss:.2f}, KL loss : {kl_loss:.2f} \n MI : {MI_estimation:.2f} ')
+
+
+    # visualize reconstrunction, synthesis, and latent space
+    if (epoch%1==0) or (epoch == 1):
+
+        fig, ax, fig2, ax2 = plot_latent_space(VAE,train_loader,train_on_gpu)
+        if ax != None and ax2 != None:
+            ax.set_title(f'2D Latent Space after {epoch} epochs, 1 color = 1 Well = 1 condition \n Reconstruction loss : {recon_loss:.2f}, KL loss : {kl_loss:.2f} \n MI : {MI_estimation:.2f} ')
+            ax2.set_title(f'2D Latent Space after {epoch} epochs,\n Ground truth clusters\' center of mass and 0.7std (51.6%) confidence ellipse are plotted')
+        if fig != None :
+            fig.show()
+        if fig2 != None :
+            fig2.show()
+
+        img_grid = make_grid(torch.cat((data[:4,:3,:,:],nn.Sigmoid()(x_recon[:4,:3,:,:]))), nrow=4, padding=12, pad_value=1)
+
+        plt.figure(figsize=(10,5))
+        plt.imshow(img_grid.detach().cpu().permute(1,2,0))
+        plt.axis('off')
+        plt.title(f'Example data and its reconstruction - epoch {epoch}')
+        plt.show()
+
+        samples = torch.randn(8, VAE.zdim, 1, 1)
+        samples = Variable(samples,requires_grad=False).cuda()
+        recon = VAE.decode(samples)
+        img_grid = make_grid(nn.Sigmoid()(recon[:,:3,:,:]), nrow=4, padding=12, pad_value=1)
+
+        plt.figure(figsize=(10,5))
+        plt.imshow(img_grid.detach().cpu().permute(1,2,0))
+        plt.axis('off')
+        plt.title(f'Random generated samples - epoch {epoch}')
+        plt.show()
+
+
+    return global_VAE_loss, MI_estimation, MI_estimator_loss, kl_loss, recon_loss
+
+def train_InfoMAX_model(epochs,VAE, MLP, opti_VAE, opti_MLP, dataloader, train_on_gpu):
+    '''
+    Params :
+        beta_init ([int]) : [max_value, start, reach]
+    '''
+
+    # Number of epochs already trained (if using loaded in model weights)
+    try:
+        print(f'Model has been trained for: {VAE.epochs} epochs.\n')
+    except:
+        VAE.epochs = 0
+        print(f'Starting Training from Scratch.\n')
+
+    history = []
+    overall_start = timer()
+    for epoch in range(VAE.epochs+1,VAE.epochs+epochs+1):
+
+        global_VAE_loss, MI_estimation, MI_estimator_loss, kl_loss, recon_loss = train_infoM_epoch(epoch, VAE, MLP, opti_VAE, opti_MLP, dataloader['train'], train_on_gpu)
+        history.append([global_VAE_loss, MI_estimation, MI_estimator_loss, kl_loss, recon_loss])
+
+        VAE.epochs += 1
+
+    history = pd.DataFrame(
+        history,
+        columns=['global_VAE_loss', 'MI_estimation', 'MI_estimator_loss', 'kl_loss', 'recon_loss'])#,'valid_loss','val_kl','val_recon'])
+
+    total_time = timer() - overall_start
+    print(
+        f'{total_time:.2f} total seconds elapsed. {total_time / (epoch):.2f} seconds per epoch.'
+    )
+    print('######### TRAINING FINISHED ##########')
+
+    # Attach the optimizer
+    VAE.optimizer = opti_VAE
+    MLP.optimizer = opti_MLP
+
+    return VAE, MLP, history
+
+
+
 
 def inference_recon(model, inference_loader, num_img, train_on_gpu):
     with torch.no_grad():
@@ -179,117 +351,3 @@ def inference_recon(model, inference_loader, num_img, train_on_gpu):
         show(make_grid(recon[:num_img,:3,:,:],nrow=int(np.sqrt(num_img))),train_on_gpu)
 
         #To save the img, use save_image from torch utils
-
-
-
-def show(img, train_on_gpu):
-    if train_on_gpu:
-        npimg = img.cpu().numpy()
-    else:
-        npimg = img.numpy()
-    plt.figure(figsize=(10,10))
-    plt.imshow(np.transpose(npimg, (1,2,0)), interpolation='nearest')
-
-
-def plot_train_result(history):
-    """Display training and validation loss evolution over epochs
-
-    Params
-    -------
-    history : DataFrame
-        Panda DataFrame containing train and valid losses
-
-    Return
-    --------
-
-    """
-    plt.figure(figsize=(20, 20))
-    fig, ((ax1 ,ax2),(ax3 ,ax4)) = plt.subplots(2,2)
-    #for c in ['train_loss', 'valid_loss']:
-    #    plt.plot(
-    #        history[c], label=c)
-    ax1.plot(history['train_loss'],color='dodgerblue',label='train_loss')
-    ax1.plot(history['valid_loss'],color='lightsalmon',label='valid_loss')
-    ax1.set_title('General Loss')
-    ax2.plot(history['train_kl'],color='dodgerblue',label='train KL loss')
-    ax2.plot(history['val_kl'],color='lightsalmon',label='valid KL loss')
-    ax2.set_title('KL Loss')
-    ax3.plot(history['train_recon'],color='dodgerblue',label='train RECON loss')
-    ax3.plot(history['val_recon'],color='lightsalmon',label='valid RECON loss')
-    ax3.set_title('Reconstruction Loss')
-    ax4.plot(history['beta'],color='dodgerblue',label='Beta')
-    ax4.set_title('KL Cost Weight')
-
-    plt.legend()
-
-
-def save_checkpoint(model, path):
-    """Save a vgg16 model to path.
-        Useful to reuse later on a model already trained on our specific data
-
-    Params
-    --------
-        model (PyTorch model): model to save
-        path (str): location to save model. must end in '.pth'
-
-    Returns
-    --------
-        None, save the `model` to `path`
-
-    """
-
-    # Basic details, as mapping id to classe and number of epochs already trained
-    checkpoint = {
-        'epochs': model.epochs,
-    }
-
-    checkpoint['state_dict'] = model.state_dict() #Weights
-
-    # Add the optimizer
-    checkpoint['optimizer'] = model.optimizer
-    checkpoint['optimizer_state_dict'] = model.optimizer.state_dict()
-
-    # Save the data to the path
-    torch.save(checkpoint, path)
-
-
-def load_checkpoint(model, path):
-    """Load a VAE network, pre-trained on single cell images
-
-    Params
-    --------
-        path (str): saved model checkpoint. Must end in '.pth'
-
-    Returns
-    --------
-        None, load the `model` from `path`
-
-    """
-    # Load in checkpoint
-    train_on_gpu = cuda.is_available()
-    if train_on_gpu:
-        checkpoint = torch.load(path)
-    else :
-        checkpoint = torch.load(path,map_location='cpu')  #TODO Attention, bug si reload depuis autre part que GPU !!!
-        ## TODO: inspect why
-
-
-    # Load in the state dict
-    model.load_state_dict(checkpoint['state_dict'])
-
-    total_params = sum(p.numel() for p in model.parameters())
-    print(f'{total_params:,} total parameters.')
-    total_trainable_params = sum(
-        p.numel() for p in model.parameters() if p.requires_grad)
-    print(f'{total_trainable_params:,} total gradient parameters.')
-
-    if train_on_gpu:
-        model = model.to('cuda')
-
-    model.epochs = checkpoint['epochs']
-
-    # Optimizer
-    optimizer = checkpoint['optimizer']
-    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-
-    return model, optimizer
