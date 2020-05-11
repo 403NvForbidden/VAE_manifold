@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-05-07T12:16:26+10:00
+# @Last modified time: 2020-05-11T10:20:49+10:00
 
 
 '''File containing the architecture of InfoMax VAE, a VAE framework that
@@ -35,7 +35,7 @@ class MLP_MI_estimator(nn.Module):
         self.zdim = zdim
         ## TODO: This is for a 64x64 3 channels images data. Modularize it
         self.MLP = nn.Sequential(
-            nn.Linear(64*64*4 + zdim, 2000),
+            nn.Linear(64*64*3 + zdim, 2000),
             nn.LeakyReLU(0.2, True),
             nn.Linear(2000, 1000),
             nn.LeakyReLU(0.2, True),
@@ -52,7 +52,7 @@ class MLP_MI_estimator(nn.Module):
                 m.bias.data.fill_(0.01)
 
     def forward(self, x, z):
-        x = x.view(-1,64*64*4)
+        x = x.view(-1,64*64*3)
         x = torch.cat((x,z),1) #Simple concatenation of x and z
         value = self.MLP(x).squeeze()
 
@@ -81,7 +81,7 @@ class CNN_VAE(nn.Module):
         # to having reshape and dense layer at the end.
 
         self.encoder = nn.Sequential(
-            Conv(4,base_enc,4,stride=2,padding=1), #stride 2, resolution is splitted by half
+            Conv(3,base_enc,4,stride=2,padding=1), #stride 2, resolution is splitted by half
             Conv(base_enc,base_enc*2,4,stride=2,padding=1),
             Conv(base_enc*2,base_enc*4,4,stride=2,padding=1), #8x8
             Conv(base_enc*4,base_enc*4,4,stride=2,padding=1),
@@ -99,9 +99,12 @@ class CNN_VAE(nn.Module):
             ConvUpsampling(int(base_dec*(depth_factor_dec**0)),int(base_dec*(depth_factor_dec**0)),4,stride=2,padding=1),
 
             nn.Upsample(scale_factor=4,mode='bilinear'),
-            nn.Conv2d(int(base_dec*(depth_factor_dec**0)), 4, 4, 2, 1),
+            nn.Conv2d(int(base_dec*(depth_factor_dec**0)), 3, 4, 2, 1),
             #nn.Sigmoid(), #Sigmoid compute directly in the loss (more stable)
         )
+
+        self.stabilize_exp = nn.Hardtanh(min_val=-6.,max_val=2.) #linear between min and max
+
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d) or isinstance(m, nn.ConvTranspose2d):
@@ -123,7 +126,7 @@ class CNN_VAE(nn.Module):
     def encode(self, x):
         learnt_stats = self.encoder(x) #Mu encode in the first half channels
         mu_z = learnt_stats[:,self.zdim:]
-        logvar_z = learnt_stats[:, :self.zdim]
+        logvar_z = self.stabilize_exp(learnt_stats[:, :self.zdim])
 
         return mu_z, logvar_z
 

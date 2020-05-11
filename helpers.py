@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-05-07T10:28:57+10:00
+# @Last modified time: 2020-05-11T22:44:48+10:00
 
 '''File containing function to visualize data or to save it'''
 import torch
@@ -16,6 +16,8 @@ from torch import cuda
 from torchvision.utils import save_image, make_grid
 from matplotlib.patches import Ellipse
 import matplotlib.transforms as transforms
+import matplotlib.colors
+import itertools
 
 
 ############################
@@ -87,16 +89,21 @@ def plot_latent_space(model, dataloader, train_on_gpu):
         colors2 = cmap2(np.linspace(0,1.0,10))
         colors = np.concatenate((colors1,colors2),0)
 
+        ## TODO: Do a mapping between class ID and Process to ensure it is rightly mapped
+        zorder = 100
         for i in np.unique(true_label):
-            ax.scatter(z_points[true_label==i,0],z_points[true_label==i,1],s=5,color=colors[i])
+            zorder -= 10
+            ax.scatter(z_points[true_label==i,0],z_points[true_label==i,1],s=5,color=colors[i],zorder=zorder, label=f'Process_{i+1}')
 
             mu_1 = np.mean(z_points[true_label==i,0])
             mu_2 = np.mean(z_points[true_label==i,1])
 
             confidence_ellipse(z_points[true_label==i,0], z_points[true_label==i,1], ax_ellipse,n_std=0.7,
                 alpha=0.5,facecolor=colors[i], edgecolor=colors[i] , zorder=0)
-            ax_ellipse.scatter(mu_1, mu_2,marker='X', s=50, color=colors[i])
+            ax_ellipse.scatter(mu_1, mu_2,marker='X', s=50, color=colors[i],zorder=zorder,label=f'Process_{i+1}')
 
+        ax.legend()
+        ax_ellipse.legend()
         return fig, ax, fig2, ax_ellipse
 
 
@@ -157,6 +164,94 @@ def confidence_ellipse(x, y, ax, n_std=3.0, facecolor='none', **kwargs):
     return ax.add_patch(ellipse)
 
 
+
+def metadata_latent_space(model, infer_dataloader, train_on_gpu):
+
+    labels_list = []
+    z_list = []
+    id_list = []
+
+    if model.zdim > 3 :
+        print(f'Latent space is >3D ({model.zdim} dimensional), no visualization is provided')
+        return None, None, None, None
+
+    for i, (data, labels, file_names) in enumerate(infer_dataloader):
+        #Extract unique cell id from file_names
+        temp_id = [[file_name.split('_')[2],file_name.split('_')[3][-1],file_name.split('_')[4][2:-5]] for file_name in file_names]
+        id_list.append(temp_id)
+        if train_on_gpu:
+            # make sure this lives on the GPU
+            data = data.cuda()
+        with torch.no_grad():
+            model.eval()
+
+            data = Variable(data, requires_grad=False)
+
+            #The mean can be taken as the most likely z
+            z, _ = model.encode(data)
+            z = z.view(-1,model.zdim)
+            z_list.append((z.data).cpu().numpy())
+            labels_list.append(labels.numpy())
+
+        print(f'In progress...{i*len(data)}/{len(infer_dataloader.dataset)}',end='\r')
+
+    z_points = np.concatenate(z_list,axis=0) # datasize x 3
+    true_label = np.concatenate(labels_list,axis=0)
+    link_to_metadata = list(itertools.chain.from_iterable(id_list)) #[Well,Site,CellID] of each cells
+
+    if model.zdim == 3:
+        fig = plt.figure()
+        ax = Axes3D(fig)
+
+        for i in np.unique(true_label):
+            ax.scatter(z_points[true_label==i,0],z_points[true_label==i,1],z_points[true_label==i,2],s=5)
+
+        return fig, fig
+
+    if model.zdim == 2:
+
+        ##### Plot 1 : Latent representation - Sample labeled by classes #####
+
+        fig, ax = plt.subplots(figsize=(12,12))
+
+        fig2, ax2 = plt.subplots(figsize=(12,12))
+
+        cmap1 = plt.get_cmap('tab20')
+        colors1 = cmap1(np.linspace(0,1.0,20))
+        cmap2 = plt.get_cmap('Set3')
+        colors2 = cmap2(np.linspace(0,1.0,10))
+        colors = np.concatenate((colors1,colors2),0)
+
+
+        ## TODO: Do a mapping between class ID and Process to ensure it is rightly mapped
+        zorder = 100
+        for i in np.unique(true_label):
+            zorder -= 10
+            ax.scatter(z_points[true_label==i,0],z_points[true_label==i,1],s=5,color=colors[i],zorder=zorder, label=f'Process_{i+1}')
+
+
+        ax.legend()
+
+
+        ##### Plot 2 : Latent representation - Sample labeled by shape factor #####
+
+        cmap_blues = plt.get_cmap('Blues')
+        norm = matplotlib.colors.Normalize(vmin=0.0, vmax=1.0)
+
+        MetaData_csv = pd.read_csv('DataSets/MetaData1_GT_link_CP.csv')
+
+        for i in range(len(z_points)):
+            well=link_to_metadata[i][0]
+            site=int(link_to_metadata[i][1])
+            cell_id=int(link_to_metadata[i][2])
+            #print(np.any(MetaData_csv['Well']==well),np.any(MetaData_csv['Site']==site),np.any(MetaData_csv['GT_Cell_id']==cell_id))
+
+            shape_factor=MetaData_csv[(MetaData_csv['Well']==well) & (MetaData_csv['Site']==site) & (MetaData_csv['GT_Cell_id']==cell_id)]['GT_Shape'].values
+            ax2.scatter(z_points[i,0],z_points[i,1],s=5,color=cmap_blues(norm(shape_factor)))
+
+        return fig, ax, fig2, ax2
+
+
 def show(img, train_on_gpu):
     if train_on_gpu:
         npimg = img.cpu().numpy()
@@ -183,7 +278,7 @@ def plot_train_result(history, infoMAX = False, only_train_data=True):
     #    plt.plot(
     #        history[c], label=c)
 
-    if only_train_data:
+    if only_train_data and not(infoMAX):
 
         ax1.plot(history['train_loss'],color='dodgerblue',label='Global loss')
         ax1.set_title('General Loss')
@@ -195,14 +290,14 @@ def plot_train_result(history, infoMAX = False, only_train_data=True):
         #ax4.set_title('KL Cost Weight')
 
     if only_train_data and infoMAX:
-        ax1.plot(history['global_VAE_loss'],color='dodgerblue',label='Global Loss')
+        ax1.plot(history['global_VAE_loss'][1:],color='dodgerblue',label='Global Loss')
         ax1.set_title('global_VAE_loss')
         ax2.plot(history['MI_estimator_loss'][1:],color='dodgerblue',label='MLP Loss')
         ax2.plot(history['MI_estimation'][1:],color='lightsalmon',label='MI Estimation')
         ax2.set_title('Mutual Information')
-        ax3.plot(history['recon_loss'],color='dodgerblue',label='Reconstruction Loss')
+        ax3.plot(history['recon_loss'][1:],color='dodgerblue',label='Reconstruction Loss')
         ax3.set_title('recon_loss')
-        ax4.plot(history['kl_loss'],color='dodgerblue',label='Fit to prior loss')
+        ax4.plot(history['kl_loss'][1:],color='dodgerblue',label='Fit to prior loss')
         ax4.set_title('kl_loss')
 
     # else:

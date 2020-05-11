@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-05-10T21:24:18+10:00
+# @Last modified time: 2020-05-11T22:21:51+10:00
 
 
 
@@ -14,7 +14,7 @@ from skimage import io
 import os
 import shutil
 
-CPpath = 'CellProfiler_Outputs/'
+CPpath = 'DataSets/CellProfiler_Outputs/'
 CPQuantitativeFiles ='Quantitative_Outputs/'
 CPcsv = '200507_Horvath_Synth_Simple_Cell_Profiler_AnalysisWholeCell.csv'
 
@@ -32,7 +32,7 @@ CP_df.keys()
 CP_df.shape
 
 # %%
-img_test_path = 'BBBC031_v1_dataset/Images/ProcessPlateSparse_wA01_s01_z1_t1_CELLMASK.png'
+img_test_path = 'DataSets/BBBC031_v1_dataset/Images/ProcessPlateSparse_wA01_s01_z1_t1_CELLMASK.png'
 img = io.imread(img_test_path)
 
 fig, ax = plt.subplots(1,1,figsize=(10, 10))
@@ -54,9 +54,9 @@ ax.scatter(x.values,y.values,s=60,c='red',marker='X')
 
 # %% Extraction of info from BBBC Groundtruh
 
-BBBC_GT_path = 'BBBC031_v1_DatasetGroundTruth.csv'
+BBBC_GT_path = 'DataSets/BBBC031_v1_DatasetGroundTruth.csv'
 
-fields = ['ImageName','CellIdx','LocationX','LocationY','ProcessID']
+fields = ['ImageName','CellIdx','LocationX','LocationY','ProcessID','ColorParamsR','ColorParamsG','ColorParamsB','ShapeParams']
 
 GT_df = pd.read_csv(BBBC_GT_path,sep=';',usecols=fields)
 
@@ -87,7 +87,7 @@ def closest_point(point,points):
 
 
 #Folder were to save data
-save_folder = 'Synthetic_Data_1/'
+save_folder = 'DataSets/Synthetic_Data_1/'
 list_folder = ['Process_1','Process_2','Process_3','Process_4','Process_5','Process_6','Process_7']
 for folder in list_folder:
     saving_folder = f'{save_folder}{folder}'
@@ -95,12 +95,12 @@ for folder in list_folder:
         shutil.rmtree(saving_folder)
     os.makedirs(saving_folder)
 
-MetaData_GT_link_CP = pd.DataFrame(columns=['Well','Site','GT_label','GT_Cell_id','GT_x','GT_y','CP_ImagerNumber','CP_ObjectNumber','CP_x','CP_y'])
+MetaData_GT_link_CP = pd.DataFrame(columns=['Well','Site','GT_label','GT_Cell_id','GT_x','GT_y','GT_colorR','GT_colorG','GT_colorB','GT_Shape','CP_ImagerNumber','CP_ObjectNumber','CP_x','CP_y'])
 
 counter = 0
 
 #Iterate over images (combination of well and site)
-list_of_well_site = os.listdir('CellProfiler_Outputs/SingleWholeCellCroppedImages/SingleWholeCellCroppedImages_Blue')
+list_of_well_site = os.listdir('DataSets/CellProfiler_Outputs/SingleWholeCellCroppedImages/SingleWholeCellCroppedImages_Blue')
 for combination in list_of_well_site:
     strings = combination.split('_')
     well_i = strings[0]
@@ -129,12 +129,12 @@ for combination in list_of_well_site:
             counter += 1
             continue
         #Store all useful info about that cell to link its GT and cellprofiler metadata
-        new_row = pd.Series([row['Well'],row['Site'],row['ProcessID'],row['CellIdx'],row['LocationX'],row['LocationY'],CP_WA1_S1.loc[CP_row_min,'ImageNumber'],CP_WA1_S1.loc[CP_row_min,'ObjectNumber'],CP_WA1_S1.loc[CP_row_min,'AreaShape_Center_X'],CP_WA1_S1.loc[CP_row_min,'AreaShape_Center_Y']], index=MetaData_GT_link_CP.columns)
+        new_row = pd.Series([row['Well'],row['Site'],row['ProcessID'],row['CellIdx'],row['LocationX'],row['LocationY'],row['ColorParamsR'],row['ColorParamsG'],row['ColorParamsB'],row['ShapeParams'],CP_WA1_S1.loc[CP_row_min,'ImageNumber'],CP_WA1_S1.loc[CP_row_min,'ObjectNumber'],CP_WA1_S1.loc[CP_row_min,'AreaShape_Center_X'],CP_WA1_S1.loc[CP_row_min,'AreaShape_Center_Y']], index=MetaData_GT_link_CP.columns)
         MetaData_GT_link_CP = MetaData_GT_link_CP.append(new_row, ignore_index=True)
         #save one 3 Channel tiff file per single cell, in a folder corresponding to GT
-        blue_path = 'CellProfiler_Outputs/SingleWholeCellCroppedImages/SingleWholeCellCroppedImages_Blue/'
-        green_path = 'CellProfiler_Outputs/SingleWholeCellCroppedImages/SingleWholeCellCroppedImages_Green/'
-        red_path = 'CellProfiler_Outputs/SingleWholeCellCroppedImages/SingleWholeCellCroppedImages_Red/'
+        blue_path = 'DataSets/CellProfiler_Outputs/SingleWholeCellCroppedImages/SingleWholeCellCroppedImages_Blue/'
+        green_path = 'DataSets/CellProfiler_Outputs/SingleWholeCellCroppedImages/SingleWholeCellCroppedImages_Green/'
+        red_path = 'DataSets/CellProfiler_Outputs/SingleWholeCellCroppedImages/SingleWholeCellCroppedImages_Red/'
 
         w = row['Well']
         r = row['Site']
@@ -161,12 +161,14 @@ for combination in list_of_well_site:
 MetaData_GT_link_CP.head()
 MetaData_GT_link_CP.shape
 
+MetaData_GT_link_CP.to_csv('DataSets/MetaData1_GT_link_CP.csv')
+
 print('All files processed')
 print(f'{counter} GT cells were not detected by cell profiler')
 
 # %%
 
-img = io.imread('BBBC031_v1_dataset/Images/ProcessPlateSparse_wA02_s01_z1_t1_CELLMASK.png')
+img = io.imread('DataSets/BBBC031_v1_dataset/Images/ProcessPlateSparse_wA02_s01_z1_t1_CELLMASK.png')
 fig, ax = plt.subplots(1,1,figsize=(10, 10))
 ax.imshow(img)
 

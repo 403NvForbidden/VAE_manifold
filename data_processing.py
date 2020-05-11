@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning Methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-04-20T09:09:57+10:00
+# @Last modified time: 2020-05-11T22:28:55+10:00
 
 '''
 This file contains classes and function that are usefull to load the raw data,
@@ -17,6 +17,7 @@ from skimage.util import img_as_float, pad
 from PIL import Image
 from torchvision import transforms
 from skimage.transform import resize
+import torch
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -65,6 +66,61 @@ class load_from_path(object):
         sample = img_as_float(sample) # float64 0 - 1.0
 
         return sample
+
+def get_inference_dataset(dataset_dir,batchsize,input_size):
+
+    inference_trfm = transforms.Compose([
+        #Data arrive as HxWx4 float64 0 - 1.0 ndarray
+        # 1) Rescale and Pad to fixed
+        zPad_or_Rescale_inference(input_size),
+        ToTensor_inference(), #Will rescale to 0-1 Float32
+        Double_to_Float_inference()])
+
+    data = datasets.DatasetFolder(root=dataset_dir,loader=keep_Metadata_from_path(),extensions=('.png','.jpg','.tif','.tiff'), transform=inference_trfm)
+    dataloaders = DataLoader(data, batch_size=batchsize, collate_fn=My_ID_Collator(), shuffle=True)
+
+    return data, dataloaders
+
+class keep_Metadata_from_path(object):
+    """Load an image from its path, but keep track of the cell id at the same time.
+    It enables therefore to inspect some characteristic of the built
+    latent reprensetation alongside some metadata information of the dataset.
+    Samples are returned as ndarray, float64 0-1"""
+
+    def __call__(self, path):
+
+        sample = io.imread(path,plugin='tifffile') #load H x W x 4 tiff files
+        #Single cell image are in uint8, 0-255
+
+        sample = img_as_float(sample) # float64 0 - 1.0
+
+        #Extract the unique cell id from the file name
+        #It output simply the full single cell name, which will be process afterward
+        file_name = path.split('/')
+
+        return (sample, file_name[-1])
+
+class My_ID_Collator(object):
+    """
+    Custom collate_fn, specify to dataloader how to batch sample together.
+    During inference, it enables to keep track of sample, label as well as single
+    cell ids from the file name, and exploit this unique id to retrieve any
+    single cell information we want from csv metadata file
+    """
+    def __call__(self, batch):
+        """
+        Input is automatically given by the dataloader; a list of size 'batch_size'
+        where each element is a tuple as follow : ((sample,file_name),label)
+        """
+        data = [item[0][0] for item in batch]
+        file_name = [item[0][1] for item in batch]
+        target = [item[1] for item in batch]
+        target = torch.LongTensor(target)
+
+        data_batch_tensor = torch.stack(data,dim=0)
+
+        return data_batch_tensor, target, file_name
+
 
 def image_tranforms(input_size):
     """
@@ -155,6 +211,42 @@ class zPad_or_Rescale(object):
 
         return img_resized
 
+class zPad_or_Rescale_inference(object):
+    """Resize all data to fixed size of 256x256
+    if any dimension is bigger than 256 -> RESCALE
+    if both dimension are smaller than 256 -> Zero Pad
+
+    Image is returned as an ndarray float64 0-1"""
+    def __init__(self, input_size):
+        self.input_size = input_size
+
+
+    def __call__(self, sample):
+
+        image, file_name = sample[0], sample[1]
+        img_arr = image #HxWx4
+
+        h = img_arr.shape[0]
+        w = img_arr.shape[1]
+
+        fixed_size = (self.input_size,self.input_size)
+
+        if ((h > fixed_size[0]) or (w > fixed_size[1])):
+            # Resize
+            img_resized = resize(img_arr,fixed_size,preserve_range=False, anti_aliasing=True)
+            # TODO: CHeck if ok to stay in uint8 here
+            #anti-aliasing import before down sampling
+        elif ((h <= fixed_size[0]) and (w <= fixed_size[1])):
+            # ZeroPad
+            diff_h = fixed_size[0] - h
+            diff_w = fixed_size[1] - w
+
+            img_resized = pad(img_arr,((int(np.round(diff_h/2.)),diff_h-int(np.round(diff_h/2.))),(int(np.round(diff_w/2.)),diff_w-int(np.round(diff_w/2.))),(0,0)))
+
+        assert img_resized[:,:,0].shape == fixed_size, "Error in padding / rescaling"
+
+        return (img_resized, file_name)
+
 
 class RandomHandVFlip(object):
     """Data augmentation
@@ -177,6 +269,24 @@ class Double_to_Float(object):
     def __call__(self, sample):
 
         return sample.float()
+
+class Double_to_Float_inference(object):
+
+    def __call__(self, sample):
+
+        image, file_name = sample[0], sample[1]
+        return (image.float(), file_name)
+
+class ToTensor_inference(object):
+
+    def __call__(self,sample):
+        image, file_name = sample[0], sample[1]
+
+        image = image.transpose((2,0,1))
+
+        return (torch.from_numpy(image), file_name)
+
+
 
 
 def imshow_tensor(tensor_img, ax = None, tittle = None):

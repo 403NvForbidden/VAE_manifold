@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning Methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-05-07T13:52:20+10:00
+# @Last modified time: 2020-05-11T16:26:29+10:00
 
 ##########################################################
 # %% imports
@@ -12,7 +12,7 @@
 from networks import VAE, Skip_VAE
 from torchsummary import summary
 from torch import cuda, optim
-from data_processing import get_dataloader, image_tranforms, imshow_tensor
+from data_processing import get_dataloader, image_tranforms, imshow_tensor, get_inference_dataset
 from train_net import train_VAE_model, inference_recon
 from helpers import plot_train_result, save_checkpoint, load_checkpoint, save_brute, load_brute, plot_latent_space
 import torch
@@ -28,7 +28,7 @@ traindir = datadir + 'train/'
 validdir = datadir + 'val/'
 testdir = datadir + 'test/'
 # Change to fit hardware
-batch_size = 128
+batch_size = 12
 
 # Check if GPU avalaible
 train_on_gpu = cuda.is_available()
@@ -52,6 +52,24 @@ features, labels = next(trainiter)
 
 _,_ = imshow_tensor(features[0])
 
+#%% Test inference DataSets
+infer_data, infer_dataloader = get_inference_dataset('DataSets/Synthetic_Data_1',batch_size,input_size)
+infer_iter = iter(infer_dataloader)
+features, labels, file_names = next(infer_iter)
+print(file_names)
+_,_ = imshow_tensor(features[0])
+
+
+temp_id = [[file_name.split('_')[2],file_name.split('_')[3][-1],file_name.split('_')[4][2:-5]] for file_name in file_names]
+temp_id2 = temp_id
+
+temp = [temp_id, temp_id2]
+print(temp)
+import itertools
+print(list(itertools.chain.from_iterable(temp)))
+
+#Obtain the class
+print(infer_data.classes[0])
 
 ##########################################################
 # %% Build custom VAE Model

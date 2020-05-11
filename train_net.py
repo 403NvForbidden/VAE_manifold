@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning Methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-05-07T10:19:00+10:00
+# @Last modified time: 2020-05-11T10:49:24+10:00
 
 '''
 File containing main function to train the VAE with proper single cell images dataset
@@ -200,7 +200,7 @@ def train_infoM_epoch(epoch, VAE, MLP, opti_VAE, opti_MLP, train_loader, train_o
 
     start = timer()
 
-    criterion_recon = nn.BCEWithLogitsLoss(size_average=False).cuda() #more stable than handmade sigmoid as last layer and BCELoss
+    criterion_recon = nn.BCEWithLogitsLoss().cuda() #more stable than handmade sigmoid as last layer and BCELoss
 
     # each `data` is of BATCH_SIZE samples and has shape [batch_size, 4, 128, 128]
     for batch_idx, (data, _) in enumerate(train_loader):
@@ -218,6 +218,7 @@ def train_infoM_epoch(epoch, VAE, MLP, opti_VAE, opti_MLP, train_loader, train_o
         MI_xz = (t_xz.mean() - (torch.exp(t_xz_tilda -1).mean()))
 
         loss_recon = criterion_recon(x_recon,data)
+        loss_recon *= data.size(1)*data.size(2)*data.size(3)
         loss_recon.div(data.size(0))
         loss_kl = VAE.kl_divergence(mu_z,logvar_z)
 
@@ -259,7 +260,7 @@ def train_infoM_epoch(epoch, VAE, MLP, opti_VAE, opti_MLP, train_loader, train_o
 
 
     # visualize reconstrunction, synthesis, and latent space
-    if (epoch%1==0) or (epoch == 1):
+    if (epoch%5==0) or (epoch == 1):
 
         fig, ax, fig2, ax2 = plot_latent_space(VAE,train_loader,train_on_gpu)
         if ax != None and ax2 != None:
