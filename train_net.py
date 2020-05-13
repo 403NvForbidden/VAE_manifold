@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning Methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-05-11T10:49:24+10:00
+# @Last modified time: 2020-05-12T16:58:31+10:00
 
 '''
 File containing main function to train the VAE with proper single cell images dataset
@@ -260,7 +260,7 @@ def train_infoM_epoch(epoch, VAE, MLP, opti_VAE, opti_MLP, train_loader, train_o
 
 
     # visualize reconstrunction, synthesis, and latent space
-    if (epoch%5==0) or (epoch == 1):
+    if (epoch%20==0) or (epoch == 1):
 
         fig, ax, fig2, ax2 = plot_latent_space(VAE,train_loader,train_on_gpu)
         if ax != None and ax2 != None:
@@ -268,7 +268,7 @@ def train_infoM_epoch(epoch, VAE, MLP, opti_VAE, opti_MLP, train_loader, train_o
             ax2.set_title(f'2D Latent Space after {epoch} epochs,\n Ground truth clusters\' center of mass and 0.7std (51.6%) confidence ellipse are plotted')
         if fig != None :
             fig.show()
-        if fig2 != None :
+        if (fig2 != None) and (VAE.zdim==2) :
             fig2.show()
 
         img_grid = make_grid(torch.cat((data[:4,:3,:,:],nn.Sigmoid()(x_recon[:4,:3,:,:]))), nrow=4, padding=12, pad_value=1)

@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-05-11T22:44:48+10:00
+# @Last modified time: 2020-05-13T17:58:15+10:00
 
 '''File containing function to visualize data or to save it'''
 import torch
@@ -17,8 +17,18 @@ from torchvision.utils import save_image, make_grid
 from matplotlib.patches import Ellipse
 import matplotlib.transforms as transforms
 import matplotlib.colors
+import matplotlib.cm
 import itertools
+from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+import plotly.express as px
+import plotly.graph_objects as go
 
+
+import sys, os
+import plotly.offline
+from PyQt5.QtCore import QUrl
+from PyQt5.QtWebEngineWidgets import QWebEngineView
+from PyQt5.QtWidgets import QApplication
 
 ############################
 ######## VISUALIZATION
@@ -68,13 +78,23 @@ def plot_latent_space(model, dataloader, train_on_gpu):
     true_label = np.concatenate(labels_list,axis=0)
 
     if model.zdim == 3:
-        fig = plt.figure()
-        ax = Axes3D(fig)
+        fig = plt.figure(figsize=(10,10))
+        #ax = Axes3D(fig)
+        ax=plt.axes(projection='3d')
 
+        cmap1 = plt.get_cmap('tab20')
+        colors1 = cmap1(np.linspace(0,1.0,20))
+        cmap2 = plt.get_cmap('Set3')
+        colors2 = cmap2(np.linspace(0,1.0,10))
+        colors = np.concatenate((colors1,colors2),0)
+        zorder = 100
         for i in np.unique(true_label):
-            ax.scatter(z_points[true_label==i,0],z_points[true_label==i,1],z_points[true_label==i,2],s=5)
-
-        return fig, fig
+            zorder -= 10
+            if i+1 == 7: #Do not plot process 7 for more readability
+                continue
+            ax.scatter3D(z_points[true_label==i,0],z_points[true_label==i,1],z_points[true_label==i,2],s=5,color=colors[i],zorder=zorder, label=f'Process_{i+1}')
+        ax.legend()
+        return fig, ax, fig, ax
 
     if model.zdim == 2:
         fig = plt.figure(figsize=(12,12))
@@ -163,7 +183,20 @@ def confidence_ellipse(x, y, ax, n_std=3.0, facecolor='none', **kwargs):
     ellipse.set_transform(transf + ax.transData)
     return ax.add_patch(ellipse)
 
+def show_in_window(fig):
 
+
+    plotly.offline.plot(fig, filename='name.html', auto_open=False)
+
+    app = QApplication(sys.argv)
+    web = QWebEngineView()
+    file_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "name.html"))
+    web.load(QUrl.fromLocalFile(file_path))
+    web.show()
+    sys.exit(app.exec_())
+
+def update_point(trace, points, selector):
+    print('Test Salut')
 
 def metadata_latent_space(model, infer_dataloader, train_on_gpu):
 
@@ -175,10 +208,13 @@ def metadata_latent_space(model, infer_dataloader, train_on_gpu):
         print(f'Latent space is >3D ({model.zdim} dimensional), no visualization is provided')
         return None, None, None, None
 
+    ###### Iterate throughout inference dataset #####
+    #################################################
+
     for i, (data, labels, file_names) in enumerate(infer_dataloader):
         #Extract unique cell id from file_names
-        temp_id = [[file_name.split('_')[2],file_name.split('_')[3][-1],file_name.split('_')[4][2:-5]] for file_name in file_names]
-        id_list.append(temp_id)
+        #temp_id = [[file_name.split('_')[2],file_name.split('_')[3][-1],file_name.split('_')[4][2:-5]] for file_name in file_names]
+        id_list.append([file_name for file_name in file_names])
         if train_on_gpu:
             # make sure this lives on the GPU
             data = data.cuda()
@@ -195,26 +231,93 @@ def metadata_latent_space(model, infer_dataloader, train_on_gpu):
 
         print(f'In progress...{i*len(data)}/{len(infer_dataloader.dataset)}',end='\r')
 
+    ###### Matching samples to metadata info #####
+    #################################################
+
     z_points = np.concatenate(z_list,axis=0) # datasize x 3
     true_label = np.concatenate(labels_list,axis=0)
-    link_to_metadata = list(itertools.chain.from_iterable(id_list)) #[Well,Site,CellID] of each cells
+    #link_to_metadata = list(itertools.chain.from_iterable(id_list)) #[Well,Site,CellID] of each cells
+    unique_ids = list(itertools.chain.from_iterable(id_list))
+    temp_matching_df = pd.DataFrame(columns=['x_coord','y_coord','z_coord','Unique_ID'])
+    temp_matching_df.x_coord = z_points[:,0]
+    temp_matching_df.y_coord = z_points[:,1]
+    if model.zdim == 3 :
+        temp_matching_df.z_coord = z_points[:,2]
+    temp_matching_df.Unique_ID = unique_ids
+
+    temp_matching_df = temp_matching_df.sort_values(by=['Unique_ID'])
+
+    MetaData_csv = pd.read_csv('DataSets/MetaData1_GT_link_CP.csv')
+
+    MetaData_csv = MetaData_csv.sort_values(by=['Unique_ID'])
+    assert np.all(temp_matching_df.Unique_ID.values == MetaData_csv.Unique_ID.values), "Inference dataset doesn't match with csv metadata"
+
+    MetaData_csv['x_coord'] = temp_matching_df.x_coord.values
+    MetaData_csv['y_coord'] = temp_matching_df.y_coord.values
+    if model.zdim == 3:
+        MetaData_csv['z_coord'] = temp_matching_df.z_coord.values
+    #MetaData_csv.to_csv('DataSets/John_Metadata_3Dlatent_20200513.csv',index=False)
+
+
+    ###### Plotting part - 3 Dimensional #####
+    #################################################
 
     if model.zdim == 3:
-        fig = plt.figure()
-        ax = Axes3D(fig)
 
+        ##### Fig 1 : Plot each single cell in latent space with GT cluster labels
+        traces = []
         for i in np.unique(true_label):
-            ax.scatter(z_points[true_label==i,0],z_points[true_label==i,1],z_points[true_label==i,2],s=5)
+            scatter = go.Scatter3d(x=MetaData_csv[MetaData_csv['GT_label']==i+1].x_coord.values,y=MetaData_csv[MetaData_csv['GT_label']==i+1].y_coord.values,
+                z=MetaData_csv[MetaData_csv['GT_label']==i+1].z_coord.values, mode='markers',
+                marker=dict(size=3, opacity=0.8),
+                name=f'Process {i+1}', text=MetaData_csv.GT_Shape.values)
+            traces.append(scatter)
 
-        return fig, fig
+        layout= dict(title='Latent Representation, colored by GT clustered')
+        fig_3d_1 = go.Figure(data=traces, layout=layout)
+        # fig_3d_1 = go.Figure(data=[go.Scatter3d(x=MetaData_csv.x_coord.values,y=MetaData_csv.y_coord.values,
+        #     z=MetaData_csv.z_coord.values, mode='markers',
+        #     marker=dict(size=3,color=MetaData_csv.GT_label.values,
+        #         opacity=0.8), text=MetaData_csv.GT_Shape.values)])
+        fig_3d_1.update_layout(margin=dict(l=0,r=0,b=0,t=0),showlegend=True)
+
+        figtest = go.FigureWidget(fig_3d_1)
+        scatter = figtest.data[0]
+        scatter.on_click(update_point)
+
+
+        fig_test = px.scatter_3d(MetaData_csv, x='x_coord', y='y_coord', z='z_coord',color='GT_Shape')
+        show_in_window(figtest)
+
+        fig = plt.figure(figsize=(10,10))
+        #ax = Axes3D(fig)
+        ax=plt.axes(projection='3d')
+
+        cmap1 = plt.get_cmap('tab20')
+        colors1 = cmap1(np.linspace(0,1.0,20))
+        cmap2 = plt.get_cmap('Set3')
+        colors2 = cmap2(np.linspace(0,1.0,10))
+        colors = np.concatenate((colors1,colors2),0)
+        zorder = 100
+        for i in np.unique(true_label):
+            zorder -= 10
+            if i+1 == 7: #Do not plot process 7 for more readability
+                continue
+            ax.scatter(z_points[true_label==i,0],z_points[true_label==i,1],z_points[true_label==i,2],s=10,color=colors[i],zorder=zorder, label=f'Process_{i+1}')
+        ax.legend()
+        return fig, ax, fig, ax
+
+
+    ###### Plotting part - 2 Dimensional #####
+    #################################################
 
     if model.zdim == 2:
 
         ##### Plot 1 : Latent representation - Sample labeled by classes #####
 
-        fig, ax = plt.subplots(figsize=(12,12))
+        fig, ax = plt.subplots(figsize=(8,8),dpi=300)
 
-        fig2, ax2 = plt.subplots(figsize=(12,12))
+        fig2, ax2 = plt.subplots(figsize=(8,8),dpi=300)
 
         cmap1 = plt.get_cmap('tab20')
         colors1 = cmap1(np.linspace(0,1.0,20))
@@ -235,10 +338,10 @@ def metadata_latent_space(model, infer_dataloader, train_on_gpu):
 
         ##### Plot 2 : Latent representation - Sample labeled by shape factor #####
 
-        cmap_blues = plt.get_cmap('Blues')
-        norm = matplotlib.colors.Normalize(vmin=0.0, vmax=1.0)
-
         MetaData_csv = pd.read_csv('DataSets/MetaData1_GT_link_CP.csv')
+
+        cmap_blues = plt.get_cmap('copper')
+        norm = matplotlib.colors.Normalize(vmin=MetaData_csv['GT_Shape'].min(), vmax=MetaData_csv['GT_Shape'].max())
 
         for i in range(len(z_points)):
             well=link_to_metadata[i][0]
@@ -248,7 +351,12 @@ def metadata_latent_space(model, infer_dataloader, train_on_gpu):
 
             shape_factor=MetaData_csv[(MetaData_csv['Well']==well) & (MetaData_csv['Site']==site) & (MetaData_csv['GT_Cell_id']==cell_id)]['GT_Shape'].values
             ax2.scatter(z_points[i,0],z_points[i,1],s=5,color=cmap_blues(norm(shape_factor)))
-
+        cbaxes = inset_axes(ax2,width="30%",height="3%",loc=3)
+        cbar = fig2.colorbar(matplotlib.cm.ScalarMappable(norm=norm,cmap=cmap_blues),cax=cbaxes,orientation='horizontal',ticks=[MetaData_csv['GT_Shape'].min(),MetaData_csv['GT_Shape'].max()])
+        cbar.ax.set_xticklabels(['Rounded','Deformed'],rotation=45,ha='left')
+        cbar.ax.xaxis.set_label_position('top')
+        cbar.ax.xaxis.set_ticks_position('top')
+        #cbar.ax.axis["top"].major_ticklabels.set_ha("right")
         return fig, ax, fig2, ax2
 
 
