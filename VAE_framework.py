@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning Methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-05-11T16:26:29+10:00
+# @Last modified time: 2020-05-15T23:42:46+10:00
 
 ##########################################################
 # %% imports
@@ -24,11 +24,13 @@ import pickle as pkl
 ##########################################################
 # Location of data
 datadir = 'datadir/'
-traindir = datadir + 'train/'
+datadir1 = 'DataSets/'
+#traindir = datadir + 'train/'
+traindir = datadir1 + 'Synthetic_Data_1'
 validdir = datadir + 'val/'
 testdir = datadir + 'test/'
 # Change to fit hardware
-batch_size = 12
+batch_size = 128
 
 # Check if GPU avalaible
 train_on_gpu = cuda.is_available()
@@ -53,40 +55,40 @@ features, labels = next(trainiter)
 _,_ = imshow_tensor(features[0])
 
 #%% Test inference DataSets
-infer_data, infer_dataloader = get_inference_dataset('DataSets/Synthetic_Data_1',batch_size,input_size)
-infer_iter = iter(infer_dataloader)
-features, labels, file_names = next(infer_iter)
-print(file_names)
-_,_ = imshow_tensor(features[0])
-
-
-temp_id = [[file_name.split('_')[2],file_name.split('_')[3][-1],file_name.split('_')[4][2:-5]] for file_name in file_names]
-temp_id2 = temp_id
-
-temp = [temp_id, temp_id2]
-print(temp)
-import itertools
-print(list(itertools.chain.from_iterable(temp)))
-
-#Obtain the class
-print(infer_data.classes[0])
+# infer_data, infer_dataloader = get_inference_dataset('DataSets/Synthetic_Data_1',batch_size,input_size)
+# infer_iter = iter(infer_dataloader)
+# features, labels, file_names = next(infer_iter)
+# print(file_names)
+# _,_ = imshow_tensor(features[0])
+#
+#
+# temp_id = [[file_name.split('_')[2],file_name.split('_')[3][-1],file_name.split('_')[4][2:-5]] for file_name in file_names]
+# temp_id2 = temp_id
+#
+# temp = [temp_id, temp_id2]
+# print(temp)
+# import itertools
+# print(list(itertools.chain.from_iterable(temp)))
+#
+# #Obtain the class
+# print(infer_data.classes[0])
 
 ##########################################################
 # %% Build custom VAE Model
 ##########################################################
 
 
-#model = VAE(zdim=2,channels=4,base=16,loss='MSE',layer_count=2,input_size=input_size)
-model = Skip_VAE(zdim=128, beta=1, base_enc=32, base_dec=32, depth_factor_dec=2)
+model = VAE(zdim=3, beta=1, base_enc=64, base_dec=32, depth_factor_dec=2)
+#model = Skip_VAE(zdim=3, beta=1, base_enc=64, base_dec=32, depth_factor_dec=2)
 if train_on_gpu:
     model.cuda()
 
 #print(model)
-summary(model,input_size=(4,input_size,input_size),batch_size=32)
+summary(model,input_size=(3,input_size,input_size),batch_size=32)
 
-optimizer = optim.Adam(model.parameters(), lr=1e-4)
+optimizer = optim.Adam(model.parameters(), lr=0.5e-4)
 
-epochs = 30
+epochs = 60
 
 # KL annealing parameter : [max_value, start_increace, reach_max_value]
 #beta_init = [1.0,5,55]
@@ -96,7 +98,7 @@ fig = plot_train_result(history, only_train_data=True)
 fig.show()
 
 #model_name = '4chan_105e_512z_model2'
-#model_name = '4chan_1000e_2z_model2'
+#model_name = '3chan_60e_3z_SotaVAE'
 
 #SAVE TRAINED MODEL and history
 #history_save = 'outputs/plot_history/'+f'loss_evo_{model_name}_{datetime.date.today()}.pkl'

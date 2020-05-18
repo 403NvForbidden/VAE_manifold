@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning Methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-05-12T16:58:31+10:00
+# @Last modified time: 2020-05-15T08:56:37+10:00
 
 '''
 File containing main function to train the VAE with proper single cell images dataset
@@ -260,7 +260,7 @@ def train_infoM_epoch(epoch, VAE, MLP, opti_VAE, opti_MLP, train_loader, train_o
 
 
     # visualize reconstrunction, synthesis, and latent space
-    if (epoch%20==0) or (epoch == 1):
+    if (epoch%5==0) or (epoch == 1):
 
         fig, ax, fig2, ax2 = plot_latent_space(VAE,train_loader,train_on_gpu)
         if ax != None and ax2 != None:

@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning Methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-05-07T12:26:25+10:00
+# @Last modified time: 2020-05-15T12:01:26+10:00
 
 '''
 File containing different VAE architectures, to reconstruct 4xHxW single cell images,
@@ -40,7 +40,7 @@ class VAE(nn.Module):
         ##### Encoding layers #####
         ###########################
         self.encoder = nn.Sequential(
-            Conv(4,base_enc,4,stride=2,padding=1), #stride 2, resolution is splitted by half
+            Conv(3,base_enc,4,stride=2,padding=1), #stride 2, resolution is splitted by half
             Conv(base_enc,base_enc*2,4,stride=2,padding=1),
             Conv(base_enc*2,base_enc*4,4,stride=2,padding=1), #8x8
             Conv(base_enc*4,base_enc*4,4,stride=2,padding=1),
@@ -61,7 +61,7 @@ class VAE(nn.Module):
             ConvUpsampling(int(base_dec*(depth_factor_dec**0)),int(base_dec*(depth_factor_dec**0)),4,stride=2,padding=1),
 
             nn.Upsample(scale_factor=4,mode='bilinear'),
-            nn.Conv2d(int(base_dec*(depth_factor_dec**0)), 4, 4, 2, 1),
+            nn.Conv2d(int(base_dec*(depth_factor_dec**0)), 3, 4, 2, 1),
             #nn.Sigmoid(), #Sigmoid compute directly in the loss (more stable)
         )
 
@@ -123,7 +123,7 @@ class Skip_VAE(nn.Module):
         self.beta = beta
 
         self.encoder = nn.Sequential(
-            Skip_Conv_down(4,base_enc), # resolution is splitted by half
+            Skip_Conv_down(3,base_enc), # resolution is splitted by half
             Skip_Conv_down(base_enc,base_enc*2,kernel_size=4, stride=2, padding=1),
             Skip_Conv_down(base_enc*2,base_enc*4,kernel_size=4, stride=2, padding=1),
             Skip_Conv_down(base_enc*4,base_enc*4,kernel_size=4, stride=2, padding=1),
@@ -138,7 +138,7 @@ class Skip_VAE(nn.Module):
             Skip_DeConv_up(int(base_dec*(depth_factor_dec**2)),int(base_dec*(depth_factor_dec**1))),
             Skip_DeConv_up(int(base_dec*(depth_factor_dec**1)),int(base_dec*(depth_factor_dec**0))),
             Skip_DeConv_up(int(base_dec*(depth_factor_dec**0)),int(base_dec*(depth_factor_dec**0))),
-            Skip_DeConv_up(int(base_dec*(depth_factor_dec**0)), 4, LastLayer=True)
+            Skip_DeConv_up(int(base_dec*(depth_factor_dec**0)), 3, LastLayer=True)
         )
 
         for m in self.modules():

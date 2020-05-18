@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-05-13T17:58:15+10:00
+# @Last modified time: 2020-05-18T16:25:18+10:00
 
 '''File containing function to visualize data or to save it'''
 import torch
@@ -256,7 +256,7 @@ def metadata_latent_space(model, infer_dataloader, train_on_gpu):
     MetaData_csv['y_coord'] = temp_matching_df.y_coord.values
     if model.zdim == 3:
         MetaData_csv['z_coord'] = temp_matching_df.z_coord.values
-    #MetaData_csv.to_csv('DataSets/John_Metadata_3Dlatent_20200513.csv',index=False)
+    MetaData_csv.to_csv('DataSets/Sacha_Metadata_2dlatentVAEFAIL_20200518.csv',index=False)
 
 
     ###### Plotting part - 3 Dimensional #####
@@ -279,15 +279,13 @@ def metadata_latent_space(model, infer_dataloader, train_on_gpu):
         #     z=MetaData_csv.z_coord.values, mode='markers',
         #     marker=dict(size=3,color=MetaData_csv.GT_label.values,
         #         opacity=0.8), text=MetaData_csv.GT_Shape.values)])
-        fig_3d_1.update_layout(margin=dict(l=0,r=0,b=0,t=0),showlegend=True)
+        fig_3d_1.update_layout(margin=dict(l=0,r=0,b=0,t=0),showlegend=True,legend=dict(y=-.1))
 
-        figtest = go.FigureWidget(fig_3d_1)
-        scatter = figtest.data[0]
-        scatter.on_click(update_point)
-
-
-        fig_test = px.scatter_3d(MetaData_csv, x='x_coord', y='y_coord', z='z_coord',color='GT_Shape')
-        show_in_window(figtest)
+        #figtest = go.FigureWidget(fig_3d_1)
+        #scatter = figtest.data[0]
+        #scatter.on_click(update_point)
+        #fig_test = px.scatter_3d(MetaData_csv, x='x_coord', y='y_coord', z='z_coord',color='GT_Shape')
+        show_in_window(fig_3d_1)
 
         fig = plt.figure(figsize=(10,10))
         #ax = Axes3D(fig)
@@ -315,9 +313,9 @@ def metadata_latent_space(model, infer_dataloader, train_on_gpu):
 
         ##### Plot 1 : Latent representation - Sample labeled by classes #####
 
-        fig, ax = plt.subplots(figsize=(8,8),dpi=300)
+        #fig, ax = plt.subplots(figsize=(8,8),dpi=300)
 
-        fig2, ax2 = plt.subplots(figsize=(8,8),dpi=300)
+        #fig2, ax2 = plt.subplots(figsize=(8,8),dpi=300)
 
         cmap1 = plt.get_cmap('tab20')
         colors1 = cmap1(np.linspace(0,1.0,20))
@@ -325,39 +323,51 @@ def metadata_latent_space(model, infer_dataloader, train_on_gpu):
         colors2 = cmap2(np.linspace(0,1.0,10))
         colors = np.concatenate((colors1,colors2),0)
 
-
-        ## TODO: Do a mapping between class ID and Process to ensure it is rightly mapped
-        zorder = 100
+        traces = []
+        #MetaSubset = MetaData_csv['GT_dist_toMax_phenotype']>0.5
+        MS = MetaData_csv
         for i in np.unique(true_label):
-            zorder -= 10
-            ax.scatter(z_points[true_label==i,0],z_points[true_label==i,1],s=5,color=colors[i],zorder=zorder, label=f'Process_{i+1}')
+            scatter = go.Scatter(x=MS[MetaData_csv['GT_label']==i+1].x_coord.values,y=MS[MetaData_csv['GT_label']==i+1].y_coord.values,
+                mode='markers',
+                marker=dict(size=3, opacity=0.8),
+                name=f'Process {i+1}', text=MS.GT_Shape.values)
+            traces.append(scatter)
 
+        layout= dict(title='Latent Representation, colored by GT clustered')
+        fig_2d_1 = go.Figure(data=traces, layout=layout)
+        fig_2d_1.update_layout(margin=dict(l=0,r=0,b=0,t=0),showlegend=True)
 
-        ax.legend()
+        #show_in_window(fig_2d_1)
+        ## TODO: Do a mapping between class ID and Process to ensure it is rightly mapped
+        #zorder = 100
+        #for i in np.unique(true_label):
+            #zorder -= 10
+            #ax.scatter(z_points[true_label==i,0],z_points[true_label==i,1],s=5,color=colors[i],zorder=zorder, label=f'Process_{i+1}')
+        #ax.legend()
 
 
         ##### Plot 2 : Latent representation - Sample labeled by shape factor #####
 
-        MetaData_csv = pd.read_csv('DataSets/MetaData1_GT_link_CP.csv')
-
-        cmap_blues = plt.get_cmap('copper')
-        norm = matplotlib.colors.Normalize(vmin=MetaData_csv['GT_Shape'].min(), vmax=MetaData_csv['GT_Shape'].max())
-
-        for i in range(len(z_points)):
-            well=link_to_metadata[i][0]
-            site=int(link_to_metadata[i][1])
-            cell_id=int(link_to_metadata[i][2])
-            #print(np.any(MetaData_csv['Well']==well),np.any(MetaData_csv['Site']==site),np.any(MetaData_csv['GT_Cell_id']==cell_id))
-
-            shape_factor=MetaData_csv[(MetaData_csv['Well']==well) & (MetaData_csv['Site']==site) & (MetaData_csv['GT_Cell_id']==cell_id)]['GT_Shape'].values
-            ax2.scatter(z_points[i,0],z_points[i,1],s=5,color=cmap_blues(norm(shape_factor)))
-        cbaxes = inset_axes(ax2,width="30%",height="3%",loc=3)
-        cbar = fig2.colorbar(matplotlib.cm.ScalarMappable(norm=norm,cmap=cmap_blues),cax=cbaxes,orientation='horizontal',ticks=[MetaData_csv['GT_Shape'].min(),MetaData_csv['GT_Shape'].max()])
-        cbar.ax.set_xticklabels(['Rounded','Deformed'],rotation=45,ha='left')
-        cbar.ax.xaxis.set_label_position('top')
-        cbar.ax.xaxis.set_ticks_position('top')
+        # MetaData_csv = pd.read_csv('DataSets/MetaData1_GT_link_CP.csv')
+        #
+        # cmap_blues = plt.get_cmap('copper')
+        # norm = matplotlib.colors.Normalize(vmin=MetaData_csv['GT_Shape'].min(), vmax=MetaData_csv['GT_Shape'].max())
+        #
+        # for i in range(len(z_points)):
+        #     well=link_to_metadata[i][0]
+        #     site=int(link_to_metadata[i][1])
+        #     cell_id=int(link_to_metadata[i][2])
+        #     #print(np.any(MetaData_csv['Well']==well),np.any(MetaData_csv['Site']==site),np.any(MetaData_csv['GT_Cell_id']==cell_id))
+        #
+        #     shape_factor=MetaData_csv[(MetaData_csv['Well']==well) & (MetaData_csv['Site']==site) & (MetaData_csv['GT_Cell_id']==cell_id)]['GT_Shape'].values
+        #     ax2.scatter(z_points[i,0],z_points[i,1],s=5,color=cmap_blues(norm(shape_factor)))
+        # cbaxes = inset_axes(ax2,width="30%",height="3%",loc=3)
+        # cbar = fig2.colorbar(matplotlib.cm.ScalarMappable(norm=norm,cmap=cmap_blues),cax=cbaxes,orientation='horizontal',ticks=[MetaData_csv['GT_Shape'].min(),MetaData_csv['GT_Shape'].max()])
+        # cbar.ax.set_xticklabels(['Rounded','Deformed'],rotation=45,ha='left')
+        # cbar.ax.xaxis.set_label_position('top')
+        # cbar.ax.xaxis.set_ticks_position('top')
         #cbar.ax.axis["top"].major_ticklabels.set_ha("right")
-        return fig, ax, fig2, ax2
+        return fig_2d_1
 
 
 def show(img, train_on_gpu):
