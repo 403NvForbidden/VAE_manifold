@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning Methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-05-13T10:02:20+10:00
+# @Last modified time: 2020-05-22T14:52:38+10:00
 
 '''
 This file contains classes and function that are usefull to load the raw data,
@@ -16,7 +16,7 @@ from skimage import io
 from skimage.util import img_as_float, pad
 from PIL import Image
 from torchvision import transforms
-from skimage.transform import resize
+from skimage.transform import resize, rotate
 import torch
 
 import matplotlib.pyplot as plt
@@ -151,7 +151,10 @@ def image_tranforms(input_size):
             # 1) Rescale and Pad to fixed
             zPad_or_Rescale(input_size),
             # 2) Data augmentation
-            RandomHandVFlip(),
+            RandomRot90(),
+            RandomSmallRotation(),
+            RandomVFlip(),
+            RandomHFlip(),
             # ROTATION ? WARP ? NOISE ?
             transforms.ToTensor(), #Will rescale to 0-1 Float32
             Double_to_Float()
@@ -248,19 +251,53 @@ class zPad_or_Rescale_inference(object):
         return (img_resized, file_name)
 
 
-class RandomHandVFlip(object):
+class RandomVFlip(object):
     """Data augmentation
-    Randomly flip the image verticallz or horizontally"""
+    Randomly flip the image horizontally"""
+
+    def __call__(self, sample):
+
+        if random.random() < 0.5:
+            sample = np.flipud(sample)
+
+        ### TODO:  Do the same with np.rot() ???
+
+        return np.ascontiguousarray(sample)
+
+class RandomHFlip(object):
+    """Data augmentation
+    Randomly flip the image vertically"""
 
     def __call__(self, sample):
 
         if random.random() < 0.5:
             sample = np.fliplr(sample)
 
+        return np.ascontiguousarray(sample)
+
+class RandomSmallRotation(object):
+    """Data augmentation
+    Randomly rotate the image"""
+
+    def __call__(self, sample):
+
+        rot_angle = [5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85]
+
         if random.random() < 0.5:
-            sample = np.flipud(sample)
+            sample = rotate(sample,np.random.choice(rot_angle))
 
         ### TODO:  Do the same with np.rot() ???
+
+        return sample
+
+class RandomRot90(object):
+    """Data augmentation
+    Randomly rotate the image by 90 degree"""
+
+    def __call__(self, sample):
+
+        if random.random() < 0.5:
+            sample = np.rot90(sample,k=1,axes=(0,1))
 
         return np.ascontiguousarray(sample)
 

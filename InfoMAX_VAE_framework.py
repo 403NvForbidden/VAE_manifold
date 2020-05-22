@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-05-18T22:09:12+10:00
+# @Last modified time: 2020-05-22T23:53:44+10:00
 
 
 ##########################################################
@@ -64,10 +64,10 @@ _,_ = imshow_tensor(features[0])
 # %% Build custom VAE Model
 ##########################################################
 
-VAE = CNN_VAE(zdim=2, alpha=1000, beta=100, base_enc=64, base_dec=32, depth_factor_dec=2)
+VAE = CNN_VAE(zdim=2, alpha=15, beta=1, base_enc=128, base_dec=16, depth_factor_dec=2)
 MLP = MLP_MI_estimator(zdim=2)
 
-opti_VAE = optim.Adam(VAE.parameters(), lr=0.001, betas=(0.9, 0.999))
+opti_VAE = optim.Adam(VAE.parameters(), lr=0.0001, betas=(0.9, 0.999))
 opti_MLP = optim.Adam(MLP.parameters(), lr=0.00001, betas=(0.9, 0.999))
 
 if train_on_gpu:
@@ -76,7 +76,7 @@ if train_on_gpu:
 
 summary(VAE,input_size=(3,64,64),batch_size=32)
 
-epochs = 40
+epochs = 60
 
 
 VAE, MLP, history = train_InfoMAX_model(epochs, VAE, MLP, opti_VAE, opti_MLP, dataloader, train_on_gpu)
@@ -85,7 +85,7 @@ fig = plot_train_result(history, infoMAX = True, only_train_data=True)
 fig.show()
 plt.show()
 #model_name = '4chan_105e_512z_model2'
-#model_name = '3chan_dataset1_20e_2z_VAEFail'
+#model_name = '3chan_dataset1_60e_2z_VAErun3'
 
 #SAVE TRAINED MODEL and history
 #history_save = 'outputs/plot_history/'+f'loss_evo_{model_name}_{datetime.date.today()}.pkl'
@@ -128,14 +128,15 @@ infer_iter = iter(infer_dataloader)
 features, labels, file_names = next(infer_iter)
 
 
-model_VAE = load_brute('outputs/Intermediate Dataset1/18.05.20 - DistToMaxPhenotype/VAE_failed/VAE_3chan_dataset1_20e_2z_VAEFail_2020-05-18.pth')
+model_VAE = load_brute('outputs/Intermediate Dataset1/21.05.2020 3z Cleandataset/Run 2 - Alpha 15 Beta 1/VAE_3chan_dataset1_new_80e_3z_VAErun2_2020-05-21.pth')
 
 figplotly = metadata_latent_space(model_VAE, infer_dataloader, train_on_gpu)
 #ax.set_title('Latent Representation - Label by GT cluster')
 #ax2.set_title('Latent Representation - Label by Shape Factor')
 #figplotly.show()
 #fig2.savefig('LatentRePresentation2.png')
-figplotly.show()
+#figplotly.show()
+show_in_window(figplotly)
 # %%
 # Test of SCORE
 
@@ -160,6 +161,7 @@ def show_in_window(fig):
     web.load(QUrl.fromLocalFile(file_path))
     web.show()
     sys.exit(app.exec_())
+
 full_csv = pd.read_csv('DataSets/Sacha_Metadata_2dlatentVAEFAIL_20200518.csv')
 
 #Define where are the source phenotype in latent space

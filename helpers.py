@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-05-18T16:25:18+10:00
+# @Last modified time: 2020-05-21T14:56:37+10:00
 
 '''File containing function to visualize data or to save it'''
 import torch
@@ -256,7 +256,7 @@ def metadata_latent_space(model, infer_dataloader, train_on_gpu):
     MetaData_csv['y_coord'] = temp_matching_df.y_coord.values
     if model.zdim == 3:
         MetaData_csv['z_coord'] = temp_matching_df.z_coord.values
-    MetaData_csv.to_csv('DataSets/Sacha_Metadata_2dlatentVAEFAIL_20200518.csv',index=False)
+    #MetaData_csv.to_csv('DataSets/Sacha_Metadata_3dlatentVAERun2_20200521.csv',index=False)
 
 
     ###### Plotting part - 3 Dimensional #####

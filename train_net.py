@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning Methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-05-15T08:56:37+10:00
+# @Last modified time: 2020-05-21T09:00:11+10:00
 
 '''
 File containing main function to train the VAE with proper single cell images dataset

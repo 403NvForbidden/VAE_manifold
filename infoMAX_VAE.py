@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-05-11T10:20:49+10:00
+# @Last modified time: 2020-05-21T08:58:47+10:00
 
 
 '''File containing the architecture of InfoMax VAE, a VAE framework that
@@ -84,16 +84,16 @@ class CNN_VAE(nn.Module):
             Conv(3,base_enc,4,stride=2,padding=1), #stride 2, resolution is splitted by half
             Conv(base_enc,base_enc*2,4,stride=2,padding=1),
             Conv(base_enc*2,base_enc*4,4,stride=2,padding=1), #8x8
-            Conv(base_enc*4,base_enc*4,4,stride=2,padding=1),
-            Conv(base_enc*4,base_enc*8,4,stride=2,padding=1),  #2x2
-            nn.Conv2d(base_enc*8, 2*zdim, 2, 1),#MLP  #1x1 -> encoded in channels
+            Conv(base_enc*4,base_enc*8,4,stride=2,padding=1),
+            Conv(base_enc*8,base_enc*16,4,stride=2,padding=1),  #2x2
+            nn.Conv2d(base_enc*16, 2*zdim, 2, 1),#MLP  #1x1 -> encoded in channels
 
         )
         self.decoder = nn.Sequential(
-            nn.Conv2d(zdim, int(base_dec*(depth_factor_dec**3)), 1), #MLP
+            nn.Conv2d(zdim, int(base_dec*(depth_factor_dec**4)), 1), #MLP
             nn.LeakyReLU(),
+            ConvUpsampling(int(base_dec*(depth_factor_dec**4)),int(base_dec*(depth_factor_dec**3)),4,stride=2,padding=1),
             ConvUpsampling(int(base_dec*(depth_factor_dec**3)),int(base_dec*(depth_factor_dec**2)),4,stride=2,padding=1),
-            ConvUpsampling(int(base_dec*(depth_factor_dec**2)),int(base_dec*(depth_factor_dec**2)),4,stride=2,padding=1),
             ConvUpsampling(int(base_dec*(depth_factor_dec**2)),int(base_dec*(depth_factor_dec**1)),4,stride=2,padding=1),
             ConvUpsampling(int(base_dec*(depth_factor_dec**1)),int(base_dec*(depth_factor_dec**0)),4,stride=2,padding=1),
             ConvUpsampling(int(base_dec*(depth_factor_dec**0)),int(base_dec*(depth_factor_dec**0)),4,stride=2,padding=1),

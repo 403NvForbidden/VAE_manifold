@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-05-18T10:05:24+10:00
+# @Last modified time: 2020-05-22T14:43:10+10:00
 
 
 
@@ -16,8 +16,7 @@ import shutil
 
 CPpath = 'DataSets/CellProfiler_Outputs/'
 CPQuantitativeFiles ='Quantitative_Outputs/'
-CPcsv = '200507_Horvath_Synth_Simple_Cell_Profiler_AnalysisWholeCell.csv'
-
+CPcsv = '200515_Horvath_Simple_AnalysisSplitCellBodies.csv'
 
 # Extraction of info from CellProfiler MetaData
 
@@ -106,18 +105,18 @@ for cluster in cluster_list:
 #Folder were to save data
 save_folder = 'DataSets/Synthetic_Data_1/'
 list_folder = ['Process_1','Process_2','Process_3','Process_4','Process_5','Process_6','Process_7']
-#for folder in list_folder:
-    #saving_folder = f'{save_folder}{folder}'
-    #if os.path.exists(saving_folder):
-        #shutil.rmtree(saving_folder)
-    #os.makedirs(saving_folder)
+for folder in list_folder:
+    saving_folder = f'{save_folder}{folder}'
+    if os.path.exists(saving_folder):
+        shutil.rmtree(saving_folder)
+    os.makedirs(saving_folder)
 
 MetaData_GT_link_CP = pd.DataFrame(columns=['Well','Site','GT_label','GT_Cell_id','Unique_ID','GT_x','GT_y','GT_colorR','GT_colorG','GT_colorB','GT_Shape','GT_dist_toMax_phenotype','PositionOnRegressionPlaneX','PositionOnRegressionPlaneY','CP_ImagerNumber','CP_ObjectNumber','CP_x','CP_y'])
 
 counter = 0
 
 #Iterate over images (combination of well and site)
-list_of_well_site = os.listdir('DataSets/CellProfiler_Outputs/SingleWholeCellCroppedImages/SingleWholeCellCroppedImages_Blue')
+list_of_well_site = os.listdir('DataSets/CellProfiler_Outputs/SingleWholeCellCroppedImages/CroppedImages_Blue')
 for combination in list_of_well_site:
     strings = combination.split('_')
     well_i = strings[0]
@@ -141,7 +140,7 @@ for combination in list_of_well_site:
         CP_row_min, dist_2 = closest_point(GT_centroid,CP_centroids_array)
         CP_centroid = CP_centroids_array[CP_row_min]
 
-        if np.sqrt(dist_2) > 30: #CellProfiler probably failed to find that cell, ignore
+        if np.sqrt(dist_2) > 35: #CellProfiler probably failed to find that cell, ignore
             print('One GT cell has been ignored')
             counter += 1
             continue
@@ -154,27 +153,27 @@ for combination in list_of_well_site:
         new_row = pd.Series([row['Well'],row['Site'],row['ProcessID'],row['CellIdx'],unique_id,row['LocationX'],row['LocationY'],row['ColorParamsR'],row['ColorParamsG'],row['ColorParamsB'],row['ShapeParams'],row['dist_toMax_phenotype'],row['PositionOnRegressionPlaneX'],row['PositionOnRegressionPlaneY'],CP_WA1_S1.loc[CP_row_min,'ImageNumber'],CP_WA1_S1.loc[CP_row_min,'ObjectNumber'],CP_WA1_S1.loc[CP_row_min,'AreaShape_Center_X'],CP_WA1_S1.loc[CP_row_min,'AreaShape_Center_Y']], index=MetaData_GT_link_CP.columns)
         MetaData_GT_link_CP = MetaData_GT_link_CP.append(new_row, ignore_index=True)
         #save one 3 Channel tiff file per single cell, in a folder corresponding to GT
-        blue_path = 'DataSets/CellProfiler_Outputs/SingleWholeCellCroppedImages/SingleWholeCellCroppedImages_Blue/'
-        green_path = 'DataSets/CellProfiler_Outputs/SingleWholeCellCroppedImages/SingleWholeCellCroppedImages_Green/'
-        red_path = 'DataSets/CellProfiler_Outputs/SingleWholeCellCroppedImages/SingleWholeCellCroppedImages_Red/'
+        blue_path = 'DataSets/CellProfiler_Outputs/SingleWholeCellCroppedImages/CroppedImages_Blue/'
+        green_path = 'DataSets/CellProfiler_Outputs/SingleWholeCellCroppedImages/CroppedImages_Green/'
+        red_path = 'DataSets/CellProfiler_Outputs/SingleWholeCellCroppedImages/CroppedImages_Red/'
 
         w = row['Well']
         r = row['Site']
         well_site_folder = f'{w}_0{r}/'
         object_num = CP_WA1_S1.loc[CP_row_min,'ObjectNumber']
-        single_cell_file = f'WholeCell_{object_num}.png'
+        single_cell_file = f'SplitCellBodies_{object_num}.png'
 
-        #img_blue = io.imread(blue_path+well_site_folder+single_cell_file)
-        #img_green = io.imread(green_path+well_site_folder+single_cell_file)
-        #img_red = io.imread(red_path+well_site_folder+single_cell_file)
+        img_blue = io.imread(blue_path+well_site_folder+single_cell_file)
+        img_green = io.imread(green_path+well_site_folder+single_cell_file)
+        img_red = io.imread(red_path+well_site_folder+single_cell_file)
 
         #new stacked RGB img
-        #img_rgb = np.stack([img_red,img_green,img_blue],axis=-1)
+        img_rgb = np.stack([img_red,img_green,img_blue],axis=-1)
 
         ## TODO: STACK DIFFERENT CHANNEL
-        #file_name = "CellProcess_{}_{}_id{}.tiff".format(label,combination,id)
-        #folder_name = list_folder[row['ProcessID']-1]
-        #io.imsave(save_folder+f'{folder_name}/'+file_name,img_rgb,plugin='tifffile')
+        file_name = "CellProcess_{}_{}_id{}.tiff".format(label,combination,id)
+        folder_name = list_folder[row['ProcessID']-1]
+        io.imsave(save_folder+f'{folder_name}/'+file_name,img_rgb,plugin='tifffile')
 
 
 MetaData_GT_link_CP.head()
@@ -273,3 +272,62 @@ fig_test.show()
 #from plotly.offline import init_notebook_mode, plot_mpl
 #plotly.io.orca.config.executable = '/home/sachahai/miniconda2/pkgs/plotly-orca-1.2.1-1/bin/orca'
 #plotly.io.orca.config.save()
+
+#%% ###################################
+#### Prepare CSV File linking CellProfiler extracted features and BBBC ground truth label
+# AIM : Update cellprofiler csv file and add a last column with the ground truth label
+path_to_CP_csv_file = 'DataSets/CellProfiler_Outputs/Quantitative_Outputs/200515_Horvath_Simple_AnalysisSplitCyto.csv'
+CP_file = pd.read_csv(path_to_CP_csv_file)
+BBBC_vae = pd.read_csv('DataSets/MetaData1_GT_link_CP.csv')
+
+CP_file['GT_label']=np.nan
+#CP_file['control_x']=np.nan
+
+for index, row in BBBC_vae.iterrows():
+    Img_number = row['CP_ImagerNumber']
+    Obj_number = row['CP_ObjectNumber']
+    GT_label = row['GT_label']
+    control = row['CP_x']
+    CP_file.loc[(CPLinked['ImageNumber']==Img_number) & (CPLinked['ObjectNumber']==Obj_number),'GT_label']=GT_label
+    #CP_file.loc[(CPLinked['ImageNumber']==Img_number) & (CPLinked['ObjectNumber']==Obj_number),'control_x']=control
+
+#assert np.all(CP_file.GT_label.values==CP_file.GT_test.values), 'Matching Ground Truth Failed'
+#assert np.all(CP_file.AreaShape_Center_X==CP_file.control_x.values), 'Matching Ground Truth Failed'
+assert not(np.any(CP_file['GT_label'].isnull())), 'Matching Ground Truth Failed'
+print('Matching groud truth to Cell profiler --- completed')
+
+#CP_file=CP_file.drop(columns=['GT_label','control_x'])
+#CP_file=CP_file.rename(columns={'GT_test':'GT_label'})
+
+#CP_file.to_csv(path_to_CP_csv_file,index=False)
+CP_file.head()
+# %%
+#Link ground truth to CP for UMAP ploting
+
+#Control everzthing is ok
+
+GT_VAE_csv = pd.read_csv('DataSets/Sacha_Metadata_3dlatentVAERun2_20200521.csv')
+
+GT_VAE_csv.head()
+
+#fig = px.scatter_3d(GT_VAE_csv[GT_VAE_csv['GT_label']!=7], x='x_coord',y='y_coord',z='z_coord',color='GT_label')
+#fig.update_traces(marker=dict(size=3))
+#show_in_window(fig)
+
+CPLinked = pd.read_csv('DataSets/CellProfiler_Outputs/Quantitative_Outputs/200515_Horvath_Simple_AnalysisSplitCellBodies.csv')
+CPLinked.head()
+
+GT_VAE_csv = GT_VAE_csv[['CP_ImagerNumber','CP_ObjectNumber','GT_label']]
+GT_VAE_csv.head()
+CPLinked = CPLinked[['ImageNumber','ObjectNumber','GT_label']]
+CPLinked.head()
+
+CPLinked['Label_test']=""
+CPLinked.loc[(CPLinked['ImageNumber']==1) & (CPLinked['ObjectNumber']==4),'Label_test']=4
+for index, row in GT_VAE_csv.iterrows():
+    Img_number = row['CP_ImagerNumber']
+    Obj_number = row['CP_ObjectNumber']
+    GT_label = row['GT_label']
+    CPLinked.loc[(CPLinked['ImageNumber']==Img_number) & (CPLinked['ObjectNumber']==Obj_number),'Label_test']=GT_label
+CPLinked.head(20)
+np.all(CPLinked.GT_label.values==CPLinked.Label_test.values)
