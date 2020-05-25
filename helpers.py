@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-05-21T14:56:37+10:00
+# @Last modified time: 2020-05-25T18:38:01+10:00
 
 '''File containing function to visualize data or to save it'''
 import torch
@@ -256,7 +256,7 @@ def metadata_latent_space(model, infer_dataloader, train_on_gpu):
     MetaData_csv['y_coord'] = temp_matching_df.y_coord.values
     if model.zdim == 3:
         MetaData_csv['z_coord'] = temp_matching_df.z_coord.values
-    #MetaData_csv.to_csv('DataSets/Sacha_Metadata_3dlatentVAERun2_20200521.csv',index=False)
+    #MetaData_csv.to_csv('DataSets/Sacha_Metadata_3d_VAE_20200525.csv',index=False)
 
 
     ###### Plotting part - 3 Dimensional #####
@@ -269,7 +269,7 @@ def metadata_latent_space(model, infer_dataloader, train_on_gpu):
         for i in np.unique(true_label):
             scatter = go.Scatter3d(x=MetaData_csv[MetaData_csv['GT_label']==i+1].x_coord.values,y=MetaData_csv[MetaData_csv['GT_label']==i+1].y_coord.values,
                 z=MetaData_csv[MetaData_csv['GT_label']==i+1].z_coord.values, mode='markers',
-                marker=dict(size=3, opacity=0.8),
+                marker=dict(size=3, opacity=1),
                 name=f'Process {i+1}', text=MetaData_csv.GT_Shape.values)
             traces.append(scatter)
 

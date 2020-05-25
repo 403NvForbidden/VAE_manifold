@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning Methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-05-22T14:52:38+10:00
+# @Last modified time: 2020-05-25T18:38:05+10:00
 
 '''
 This file contains classes and function that are usefull to load the raw data,

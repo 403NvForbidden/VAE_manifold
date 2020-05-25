@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-05-22T14:43:10+10:00
+# @Last modified time: 2020-05-25T18:38:02+10:00
 
 
 
@@ -287,8 +287,8 @@ for index, row in BBBC_vae.iterrows():
     Img_number = row['CP_ImagerNumber']
     Obj_number = row['CP_ObjectNumber']
     GT_label = row['GT_label']
-    control = row['CP_x']
-    CP_file.loc[(CPLinked['ImageNumber']==Img_number) & (CPLinked['ObjectNumber']==Obj_number),'GT_label']=GT_label
+    #control = row['CP_x']
+    CP_file.loc[(CP_file['ImageNumber']==Img_number) & (CP_file['ObjectNumber']==Obj_number),'GT_label']=GT_label
     #CP_file.loc[(CPLinked['ImageNumber']==Img_number) & (CPLinked['ObjectNumber']==Obj_number),'control_x']=control
 
 #assert np.all(CP_file.GT_label.values==CP_file.GT_test.values), 'Matching Ground Truth Failed'
@@ -301,33 +301,3 @@ print('Matching groud truth to Cell profiler --- completed')
 
 #CP_file.to_csv(path_to_CP_csv_file,index=False)
 CP_file.head()
-# %%
-#Link ground truth to CP for UMAP ploting
-
-#Control everzthing is ok
-
-GT_VAE_csv = pd.read_csv('DataSets/Sacha_Metadata_3dlatentVAERun2_20200521.csv')
-
-GT_VAE_csv.head()
-
-#fig = px.scatter_3d(GT_VAE_csv[GT_VAE_csv['GT_label']!=7], x='x_coord',y='y_coord',z='z_coord',color='GT_label')
-#fig.update_traces(marker=dict(size=3))
-#show_in_window(fig)
-
-CPLinked = pd.read_csv('DataSets/CellProfiler_Outputs/Quantitative_Outputs/200515_Horvath_Simple_AnalysisSplitCellBodies.csv')
-CPLinked.head()
-
-GT_VAE_csv = GT_VAE_csv[['CP_ImagerNumber','CP_ObjectNumber','GT_label']]
-GT_VAE_csv.head()
-CPLinked = CPLinked[['ImageNumber','ObjectNumber','GT_label']]
-CPLinked.head()
-
-CPLinked['Label_test']=""
-CPLinked.loc[(CPLinked['ImageNumber']==1) & (CPLinked['ObjectNumber']==4),'Label_test']=4
-for index, row in GT_VAE_csv.iterrows():
-    Img_number = row['CP_ImagerNumber']
-    Obj_number = row['CP_ObjectNumber']
-    GT_label = row['GT_label']
-    CPLinked.loc[(CPLinked['ImageNumber']==Img_number) & (CPLinked['ObjectNumber']==Obj_number),'Label_test']=GT_label
-CPLinked.head(20)
-np.all(CPLinked.GT_label.values==CPLinked.Label_test.values)
