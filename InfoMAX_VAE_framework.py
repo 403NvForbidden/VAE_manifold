@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-05-25T18:37:52+10:00
+# @Last modified time: 2020-05-27T18:55:48+10:00
 
 
 ##########################################################
@@ -128,9 +128,9 @@ infer_iter = iter(infer_dataloader)
 features, labels, file_names = next(infer_iter)
 
 
-#model_VAE = load_brute('outputs/Intermediate Dataset1/20200523-DataFinal Run1 For John/VAE_3chan_dataset1_final_60e_3z_VAErun1_2020-05-23.pth')
+#model_VAE = load_brute('outputs/Intermediate Dataset1/3D_latent_bigFail/VAE_3chan_dataset1_final_20e_3z_VAEBIGfail_2020-05-25.pth')
 
-figplotly = metadata_latent_space(VAE, infer_dataloader, train_on_gpu)
+figplotly = metadata_latent_space(model_VAE, infer_dataloader, train_on_gpu)
 #ax.set_title('Latent Representation - Label by GT cluster')
 #ax2.set_title('Latent Representation - Label by Shape Factor')
 #figplotly.show()

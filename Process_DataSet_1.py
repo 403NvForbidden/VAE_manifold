@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-05-25T18:38:02+10:00
+# @Last modified time: 2020-05-27T15:16:58+10:00
 
 
 
@@ -84,34 +84,49 @@ def closest_point(point,points):
     dist_2 = np.sum((points-point)**2, axis=1)
     return np.argmin(dist_2), dist_2[np.argmin(dist_2)]
 
+def is_above_diagonal(xi,yi):
+    '''Return True if closest initial state are RED ([1,1]) cells'''
+    if (yi > -xi + 1):
+        return True
+    else:
+        return False
+
 #Compute and add distance to maximum phenotype per cluster in GT dataframe
+#Add the same time, compute and add GT for each cell describing if closest initial state is red  or green
+#In GT -> Red Cells are close to [1,1] in phenotypic plane and have small shape factor
 distances = []
+initial_state = []
 Extremes = np.array([[0.,0.],[1.,1.]])
 #Find distance to max Phenotype
 for index, row in GT_df.iterrows():
     ind, dist = closest_point(np.array([row['PositionOnRegressionPlaneX'],row['PositionOnRegressionPlaneY']]),Extremes)
     distances.append(np.sqrt(dist))
-GT_df['dist_toMax_phenotype'] = distances
+    if is_above_diagonal(row['PositionOnRegressionPlaneX'],row['PositionOnRegressionPlaneY']):
+        initial_state.append('red')
+    else:
+        initial_state.append('green')
+GT_df['dist_toInit_state'] = distances
+GT_df['closest_init_state'] = initial_state
 
 #Normalize in 0-1 for each clusters
 cluster_list = np.unique(GT_df.ProcessID.values)
 for cluster in cluster_list:
     cluster_index = GT_df['ProcessID']==cluster
-    max_per_cluster = GT_df['dist_toMax_phenotype'][cluster_index].max()
-    GT_df['dist_toMax_phenotype'][cluster_index] = GT_df['dist_toMax_phenotype'][cluster_index].values / max_per_cluster
+    max_per_cluster = GT_df['dist_toInit_state'][cluster_index].max()
+    GT_df['dist_toInit_state'][cluster_index] = GT_df['dist_toInit_state'][cluster_index].values / max_per_cluster
 
 
 
 #Folder were to save data
-save_folder = 'DataSets/Synthetic_Data_1/'
-list_folder = ['Process_1','Process_2','Process_3','Process_4','Process_5','Process_6','Process_7']
-for folder in list_folder:
-    saving_folder = f'{save_folder}{folder}'
-    if os.path.exists(saving_folder):
-        shutil.rmtree(saving_folder)
-    os.makedirs(saving_folder)
+#save_folder = 'DataSets/Synthetic_Data_1/'
+#list_folder = ['Process_1','Process_2','Process_3','Process_4','Process_5','Process_6','Process_7']
+#for folder in list_folder:
+    #saving_folder = f'{save_folder}{folder}'
+    #if os.path.exists(saving_folder):
+        #shutil.rmtree(saving_folder)
+    #os.makedirs(saving_folder)
 
-MetaData_GT_link_CP = pd.DataFrame(columns=['Well','Site','GT_label','GT_Cell_id','Unique_ID','GT_x','GT_y','GT_colorR','GT_colorG','GT_colorB','GT_Shape','GT_dist_toMax_phenotype','PositionOnRegressionPlaneX','PositionOnRegressionPlaneY','CP_ImagerNumber','CP_ObjectNumber','CP_x','CP_y'])
+MetaData_GT_link_CP = pd.DataFrame(columns=['Well','Site','GT_label','GT_Cell_id','Unique_ID','GT_x','GT_y','GT_colorR','GT_colorG','GT_colorB','GT_Shape','GT_dist_toInit_state','GT_initial_state','PositionOnRegressionPlaneX','PositionOnRegressionPlaneY','CP_ImagerNumber','CP_ObjectNumber','CP_x','CP_y'])
 
 counter = 0
 
@@ -150,30 +165,30 @@ for combination in list_of_well_site:
         well_site = combination
         unique_id = "CellProcess_{}_{}_id{}.tiff".format(label,combination,id)
         #Store all useful info about that cell to link its GT and cellprofiler metadata
-        new_row = pd.Series([row['Well'],row['Site'],row['ProcessID'],row['CellIdx'],unique_id,row['LocationX'],row['LocationY'],row['ColorParamsR'],row['ColorParamsG'],row['ColorParamsB'],row['ShapeParams'],row['dist_toMax_phenotype'],row['PositionOnRegressionPlaneX'],row['PositionOnRegressionPlaneY'],CP_WA1_S1.loc[CP_row_min,'ImageNumber'],CP_WA1_S1.loc[CP_row_min,'ObjectNumber'],CP_WA1_S1.loc[CP_row_min,'AreaShape_Center_X'],CP_WA1_S1.loc[CP_row_min,'AreaShape_Center_Y']], index=MetaData_GT_link_CP.columns)
+        new_row = pd.Series([row['Well'],row['Site'],row['ProcessID'],row['CellIdx'],unique_id,row['LocationX'],row['LocationY'],row['ColorParamsR'],row['ColorParamsG'],row['ColorParamsB'],row['ShapeParams'],row['dist_toInit_state'],row['closest_init_state'],row['PositionOnRegressionPlaneX'],row['PositionOnRegressionPlaneY'],CP_WA1_S1.loc[CP_row_min,'ImageNumber'],CP_WA1_S1.loc[CP_row_min,'ObjectNumber'],CP_WA1_S1.loc[CP_row_min,'AreaShape_Center_X'],CP_WA1_S1.loc[CP_row_min,'AreaShape_Center_Y']], index=MetaData_GT_link_CP.columns)
         MetaData_GT_link_CP = MetaData_GT_link_CP.append(new_row, ignore_index=True)
         #save one 3 Channel tiff file per single cell, in a folder corresponding to GT
         blue_path = 'DataSets/CellProfiler_Outputs/SingleWholeCellCroppedImages/CroppedImages_Blue/'
         green_path = 'DataSets/CellProfiler_Outputs/SingleWholeCellCroppedImages/CroppedImages_Green/'
         red_path = 'DataSets/CellProfiler_Outputs/SingleWholeCellCroppedImages/CroppedImages_Red/'
 
-        w = row['Well']
-        r = row['Site']
-        well_site_folder = f'{w}_0{r}/'
-        object_num = CP_WA1_S1.loc[CP_row_min,'ObjectNumber']
-        single_cell_file = f'SplitCellBodies_{object_num}.png'
+        #w = row['Well']
+        #r = row['Site']
+        #well_site_folder = f'{w}_0{r}/'
+        #object_num = CP_WA1_S1.loc[CP_row_min,'ObjectNumber']
+        #single_cell_file = f'SplitCellBodies_{object_num}.png'
 
-        img_blue = io.imread(blue_path+well_site_folder+single_cell_file)
-        img_green = io.imread(green_path+well_site_folder+single_cell_file)
-        img_red = io.imread(red_path+well_site_folder+single_cell_file)
+        #img_blue = io.imread(blue_path+well_site_folder+single_cell_file)
+        #img_green = io.imread(green_path+well_site_folder+single_cell_file)
+        #img_red = io.imread(red_path+well_site_folder+single_cell_file)
 
         #new stacked RGB img
-        img_rgb = np.stack([img_red,img_green,img_blue],axis=-1)
+        #img_rgb = np.stack([img_red,img_green,img_blue],axis=-1)
 
         ## TODO: STACK DIFFERENT CHANNEL
-        file_name = "CellProcess_{}_{}_id{}.tiff".format(label,combination,id)
-        folder_name = list_folder[row['ProcessID']-1]
-        io.imsave(save_folder+f'{folder_name}/'+file_name,img_rgb,plugin='tifffile')
+        #file_name = "CellProcess_{}_{}_id{}.tiff".format(label,combination,id)
+        #folder_name = list_folder[row['ProcessID']-1]
+        #io.imsave(save_folder+f'{folder_name}/'+file_name,img_rgb,plugin='tifffile')
 
 
 MetaData_GT_link_CP.head()
@@ -265,7 +280,9 @@ def show_in_window(fig):
 SubSamples1 = Metadata1['GT_dist_toMax_phenotype']>0.5
 SubSamples2 = Metadata1['GT_label']!=7
 
-fig_test = px.scatter(Metadata1[SubSamples1 & SubSamples2], x='PositionOnRegressionPlaneX', y='PositionOnRegressionPlaneY',color='GT_label')
+#fig_test = px.scatter(Metadata1[SubSamples1 & SubSamples2], x='PositionOnRegressionPlaneX', y='PositionOnRegressionPlaneY',color='GT_label')
+fig_test = px.scatter(Metadata1, x='PositionOnRegressionPlaneX', y='PositionOnRegressionPlaneY',color='GT_initial_state')
+
 fig_test.show()
 #fig_test.write_image('GT_latentCode.png')
 #show_in_window(fig_test)

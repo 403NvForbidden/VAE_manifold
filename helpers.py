@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-05-25T18:38:01+10:00
+# @Last modified time: 2020-05-27T15:24:19+10:00
 
 '''File containing function to visualize data or to save it'''
 import torch
@@ -256,7 +256,7 @@ def metadata_latent_space(model, infer_dataloader, train_on_gpu):
     MetaData_csv['y_coord'] = temp_matching_df.y_coord.values
     if model.zdim == 3:
         MetaData_csv['z_coord'] = temp_matching_df.z_coord.values
-    #MetaData_csv.to_csv('DataSets/Sacha_Metadata_3d_VAE_20200525.csv',index=False)
+    #MetaData_csv.to_csv('DataSets/Sacha_Metadata_3dlatigFAIL_20200525.csv',index=False)
 
 
     ###### Plotting part - 3 Dimensional #####
@@ -367,6 +367,46 @@ def metadata_latent_space(model, infer_dataloader, train_on_gpu):
         # cbar.ax.xaxis.set_label_position('top')
         # cbar.ax.xaxis.set_ticks_position('top')
         #cbar.ax.axis["top"].major_ticklabels.set_ha("right")
+        return fig_2d_1
+
+
+def plot_from_csv(path_to_csv,dim=3):
+
+    MetaData_csv = pd.read_csv(path_to_csv)
+
+    if dim == 3:
+
+        ##### Fig 1 : Plot each single cell in latent space with GT cluster labels
+        traces = []
+        for i in range(7):
+            scatter = go.Scatter3d(x=MetaData_csv[MetaData_csv['GT_label']==i+1].x_coord.values,y=MetaData_csv[MetaData_csv['GT_label']==i+1].y_coord.values,
+                z=MetaData_csv[MetaData_csv['GT_label']==i+1].z_coord.values, mode='markers',
+                marker=dict(size=3, opacity=1),
+                name=f'Process {i+1}', text=MetaData_csv.GT_Shape.values)
+            traces.append(scatter)
+
+        layout= dict(title='Latent Representation, colored by GT clustered')
+        fig_3d_1 = go.Figure(data=traces, layout=layout)
+        fig_3d_1.update_layout(margin=dict(l=0,r=0,b=0,t=0),showlegend=True,legend=dict(y=-.1))
+
+        return fig_3d_1
+
+    if dim == 2:
+
+        traces = []
+        #MetaSubset = MetaData_csv['GT_dist_toMax_phenotype']>0.5
+        MS = MetaData_csv
+        for i in range(7):
+            scatter = go.Scatter(x=MS[MetaData_csv['GT_label']==i+1].x_coord.values,y=MS[MetaData_csv['GT_label']==i+1].y_coord.values,
+                mode='markers',
+                marker=dict(size=3, opacity=0.8),
+                name=f'Process {i+1}', text=MS.GT_Shape.values)
+            traces.append(scatter)
+
+        layout= dict(title='Latent Representation, colored by GT clustered')
+        fig_2d_1 = go.Figure(data=traces, layout=layout)
+        fig_2d_1.update_layout(margin=dict(l=0,r=0,b=0,t=0),showlegend=True)
+
         return fig_2d_1
 
 
