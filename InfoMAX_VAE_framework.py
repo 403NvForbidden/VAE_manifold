@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-05-27T18:55:48+10:00
+# @Last modified time: 2020-06-01T19:56:13+10:00
 
 
 ##########################################################
@@ -64,7 +64,7 @@ _,_ = imshow_tensor(features[0])
 # %% Build custom VAE Model
 ##########################################################
 
-VAE = CNN_VAE(zdim=3, alpha=0, beta=3000, base_enc=32, base_dec=32, depth_factor_dec=2)
+VAE = CNN_VAE(zdim=3, alpha=15, beta=1, base_enc=64, base_dec=32, depth_factor_dec=2)
 MLP = MLP_MI_estimator(zdim=3)
 
 opti_VAE = optim.Adam(VAE.parameters(), lr=0.0001, betas=(0.9, 0.999))
@@ -76,7 +76,7 @@ if train_on_gpu:
 
 summary(VAE,input_size=(3,64,64),batch_size=32)
 
-epochs = 20
+epochs = 2
 
 
 VAE, MLP, history = train_InfoMAX_model(epochs, VAE, MLP, opti_VAE, opti_MLP, dataloader, train_on_gpu)
@@ -85,7 +85,7 @@ fig = plot_train_result(history, infoMAX = True, only_train_data=True)
 fig.show()
 plt.show()
 #model_name = '4chan_105e_512z_model2'
-#model_name = '3chan_dataset1_final_20e_3z_VAEBIGfail'
+#model_name = '3chan_dataset1_final_500e_3z_VAE'
 
 #SAVE TRAINED MODEL and history
 #history_save = 'outputs/plot_history/'+f'loss_evo_{model_name}_{datetime.date.today()}.pkl'
@@ -130,7 +130,7 @@ features, labels, file_names = next(infer_iter)
 
 #model_VAE = load_brute('outputs/Intermediate Dataset1/3D_latent_bigFail/VAE_3chan_dataset1_final_20e_3z_VAEBIGfail_2020-05-25.pth')
 
-figplotly = metadata_latent_space(model_VAE, infer_dataloader, train_on_gpu)
+figplotly = metadata_latent_space(VAE, infer_dataloader, train_on_gpu)
 #ax.set_title('Latent Representation - Label by GT cluster')
 #ax2.set_title('Latent Representation - Label by Shape Factor')
 #figplotly.show()

@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-05-27T15:16:58+10:00
+# @Last modified time: 2020-06-01T18:52:01+10:00
 
 
 
@@ -318,3 +318,8 @@ print('Matching groud truth to Cell profiler --- completed')
 
 #CP_file.to_csv(path_to_CP_csv_file,index=False)
 CP_file.head()
+
+
+# %%
+from scipy import stats
+stats.spearmanr([3,2,1,4],[234,22,21,1231])

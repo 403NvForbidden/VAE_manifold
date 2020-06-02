@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning Methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-05-25T18:38:05+10:00
+# @Last modified time: 2020-05-29T11:47:24+10:00
 
 '''
 This file contains classes and function that are usefull to load the raw data,
@@ -67,7 +67,7 @@ class load_from_path(object):
 
         return sample
 
-def get_inference_dataset(dataset_dir,batchsize,input_size):
+def get_inference_dataset(dataset_dir,batchsize,input_size,shuffle=False,droplast=False):
 
     inference_trfm = transforms.Compose([
         #Data arrive as HxWx4 float64 0 - 1.0 ndarray
@@ -77,7 +77,7 @@ def get_inference_dataset(dataset_dir,batchsize,input_size):
         Double_to_Float_inference()])
 
     data = datasets.DatasetFolder(root=dataset_dir,loader=keep_Metadata_from_path(),extensions=('.png','.jpg','.tif','.tiff'), transform=inference_trfm)
-    dataloaders = DataLoader(data, batch_size=batchsize, collate_fn=My_ID_Collator())
+    dataloaders = DataLoader(data, batch_size=batchsize, collate_fn=My_ID_Collator(), shuffle=shuffle,drop_last=droplast)
 
     return data, dataloaders
 

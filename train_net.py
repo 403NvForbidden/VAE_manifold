@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning Methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-05-25T18:38:03+10:00
+# @Last modified time: 2020-05-29T11:18:40+10:00
 
 '''
 File containing main function to train the VAE with proper single cell images dataset
@@ -210,9 +210,9 @@ def train_infoM_epoch(epoch, VAE, MLP, opti_VAE, opti_MLP, train_loader, train_o
 
         #data feed to CNN-VAE
         x_recon, mu_z, logvar_z, z = VAE(data)
-        t_xz = MLP(data,z)
+        t_xz = MLP(data,z) #From joint distribution
         z_perm = VAE.permute_dims(z)
-        t_xz_tilda = MLP(data,z_perm)
+        t_xz_tilda = MLP(data,z_perm) #From product of marginal distribution
 
         #Estimation of the Mutual Info between X and Z
         MI_xz = (t_xz.mean() - (torch.exp(t_xz_tilda -1).mean()))
