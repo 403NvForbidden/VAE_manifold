@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-05-27T15:24:19+10:00
+# @Last modified time: 2020-06-04T15:40:10+10:00
 
 '''File containing function to visualize data or to save it'''
 import torch
@@ -195,14 +195,13 @@ def show_in_window(fig):
     web.show()
     sys.exit(app.exec_())
 
-def update_point(trace, points, selector):
-    print('Test Salut')
 
-def metadata_latent_space(model, infer_dataloader, train_on_gpu):
+def metadata_latent_space(model, infer_dataloader, train_on_gpu, save_csv=False, csv_path='no_name_specified.csv'):
 
     labels_list = []
     z_list = []
     id_list = []
+    list_of_tensors = [] #Store raw_data for performance metrics
 
     if model.zdim > 3 :
         print(f'Latent space is >3D ({model.zdim} dimensional), no visualization is provided')
@@ -220,6 +219,8 @@ def metadata_latent_space(model, infer_dataloader, train_on_gpu):
             data = data.cuda()
         with torch.no_grad():
             model.eval()
+            raw_data = data.view(data.size(0),-1) #B x 64x64x3
+            list_of_tensors.append(raw_data)
 
             data = Variable(data, requires_grad=False)
 
@@ -234,10 +235,23 @@ def metadata_latent_space(model, infer_dataloader, train_on_gpu):
     ###### Matching samples to metadata info #####
     #################################################
 
+    #Store raw data in a separate data frame
+    raw_data = torch.cat(list_of_tensors,0)
+    raw_data = raw_data.data.cpu().numpy()
+
+    rawdata_frame = pd.DataFrame(data=raw_data[0:,0:],
+                            index=[i for i in range(raw_data.shape[0])],
+                            columns=['feature'+str(i) for i in range(raw_data.shape[1])])
+
+    unique_ids = list(itertools.chain.from_iterable(id_list))
+
+    rawdata_frame['Unique_ID']=np.nan
+    rawdata_frame.Unique_ID=unique_ids
+
     z_points = np.concatenate(z_list,axis=0) # datasize x 3
     true_label = np.concatenate(labels_list,axis=0)
     #link_to_metadata = list(itertools.chain.from_iterable(id_list)) #[Well,Site,CellID] of each cells
-    unique_ids = list(itertools.chain.from_iterable(id_list))
+
     temp_matching_df = pd.DataFrame(columns=['x_coord','y_coord','z_coord','Unique_ID'])
     temp_matching_df.x_coord = z_points[:,0]
     temp_matching_df.y_coord = z_points[:,1]
@@ -245,19 +259,29 @@ def metadata_latent_space(model, infer_dataloader, train_on_gpu):
         temp_matching_df.z_coord = z_points[:,2]
     temp_matching_df.Unique_ID = unique_ids
 
+
+    rawdata_frame = rawdata_frame.sort_values(by=['Unique_ID'])
     temp_matching_df = temp_matching_df.sort_values(by=['Unique_ID'])
 
     MetaData_csv = pd.read_csv('DataSets/MetaData1_GT_link_CP.csv')
 
     MetaData_csv = MetaData_csv.sort_values(by=['Unique_ID'])
     assert np.all(temp_matching_df.Unique_ID.values == MetaData_csv.Unique_ID.values), "Inference dataset doesn't match with csv metadata"
+    assert np.all(rawdata_frame.Unique_ID.values == MetaData_csv.Unique_ID.values), "Inference dataset doesn't match with csv metadata"
 
     MetaData_csv['x_coord'] = temp_matching_df.x_coord.values
     MetaData_csv['y_coord'] = temp_matching_df.y_coord.values
     if model.zdim == 3:
         MetaData_csv['z_coord'] = temp_matching_df.z_coord.values
-    #MetaData_csv.to_csv('DataSets/Sacha_Metadata_3dlatigFAIL_20200525.csv',index=False)
 
+    #Add raw_data add the end of the metadata CSV
+    #rawdata_frame = rawdata_frame.drop(columns=['Unique_ID'])
+    MetaData_csv = MetaData_csv.join(rawdata_frame.set_index('Unique_ID'), on='Unique_ID')
+
+
+    if save_csv:
+        MetaData_csv.to_csv(csv_path,index=False)
+        print('saving done')
 
     ###### Plotting part - 3 Dimensional #####
     #################################################

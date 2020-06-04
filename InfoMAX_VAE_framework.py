@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-06-01T19:56:13+10:00
+# @Last modified time: 2020-06-04T22:59:39+10:00
 
 
 ##########################################################
@@ -123,14 +123,16 @@ load_model_path = 'outputs/saved_models/'+f'VAE_{model_name}_{date}.pth'
 #%% INFERENCE LATENT REPRESENTATION PLOT
 batch_size = 128
 input_size = 64
-infer_data, infer_dataloader = get_inference_dataset('DataSets/Synthetic_Data_1',batch_size,input_size)
+infer_data, infer_dataloader = get_inference_dataset('DataSets/Synthetic_Data_1',batch_size,input_size,droplast=False)
 infer_iter = iter(infer_dataloader)
 features, labels, file_names = next(infer_iter)
 
 
-#model_VAE = load_brute('outputs/Intermediate Dataset1/3D_latent_bigFail/VAE_3chan_dataset1_final_20e_3z_VAEBIGfail_2020-05-25.pth')
+model_VAE = load_brute('outputs/Intermediate Dataset1/3D_latent_bigFail/VAE_3chan_dataset1_final_20e_3z_VAEBIGfail_2020-05-25.pth')
 
-figplotly = metadata_latent_space(VAE, infer_dataloader, train_on_gpu)
+#Where to save csv with metadata
+meta_name = 'DataSets/Sacha_Metadata_3dlatentVAEbigFAIL_20200525.csv'
+figplotly = metadata_latent_space(model_VAE, infer_dataloader, train_on_gpu, save_csv=True,csv_path=meta_name)
 #ax.set_title('Latent Representation - Label by GT cluster')
 #ax2.set_title('Latent Representation - Label by Shape Factor')
 #figplotly.show()

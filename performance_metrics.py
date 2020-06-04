@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-06-02T16:54:22+10:00
+# @Last modified time: 2020-06-04T22:59:38+10:00
 
 '''
 File containing different metrics that are used to evaluate the
@@ -750,10 +750,6 @@ print(kendall_r)
 
 
 
-pnt2line([0.8,1,0.8],[-2,3,0],[4,0,0])
-x = [1,2,3]
-y = [4,5,6]
-x+y
 
 plotly.colors.qualitative.Plotly[0]
 data = pd.read_csv(name_of_csv3)
