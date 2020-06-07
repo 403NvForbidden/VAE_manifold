@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-06-01T18:52:01+10:00
+# @Last modified time: 2020-06-07T23:54:51+10:00
 
 
 
@@ -185,7 +185,6 @@ for combination in list_of_well_site:
         #new stacked RGB img
         #img_rgb = np.stack([img_red,img_green,img_blue],axis=-1)
 
-        ## TODO: STACK DIFFERENT CHANNEL
         #file_name = "CellProcess_{}_{}_id{}.tiff".format(label,combination,id)
         #folder_name = list_folder[row['ProcessID']-1]
         #io.imsave(save_folder+f'{folder_name}/'+file_name,img_rgb,plugin='tifffile')
