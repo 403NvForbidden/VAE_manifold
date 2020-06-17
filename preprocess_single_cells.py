@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-04-17T16:24:10+10:00
+# @Last modified time: 2020-06-09T11:26:48+10:00
 '''
 CellProfiler output single_cell images (from segmentation) in a given folder architecture :
 a separate folder for each Well_XY_channel

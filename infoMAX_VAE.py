@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-06-01T15:46:14+10:00
+# @Last modified time: 2020-06-16T23:27:16+10:00
 
 
 '''File containing the architecture of InfoMax VAE, a VAE framework that
@@ -35,15 +35,15 @@ class MLP_MI_estimator(nn.Module):
         self.zdim = zdim
         ## TODO: This is for a 64x64 3 channels images data. Modularize it
         self.MLP = nn.Sequential(
-            nn.Linear(64*64*3 + zdim, 2000),
+            nn.Linear(64*64*3 + zdim, 1000),
             nn.LeakyReLU(0.2, True),
-            nn.Linear(2000, 1000),
-            nn.LeakyReLU(0.2, True),
+            #nn.Linear(2000, 1000),
+            #nn.LeakyReLU(0.2, True),
             nn.Linear(1000, 100),
             nn.LeakyReLU(0.2, True),
-            nn.Linear(100, 10),
-            nn.LeakyReLU(0.2, True),
-            nn.Linear(10, 1),
+            #nn.Linear(100, 10),
+            #nn.LeakyReLU(0.2, True),
+            nn.Linear(100, 1),
         )
 
         for m in self.modules():
@@ -81,11 +81,8 @@ class CNN_VAE(nn.Module):
         # to having reshape and dense layer at the end.
 
         self.encoder = nn.Sequential(
-            Conv(3,20,3,stride=1,padding=1), # REMOVE
-            Conv(20,base_enc,4,stride=2,padding=1), #stride 2, resolution is splitted by half
-            Conv(base_enc,base_enc,3,stride=1,padding=1), # REMOVE
+            Conv(3,base_enc,4,stride=2,padding=1), #stride 2, resolution is splitted by half
             Conv(base_enc,base_enc*2,4,stride=2,padding=1),
-            Conv(base_enc*2,base_enc*2,3,stride=1,padding=1), # REMOVE
             Conv(base_enc*2,base_enc*4,4,stride=2,padding=1), #8x8
             Conv(base_enc*4,base_enc*8,4,stride=2,padding=1),
             Conv(base_enc*8,base_enc*16,4,stride=2,padding=1),  #2x2

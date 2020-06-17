@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning Methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-05-29T11:47:24+10:00
+# @Last modified time: 2020-06-12T11:51:59+10:00
 
 '''
 This file contains classes and function that are usefull to load the raw data,
@@ -30,9 +30,9 @@ def get_dataloader(root_dir,img_transforms,batchsize):
     """
     data = {
         'train':
-        datasets.DatasetFolder(root=root_dir[0],loader=load_from_path(),extensions=('.png','.jpg','.tif','.tiff'), transform=img_transforms['train']),
-        'val':
-        datasets.DatasetFolder(root=root_dir[1],loader=load_from_path(),extensions=('.png','.jpg','.tif','.tiff'), transform=img_transforms['val']),
+        datasets.DatasetFolder(root=root_dir[0],loader=load_from_path(),extensions=('.png','.jpg','.tif','.tiff'), transform=img_transforms['train'])
+        #'val':
+        #datasets.DatasetFolder(root=root_dir[1],loader=load_from_path(),extensions=('.png','.jpg','.tif','.tiff'), transform=img_transforms['val']),
         #'test':
         #datasets.ImageFolder(root=root_dir[2], transform=img_transforms['test'])
     }
@@ -40,8 +40,8 @@ def get_dataloader(root_dir,img_transforms,batchsize):
     #Create DataIterator, yield batch of img and label easily and in time, to not load full heavy set
     # Dataloader iterators
     dataloaders = {
-        'train': DataLoader(data['train'], batch_size=batchsize, shuffle=True, drop_last=True),
-        'val': DataLoader(data['val'], batch_size=batchsize, shuffle=True, drop_last=True),
+        'train': DataLoader(data['train'], batch_size=batchsize, shuffle=True, drop_last=True)
+        #'val': DataLoader(data['val'], batch_size=batchsize, shuffle=True, drop_last=True),
         #'test': DataLoader(data['test'], batch_size=batchsize, shuffle=True)
     }
 

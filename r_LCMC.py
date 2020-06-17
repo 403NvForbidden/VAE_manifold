@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-06-04T22:59:37+10:00
+# @Last modified time: 2020-06-09T22:53:51+10:00
 
 
 '''
@@ -22,7 +22,7 @@ import pickle as pkl
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-
+from sklearn import metrics
 
 # %%
 #Use an inference DataLoader to go throughout ALL DATASET, and save each input image
@@ -55,8 +55,8 @@ def compute_coranking(metadata_csv, feature_size, save_matrix=True):
     return Q_final
 
 
-csv3 = 'DataSets/Sacha_Metadata_3dlatentVAEbigFAIL_20200525.csv'
-_ = compute_coranking(csv3,64*64*3,save_matrix=True)
+#csv3 = 'DataSets/Sacha_Metadata_3dlatentVAEbigFAIL_20200525.csv'
+#_ = compute_coranking(csv3,64*64*3,save_matrix=True)
 
 
 def unsupervised_score(coranking_matrix):
@@ -87,26 +87,40 @@ print('All matrix are loaded')
 trust1, cont1, lcmc1 = unsupervised_score(Q1)
 print('Metrics for first model computed')
 trust2, cont2, lcmc2 = unsupervised_score(Q2)
+print('Metrics for second model computed')
 trust3, cont3, lcmc3 = unsupervised_score(Q3)
+print('Metrics for third model computed')
 # RUN IN 16 minutes -- 5 min per model
 #%%
+save_block = [[trust1,cont1,lcmc1],[trust2, cont2, lcmc2],[trust3, cont3, lcmc3]]
+name_pkl = f'DataSets/LCMC_score_saves.pkl'
+with open(name_pkl, 'wb') as f:
+    pkl.dump(save_block, f, protocol=pkl.HIGHEST_PROTOCOL)
+
+#%% Compute AUC
+x = range(20)
+trust_AUC = [metrics.auc(x,trust1),metrics.auc(x,trust2),metrics.auc(x,trust3)]
+cont_AUC = [metrics.auc(x,cont1),metrics.auc(x,cont2),metrics.auc(x,cont3)]
+lcmc_AUC = [metrics.auc(x,lcmc1),metrics.auc(x,lcmc2),metrics.auc(x,lcmc3)]
+#%%
 fig, (ax1,ax2,ax3) = plt.subplots(3,1,sharex=True,figsize=(12,12))
-ax1.plot(trust1,label='Model1')
-ax1.plot(trust2,label='Model2')
-#ax1.set_title('Trustworthiness')
+ax1.plot(trust1,label=f'Model1 - AUC : {trust_AUC[0]:.2f}')
+ax1.plot(trust2,label=f'Model2 - AUC : {trust_AUC[1]:.2f}')
+#ax1.plot(trust3,label=f'Model3 - AUC : {trust_AUC[2]:.2f}')
+ax1.set_title('Trustworthiness')
 #ax1.set_xticklabels([str(i)+'%' for i in range(1,20)])
 ax3.set_xlabel('Neighborhood size - % of total datasize')
 ax3.set_xticks(range(0,20))
 ax3.set_xticklabels(range(1,21))
 ax1.legend()
-ax2.plot(cont1,label='Model1')
-ax2.plot(cont2,label='Model2')
-#ax2.plot(cont3,label='Model3')
+ax2.plot(cont1,label=f'Model1 - AUC : {cont_AUC[0]:.2f}')
+ax2.plot(cont2,label=f'Model2 - AUC : {cont_AUC[1]:.2f}')
+#ax2.plot(cont3,label=f'Model3 - AUC : {cont_AUC[2]:.2f}')
 ax2.set_title('Continuity')
 ax2.legend()
-ax3.plot(lcmc1,label='Model1')
-ax3.plot(lcmc2,label='Model2')
-#ax3.plot(lcmc3,label='Model3')
+ax3.plot(lcmc1,label=f'Model1 - AUC : {lcmc_AUC[0]:.2f}')
+ax3.plot(lcmc2,label=f'Model1 - AUC : {lcmc_AUC[1]:.2f}')
+#ax3.plot(lcmc3,label=f'Model1 - AUC : {lcmc_AUC[2]:.2f}')
 ax3.set_title('LCMC')
 ax3.legend()
 fig.suptitle('Unsupervised evaluation of projection at different scale')

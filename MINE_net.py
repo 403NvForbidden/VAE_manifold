@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-05-29T12:54:20+10:00
+# @Last modified time: 2020-06-12T14:30:35+10:00
 
 '''
 MINE (Mutual Information Neural Estimation) implementation.
@@ -28,6 +28,7 @@ class MINE(nn.Module):
 
         self.input_dim = input_dim
         self.zdim = zdim
+        self.moving_average = None
 
         self.MLP = nn.Sequential(
             nn.Linear(input_dim + zdim, 1000),
@@ -77,9 +78,12 @@ def train_MINE(MINE,path_to_csv,epochs,infer_dataloader,train_GPU):
 
     Metadata_csv = pd.read_csv(path_to_csv)
 
-    optimizer = optim.Adam(MINE.parameters(),lr=0.00005)
+    optimizer = optim.Adam(MINE.parameters(),lr=0.0001)
+    decayRate = 0.6
+    lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer=optimizer, step_size=40, gamma=decayRate)
 
     history_MI = []
+    ma_rate = 0.001 #Moving average rate (unbiased trick)
 
     for epoch in range(epochs):
 
@@ -101,10 +105,18 @@ def train_MINE(MINE,path_to_csv,epochs,infer_dataloader,train_GPU):
             t_xz_tilda = MINE(data,permute_dims(batch_latentCode)) # from product of marginal distribution
 
             #Estimation of the Mutual Info between X and Z
-            MI_xz = (t_xz.mean() - (torch.exp(t_xz_tilda -1).mean()))
+            #We use the Donsker-Varadhan represensation of MI because if this the tightest
+            #lower bound on MI !
+            #Also we you an unbiased form with moving average as suggested in original MINE paper
+            et = torch.mean(torch.exp(t_xz_tilda))
+            if MINE.moving_average is None:
+                MINE.moving_average = et.detach().item()
+            MINE.moving_average += ma_rate * (et.detach().item() - MINE.moving_average)
+
+            #MI_xz = (t_xz.mean() - (torch.exp(t_xz_tilda -1).mean())) #f-divergence representation
+            MI_xz = torch.mean(t_xz) - torch.log(et) #* et.detach() / MINE.moving_average
 
             #We want to maximize this output -> minimize its negative
-
             MI_loss = -MI_xz
 
             optimizer.zero_grad()
@@ -121,10 +133,11 @@ def train_MINE(MINE,path_to_csv,epochs,infer_dataloader,train_GPU):
                            MI_xz.item() ),end='\r')
 
         MI_epoch /= len(infer_dataloader)
-        history_MI.append(MI_epoch)
+        history_MI.append(MI_epoch.detach().cpu().numpy())
+        lr_scheduler.step()
 
         if epoch % 1 == 0:
-            print('==========> Epoch: {} ==========> MI: {:.4f}'.format(epoch, MI_epoch))
+            print('==========> Epoch: {} ==========> MI: {:.4f} with lr : {:.8f}'.format(epoch, MI_epoch, lr_scheduler.get_last_lr()[0]))
 
     print('Finished Training')
     return history_MI

@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-06-07T23:54:48+10:00
+# @Last modified time: 2020-06-10T10:47:53+10:00
 
 '''
 This file contains all the steps necessary to process the Peter Horvath Discrete
@@ -16,6 +16,7 @@ From the ground truth position, associate the closest centroid detected by CellP
 '''
 
 import os
+import shutil
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -76,85 +77,110 @@ MetaData_GT_link_CP = pd.DataFrame(columns=['Plate','Well','GT_label','Unique_ID
 # %%
 ### TODO HERE : LOOP over each Synthetic Plate (=subfolder)
 ### For now we considerate only Plate 001
+all_plates_folder = [f for f in os.listdir(GT_path) if not f.startswith('.')]
+all_plates_folder.sort()
 
-path_to_plate = 'synthPlate001/anal2/'
-synth_plate = '001'
+#How many subfolder to process (Choose between 1 to 32) 32 lead to full datasize (300'000 cells)
+n_plates = 32
 
-#For a given synthetic plate, there is one .class ground truth file per well image
-#Loop over each class file
-list_well_images = os.listdir(GT_path+path_to_plate)
 missed_cells = 0
-for well_image in list_well_images:
-    if (well_image.endswith('.class') or well_image.endswith('.csv')):
+class_miss = np.zeros(8)
+for plate in all_plates_folder:
 
-        #GT comes weirdly in non-formated .class file. Simply rename them and treat them as csv
-        if (well_image.endswith('.class')):
+    path_to_plate = plate+'/anal2/'
+    synth_plate = plate[-3:]
+    print(f'--------Considering Plate {synth_plate} -----------------')
+
+    #For a given synthetic plate, there is one .class ground truth file per well image
+    #Loop over each class file
+    list_well_images = os.listdir(GT_path+path_to_plate)
+
+    for well_image in list_well_images:
+        if (well_image.endswith('.class') or well_image.endswith('.csv')):
+
+            #GT comes weirdly in non-formated .class file. Simply rename them and treat them as csv
+            if (well_image.endswith('.class')):
+                pre, ext = os.path.splitext(GT_path+path_to_plate+well_image)
+                os.rename(GT_path+path_to_plate+well_image, pre+'.csv')
+
             pre, ext = os.path.splitext(GT_path+path_to_plate+well_image)
-            os.rename(GT_path+path_to_plate+well_image, pre+'.csv')
 
-        pre, ext = os.path.splitext(GT_path+path_to_plate+well_image)
+            #Consider only CP metada for the given plate and well
+            plate_i = synth_plate.lstrip('0')
+            no_ext = well_image.split('.')
+            well_name = no_ext[0].split('_')
+            well_i = well_name[-1][1:]
 
-        #Consider only CP metada for the given plate and well
-        plate_i = synth_plate.lstrip('0')
-        no_ext = well_image.split('.')
-        well_name = no_ext[0].split('_')
-        well_i = well_name[-1][1:]
-
-        Platei_CP = CP_df['Metadata_Plate']==int(plate_i)
-        Welli_CP = CP_df['Metadata_Well']==well_i
-        CP_Pi_Wi = CP_df[Platei_CP & Welli_CP].reset_index()
-        CP_centroids_array = CP_Pi_Wi[['AreaShape_Center_X','AreaShape_Center_Y']].values
+            Platei_CP = CP_df['Metadata_Plate']==int(plate_i)
+            Welli_CP = CP_df['Metadata_Well']==well_i
+            CP_Pi_Wi = CP_df[Platei_CP & Welli_CP].reset_index()
+            CP_centroids_array = CP_Pi_Wi[['AreaShape_Center_X','AreaShape_Center_Y']].values
 
 
-        #GT dataframe associate with this plate - well
-        GT_df = pd.read_csv(pre+'.csv',header=None, names=['GT_pos_y', 'GT_pos_x', 'GT_label'])
+            #GT dataframe associate with this plate - well
+            GT_df = pd.read_csv(pre+'.csv',header=None, names=['GT_pos_y', 'GT_pos_x', 'GT_label'])
 
-        #iterate over each SINGLE CELL (row of the GT file of a given well image)
-        for index, row in GT_df.iterrows():
-            GT_centroid = np.array([row['GT_pos_x'],row['GT_pos_y']])
+            #iterate over each SINGLE CELL (row of the GT file of a given well image)
+            for index, row in GT_df.iterrows():
+                GT_centroid = np.array([row['GT_pos_x'],row['GT_pos_y']])
 
-            #Find the closest cell profiler centroid
-            CP_row_min, dist_2 = closest_point(GT_centroid,CP_centroids_array)
-            CP_centroid = CP_centroids_array[CP_row_min]
+                #Find the closest cell profiler centroid
+                if (len(CP_centroids_array) > 0):
+                    CP_row_min, dist_2 = closest_point(GT_centroid,CP_centroids_array)
+                    CP_centroid = CP_centroids_array[CP_row_min]
+                else:
+                    print(f'Cell Profiler didnt find any cell in plate {plate_i} well {well_i}')
+                    missed_cells += 1
+                    continue
 
-            if np.sqrt(dist_2) > 35: #CellProfiler probably failed to find that cell, ignore
-                print('One GT cell has been ignored')
-                missed_cells += 1
-                continue
+                if np.sqrt(dist_2) > 35: #CellProfiler probably failed to find that cell, ignore
+                    print(f'One GT cell has been ignored of class {row["GT_label"]}')
+                    class_miss[row['GT_label']-1]+=1
+                    missed_cells += 1
+                    continue
 
-            label = row['GT_label']
-            unique_id = "CellClass_{}_{}_{}_id{}.tiff".format(label,plate_i,well_i,index)
-            #Store all useful info about that cell to link its GT and cellprofiler metadata
-            new_row=pd.Series([plate_i,well_i,row['GT_label'],unique_id,row['GT_pos_x'],row['GT_pos_y'],CP_Pi_Wi.loc[CP_row_min,'ImageNumber'],CP_Pi_Wi.loc[CP_row_min,'ObjectNumber'],CP_Pi_Wi.loc[CP_row_min,'AreaShape_Center_X'],CP_Pi_Wi.loc[CP_row_min,'AreaShape_Center_Y']], index=MetaData_GT_link_CP.columns)
-            MetaData_GT_link_CP = MetaData_GT_link_CP.append(new_row, ignore_index=True)
+                label = row['GT_label']
+                unique_id = "CellClass_{}_{}_{}_id{}.tiff".format(label,plate_i,well_i,index)
+                #Store all useful info about that cell to link its GT and cellprofiler metadata
+                new_row=pd.Series([plate_i,well_i,row['GT_label'],unique_id,row['GT_pos_x'],row['GT_pos_y'],CP_Pi_Wi.loc[CP_row_min,'ImageNumber'],CP_Pi_Wi.loc[CP_row_min,'ObjectNumber'],CP_Pi_Wi.loc[CP_row_min,'AreaShape_Center_X'],CP_Pi_Wi.loc[CP_row_min,'AreaShape_Center_Y']], index=MetaData_GT_link_CP.columns)
+                MetaData_GT_link_CP = MetaData_GT_link_CP.append(new_row, ignore_index=True)
 
 
-            #save a 3 Channel tiff file per single cell, in a folder corresponding to GT class
-            blue_path = path_to_CP+'SingleWholeCellCroppedImages/CroppedImages_Blue/'
-            green_path = path_to_CP+'SingleWholeCellCroppedImages/CroppedImages_Green/'
-            red_path = path_to_CP+'SingleWholeCellCroppedImages/CroppedImages_Red/'
+                #save a 3 Channel tiff file per single cell, in a folder corresponding to GT class
+                blue_path = path_to_CP+'SingleWholeCellCroppedImages/CroppedImages_Blue/'
+                green_path = path_to_CP+'SingleWholeCellCroppedImages/CroppedImages_Green/'
+                red_path = path_to_CP+'SingleWholeCellCroppedImages/CroppedImages_Red/'
 
-            well_site_folder = f'{synth_plate}_{well_i}/'
-            object_num = CP_Pi_Wi.loc[CP_row_min,'ObjectNumber']
-            single_cell_file = f'SplitCellBodies_{object_num}.png'
+                well_site_folder = f'{synth_plate}_{well_i}/'
+                object_num = CP_Pi_Wi.loc[CP_row_min,'ObjectNumber']
+                single_cell_file = f'SplitCellBodies_{object_num}.png'
 
-            img_blue = io.imread(blue_path+well_site_folder+single_cell_file)
-            img_green = io.imread(green_path+well_site_folder+single_cell_file)
-            img_red = io.imread(red_path+well_site_folder+single_cell_file)
+                img_blue = io.imread(blue_path+well_site_folder+single_cell_file)
+                img_green = io.imread(green_path+well_site_folder+single_cell_file)
+                img_red = io.imread(red_path+well_site_folder+single_cell_file)
 
-            #new stacked RGB img
-            img_rgb = np.stack([img_red,img_green,img_blue],axis=-1)
+                #new stacked RGB img
+                img_rgb = np.stack([img_red,img_green,img_blue],axis=-1)
 
-            folder_name = list_folder[row['GT_label']-1]
-            io.imsave(save_folder+f'{folder_name}/'+unique_id,img_rgb,plugin='tifffile')
+                folder_name = list_folder[row['GT_label']-1]
+                io.imsave(save_folder+f'{folder_name}/'+unique_id,img_rgb,plugin='tifffile')
 
 MetaData_GT_link_CP.to_csv('DataSets/MetaData2_PeterHorvath_GT_link_CP.csv')
 
 print('All files processed')
 print(f'{missed_cells} GT cells were not detected by cell profiler')
+print(f'A subsample of {len(MetaData_GT_link_CP)} cells was created')
 
-
-
+#184 cell were missed by cell profiler
+# 15 min of run for 8 synth plate over 32
+# 77'910 cells in total
+# class miss was : [  1. 140.  14.   0.   5.   0.   8.  16.]
+#print(class_miss)
+#3h of run for all 32 plate
+#735 cells has been not detected
+#310194 Cells in total
+#No cells in plate 29 M20
+#class miss_was [  5. 506.  70.   0.  24.   0.  70.  54.]
 #%%
 ############# Statistics on the dataset 1 ###############
 #########################################################
@@ -173,10 +199,14 @@ colors1 = cmap1(np.linspace(0,1.0,20))
 cmap2 = plt.get_cmap('Set3')
 colors2 = cmap2(np.linspace(0,1.0,10))
 colors = np.concatenate((colors1,colors2),0)
-
-plt.bar(range(1,9),cluster_count,color=colors[[0,1,2,3,4,5,6,7]])
-for i, pos in enumerate(cluster_count):
-    plt.text(i+1,pos-200,str(np.round(pos/np.sum(cluster_count)*100,1))+' %',ha='center',color='black',fontweight='bold')
-plt.title('Dataset 1 cluster distribution')
+plt.figure(figsize=(12,8))
+#plt.bar(range(1,9),cluster_count,color=colors[[0,1,2,3,4,5,6,7]])
+# for i, pos in enumerate(cluster_count):
+#     plt.text(i+1,pos+200,str(np.round(pos/np.sum(cluster_count)*100,3))+' %',ha='center',color='black',fontweight='bold')
+# plt.title(f'Dataset 2 cluster distribution ({len(Metadata1)} cells in total)')
+plt.bar(range(1,9),class_miss,color=colors[[0,1,2,3,4,5,6,7]])
+for i, pos in enumerate(class_miss):
+    plt.text(i+1,pos+2,str(pos),ha='center',color='black',fontweight='bold')
+plt.title(f'Single cells not detected by Cell Profiler ({np.sum(class_miss)} cells in total)')
 plt.ylabel('# of cells')
 plt.xlabel('Cluster')

@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-06-04T22:59:39+10:00
+# @Last modified time: 2020-06-16T23:27:15+10:00
 
 
 ##########################################################
@@ -31,11 +31,12 @@ import numpy as np
 datadir = 'datadir/'
 datadir1 = 'DataSets/'
 #traindir = datadir + 'train/'
-traindir = datadir1 + 'Synthetic_Data_1'
+#traindir = datadir1 + 'Synthetic_Data_1'
+traindir = datadir1 + 'Peter_Horvath_Data'
 validdir = datadir + 'val/'
 testdir = datadir + 'test/'
 # Change to fit hardware
-batch_size = 64
+batch_size = 256
 
 # Check if GPU avalaible
 train_on_gpu = cuda.is_available()
@@ -64,11 +65,11 @@ _,_ = imshow_tensor(features[0])
 # %% Build custom VAE Model
 ##########################################################
 
-VAE = CNN_VAE(zdim=3, alpha=15, beta=1, base_enc=64, base_dec=32, depth_factor_dec=2)
+VAE = CNN_VAE(zdim=3, alpha=600, beta=40, base_enc=64, base_dec=32, depth_factor_dec=2)
 MLP = MLP_MI_estimator(zdim=3)
 
-opti_VAE = optim.Adam(VAE.parameters(), lr=0.0001, betas=(0.9, 0.999))
-opti_MLP = optim.Adam(MLP.parameters(), lr=0.00001, betas=(0.9, 0.999))
+opti_VAE = optim.Adam(VAE.parameters(), lr=0.00005, betas=(0.9, 0.999))
+opti_MLP = optim.Adam(MLP.parameters(), lr=0.00005, betas=(0.9, 0.999))
 
 if train_on_gpu:
     VAE.cuda()
@@ -79,13 +80,12 @@ summary(VAE,input_size=(3,64,64),batch_size=32)
 epochs = 2
 
 
-VAE, MLP, history = train_InfoMAX_model(epochs, VAE, MLP, opti_VAE, opti_MLP, dataloader, train_on_gpu)
-
+VAE, MLP, history = train_InfoMAX_model(epochs, VAE, MLP, opti_VAE, opti_MLP, dataloader,each_iteration=True, train_on_gpu=train_on_gpu)
 fig = plot_train_result(history, infoMAX = True, only_train_data=True)
 fig.show()
 plt.show()
 #model_name = '4chan_105e_512z_model2'
-#model_name = '3chan_dataset1_final_500e_3z_VAE'
+#model_name = '3chan_dataset2_50e_3z_VAE'
 
 #SAVE TRAINED MODEL and history
 #history_save = 'outputs/plot_history/'+f'loss_evo_{model_name}_{datetime.date.today()}.pkl'
@@ -96,7 +96,6 @@ plt.show()
 #save_model_path = 'outputs/saved_models/'+f'VAE_{model_name}_{datetime.date.today()}.pth'
 #save_checkpoint(model,save_model_path)
 #save_brute(VAE,save_model_path)
-
 
 ##########################################################
 # %% Visualize training history
@@ -116,28 +115,32 @@ plt.show()
 #
 date = '2020-04-17'
 model_name = 'testMODEL_z2_e300'
-
 load_model_path = 'outputs/saved_models/'+f'VAE_{model_name}_{date}.pth'
 
 
 #%% INFERENCE LATENT REPRESENTATION PLOT
 batch_size = 128
 input_size = 64
-infer_data, infer_dataloader = get_inference_dataset('DataSets/Synthetic_Data_1',batch_size,input_size,droplast=False)
+dataset_name = 'Peter_Horvath_Data'
+infer_data, infer_dataloader = get_inference_dataset('DataSets/'+dataset_name,batch_size,input_size,droplast=False)
 infer_iter = iter(infer_dataloader)
 features, labels, file_names = next(infer_iter)
 
 
-model_VAE = load_brute('outputs/Intermediate Dataset1/3D_latent_bigFail/VAE_3chan_dataset1_final_20e_3z_VAEBIGfail_2020-05-25.pth')
+#model_VAE = load_brute('outputs/Intermediate Dataset2/20200609 -First runs/VAE_3chan_dataset2_final_3e_3z_VAE_2020-06-09.pth')
 
+#Path to CSV that contains GT of the dataset
+path_to_GT = 'DataSets/MetaData2_PeterHorvath_GT_link_CP.csv'
 #Where to save csv with metadata
-meta_name = 'DataSets/Sacha_Metadata_3dlatentVAEbigFAIL_20200525.csv'
-figplotly = metadata_latent_space(model_VAE, infer_dataloader, train_on_gpu, save_csv=True,csv_path=meta_name)
-#ax.set_title('Latent Representation - Label by GT cluster')
-#ax2.set_title('Latent Representation - Label by Shape Factor')
-#figplotly.show()
-#fig2.savefig('LatentRePresentation2.png')
-#figplotly.show()
+csv_save_output = 'DataSets/John_Metadata_PeterHorvarth_VAELatentCode_20200610.csv'
+save_csv = False
+#Store raw image data in csv (results in heavy file, but raw data is needed for some metrics)
+store_raw = False
+figplotly = metadata_latent_space(VAE, infer_dataloader, train_on_gpu, GT_csv_path=path_to_GT, save_csv=save_csv, with_rawdata=store_raw,csv_path=csv_save_output)
+
+import plotly.offline
+plotly.offline.plot(figplotly, filename='test3.html', auto_open=True)
+
 
 # %%
 # Test of SCORE

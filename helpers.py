@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-06-04T15:40:10+10:00
+# @Last modified time: 2020-06-10T10:24:49+10:00
 
 '''File containing function to visualize data or to save it'''
 import torch
@@ -196,7 +196,7 @@ def show_in_window(fig):
     sys.exit(app.exec_())
 
 
-def metadata_latent_space(model, infer_dataloader, train_on_gpu, save_csv=False, csv_path='no_name_specified.csv'):
+def metadata_latent_space(model, infer_dataloader, train_on_gpu, GT_csv_path, save_csv=False, with_rawdata=False, csv_path='no_name_specified.csv'):
 
     labels_list = []
     z_list = []
@@ -205,26 +205,26 @@ def metadata_latent_space(model, infer_dataloader, train_on_gpu, save_csv=False,
 
     if model.zdim > 3 :
         print(f'Latent space is >3D ({model.zdim} dimensional), no visualization is provided')
-        return None, None, None, None
+        return None
 
     ###### Iterate throughout inference dataset #####
     #################################################
 
     for i, (data, labels, file_names) in enumerate(infer_dataloader):
         #Extract unique cell id from file_names
-        #temp_id = [[file_name.split('_')[2],file_name.split('_')[3][-1],file_name.split('_')[4][2:-5]] for file_name in file_names]
         id_list.append([file_name for file_name in file_names])
         if train_on_gpu:
             # make sure this lives on the GPU
             data = data.cuda()
         with torch.no_grad():
             model.eval()
-            raw_data = data.view(data.size(0),-1) #B x 64x64x3
-            list_of_tensors.append(raw_data)
+
+            if with_rawdata:
+                raw_data = data.view(data.size(0),-1) #B x 64x64x3
+                list_of_tensors.append(raw_data.data.cpu().numpy()) #Check if .data is necessary
 
             data = Variable(data, requires_grad=False)
 
-            #The mean can be taken as the most likely z
             z, _ = model.encode(data)
             z = z.view(-1,model.zdim)
             z_list.append((z.data).cpu().numpy())
@@ -235,19 +235,21 @@ def metadata_latent_space(model, infer_dataloader, train_on_gpu, save_csv=False,
     ###### Matching samples to metadata info #####
     #################################################
 
-    #Store raw data in a separate data frame
-    raw_data = torch.cat(list_of_tensors,0)
-    raw_data = raw_data.data.cpu().numpy()
-
-    rawdata_frame = pd.DataFrame(data=raw_data[0:,0:],
-                            index=[i for i in range(raw_data.shape[0])],
-                            columns=['feature'+str(i) for i in range(raw_data.shape[1])])
-
     unique_ids = list(itertools.chain.from_iterable(id_list))
 
-    rawdata_frame['Unique_ID']=np.nan
-    rawdata_frame.Unique_ID=unique_ids
+    ###### Store raw data in a separate data frame #####
+    if with_rawdata:
+        raw_data = torch.cat(list_of_tensors,0)
+        raw_data = raw_data.data.cpu().numpy()
+        rawdata_frame = pd.DataFrame(data=raw_data[0:,0:],
+                                index=[i for i in range(raw_data.shape[0])],
+                               columns=['feature'+str(i) for i in range(raw_data.shape[1])])
 
+        rawdata_frame['Unique_ID']=np.nan
+        rawdata_frame.Unique_ID=unique_ids
+        rawdata_frame = rawdata_frame.sort_values(by=['Unique_ID'])
+
+    ##### Store latent code in a temporary dataframe #####
     z_points = np.concatenate(z_list,axis=0) # datasize x 3
     true_label = np.concatenate(labels_list,axis=0)
     #link_to_metadata = list(itertools.chain.from_iterable(id_list)) #[Well,Site,CellID] of each cells
@@ -257,31 +259,29 @@ def metadata_latent_space(model, infer_dataloader, train_on_gpu, save_csv=False,
     temp_matching_df.y_coord = z_points[:,1]
     if model.zdim == 3 :
         temp_matching_df.z_coord = z_points[:,2]
+    else:
+        temp_matching_df.z_coord = 0
     temp_matching_df.Unique_ID = unique_ids
-
-
-    rawdata_frame = rawdata_frame.sort_values(by=['Unique_ID'])
     temp_matching_df = temp_matching_df.sort_values(by=['Unique_ID'])
 
-    MetaData_csv = pd.read_csv('DataSets/MetaData1_GT_link_CP.csv')
 
+    ##### Load Ground Truth information about the dataset #####
+    MetaData_csv = pd.read_csv(GT_csv_path)
     MetaData_csv = MetaData_csv.sort_values(by=['Unique_ID'])
+
+    ##### Match latent code information with ground truth info #####
     assert np.all(temp_matching_df.Unique_ID.values == MetaData_csv.Unique_ID.values), "Inference dataset doesn't match with csv metadata"
-    assert np.all(rawdata_frame.Unique_ID.values == MetaData_csv.Unique_ID.values), "Inference dataset doesn't match with csv metadata"
+    MetaData_csv = MetaData_csv.join(temp_matching_df.set_index('Unique_ID'), on='Unique_ID')
 
-    MetaData_csv['x_coord'] = temp_matching_df.x_coord.values
-    MetaData_csv['y_coord'] = temp_matching_df.y_coord.values
-    if model.zdim == 3:
-        MetaData_csv['z_coord'] = temp_matching_df.z_coord.values
+    ##### Match raw data information with ground truth info #####
+    if with_rawdata:
+        assert np.all(rawdata_frame.Unique_ID.values == MetaData_csv.Unique_ID.values), "Inference dataset doesn't match with csv metadata"
+        MetaData_csv = MetaData_csv.join(rawdata_frame.set_index('Unique_ID'), on='Unique_ID')
 
-    #Add raw_data add the end of the metadata CSV
-    #rawdata_frame = rawdata_frame.drop(columns=['Unique_ID'])
-    MetaData_csv = MetaData_csv.join(rawdata_frame.set_index('Unique_ID'), on='Unique_ID')
-
-
+    #### Save Final CSV file #####
     if save_csv:
         MetaData_csv.to_csv(csv_path,index=False)
-        print('saving done')
+        print(f'Final CSV saved to : {csv_path}')
 
     ###### Plotting part - 3 Dimensional #####
     #################################################
@@ -294,40 +294,14 @@ def metadata_latent_space(model, infer_dataloader, train_on_gpu, save_csv=False,
             scatter = go.Scatter3d(x=MetaData_csv[MetaData_csv['GT_label']==i+1].x_coord.values,y=MetaData_csv[MetaData_csv['GT_label']==i+1].y_coord.values,
                 z=MetaData_csv[MetaData_csv['GT_label']==i+1].z_coord.values, mode='markers',
                 marker=dict(size=3, opacity=1),
-                name=f'Process {i+1}', text=MetaData_csv.GT_Shape.values)
+                name=f'Process {i+1}')#, text=MetaData_csv.GT_Shape.values)
             traces.append(scatter)
 
-        layout= dict(title='Latent Representation, colored by GT clustered')
+        layout= dict(title='Latent Representation, colored by GT cluster')
         fig_3d_1 = go.Figure(data=traces, layout=layout)
-        # fig_3d_1 = go.Figure(data=[go.Scatter3d(x=MetaData_csv.x_coord.values,y=MetaData_csv.y_coord.values,
-        #     z=MetaData_csv.z_coord.values, mode='markers',
-        #     marker=dict(size=3,color=MetaData_csv.GT_label.values,
-        #         opacity=0.8), text=MetaData_csv.GT_Shape.values)])
         fig_3d_1.update_layout(margin=dict(l=0,r=0,b=0,t=0),showlegend=True,legend=dict(y=-.1))
 
-        #figtest = go.FigureWidget(fig_3d_1)
-        #scatter = figtest.data[0]
-        #scatter.on_click(update_point)
-        #fig_test = px.scatter_3d(MetaData_csv, x='x_coord', y='y_coord', z='z_coord',color='GT_Shape')
-        show_in_window(fig_3d_1)
-
-        fig = plt.figure(figsize=(10,10))
-        #ax = Axes3D(fig)
-        ax=plt.axes(projection='3d')
-
-        cmap1 = plt.get_cmap('tab20')
-        colors1 = cmap1(np.linspace(0,1.0,20))
-        cmap2 = plt.get_cmap('Set3')
-        colors2 = cmap2(np.linspace(0,1.0,10))
-        colors = np.concatenate((colors1,colors2),0)
-        zorder = 100
-        for i in np.unique(true_label):
-            zorder -= 10
-            if i+1 == 7: #Do not plot process 7 for more readability
-                continue
-            ax.scatter(z_points[true_label==i,0],z_points[true_label==i,1],z_points[true_label==i,2],s=10,color=colors[i],zorder=zorder, label=f'Process_{i+1}')
-        ax.legend()
-        return fig, ax, fig, ax
+        return fig_3d_1
 
 
     ###### Plotting part - 2 Dimensional #####
@@ -335,42 +309,19 @@ def metadata_latent_space(model, infer_dataloader, train_on_gpu, save_csv=False,
 
     if model.zdim == 2:
 
-        ##### Plot 1 : Latent representation - Sample labeled by classes #####
-
-        #fig, ax = plt.subplots(figsize=(8,8),dpi=300)
-
-        #fig2, ax2 = plt.subplots(figsize=(8,8),dpi=300)
-
-        cmap1 = plt.get_cmap('tab20')
-        colors1 = cmap1(np.linspace(0,1.0,20))
-        cmap2 = plt.get_cmap('Set3')
-        colors2 = cmap2(np.linspace(0,1.0,10))
-        colors = np.concatenate((colors1,colors2),0)
-
+        ##### Plot 1 : Latent representation - Sample labelled by classes #####
         traces = []
-        #MetaSubset = MetaData_csv['GT_dist_toMax_phenotype']>0.5
         MS = MetaData_csv
         for i in np.unique(true_label):
             scatter = go.Scatter(x=MS[MetaData_csv['GT_label']==i+1].x_coord.values,y=MS[MetaData_csv['GT_label']==i+1].y_coord.values,
                 mode='markers',
                 marker=dict(size=3, opacity=0.8),
-                name=f'Process {i+1}', text=MS.GT_Shape.values)
+                name=f'Process {i+1}')
             traces.append(scatter)
 
         layout= dict(title='Latent Representation, colored by GT clustered')
         fig_2d_1 = go.Figure(data=traces, layout=layout)
         fig_2d_1.update_layout(margin=dict(l=0,r=0,b=0,t=0),showlegend=True)
-
-        #show_in_window(fig_2d_1)
-        ## TODO: Do a mapping between class ID and Process to ensure it is rightly mapped
-        #zorder = 100
-        #for i in np.unique(true_label):
-            #zorder -= 10
-            #ax.scatter(z_points[true_label==i,0],z_points[true_label==i,1],s=5,color=colors[i],zorder=zorder, label=f'Process_{i+1}')
-        #ax.legend()
-
-
-        ##### Plot 2 : Latent representation - Sample labeled by shape factor #####
 
         # MetaData_csv = pd.read_csv('DataSets/MetaData1_GT_link_CP.csv')
         #
@@ -394,7 +345,7 @@ def metadata_latent_space(model, infer_dataloader, train_on_gpu, save_csv=False,
         return fig_2d_1
 
 
-def plot_from_csv(path_to_csv,dim=3):
+def plot_from_csv(path_to_csv,dim=3,num_class=7):
 
     MetaData_csv = pd.read_csv(path_to_csv)
 
@@ -402,7 +353,7 @@ def plot_from_csv(path_to_csv,dim=3):
 
         ##### Fig 1 : Plot each single cell in latent space with GT cluster labels
         traces = []
-        for i in range(7):
+        for i in range(num_class):
             scatter = go.Scatter3d(x=MetaData_csv[MetaData_csv['GT_label']==i+1].x_coord.values,y=MetaData_csv[MetaData_csv['GT_label']==i+1].y_coord.values,
                 z=MetaData_csv[MetaData_csv['GT_label']==i+1].z_coord.values, mode='markers',
                 marker=dict(size=3, opacity=1),
@@ -420,7 +371,7 @@ def plot_from_csv(path_to_csv,dim=3):
         traces = []
         #MetaSubset = MetaData_csv['GT_dist_toMax_phenotype']>0.5
         MS = MetaData_csv
-        for i in range(7):
+        for i in range(num_class):
             scatter = go.Scatter(x=MS[MetaData_csv['GT_label']==i+1].x_coord.values,y=MS[MetaData_csv['GT_label']==i+1].y_coord.values,
                 mode='markers',
                 marker=dict(size=3, opacity=0.8),

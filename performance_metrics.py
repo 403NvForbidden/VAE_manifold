@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-06-04T22:59:38+10:00
+# @Last modified time: 2020-06-15T11:15:02+10:00
 
 '''
 File containing different metrics that are used to evaluate the
@@ -25,7 +25,7 @@ from helpers import plot_from_csv
 from data_processing import get_inference_dataset
 from MINE_net import MINE, train_MINE
 from scipy import stats
-
+import pickle as pkl
 
 
 
@@ -726,11 +726,11 @@ def MINE_metric(path_to_csv):
     MINEnet = MINE(input_size*input_size*3,zdim=3)
     MINEnet.cuda()
 
-    history_MI = train_MINE(MINEnet,path_to_csv,100,infer_dataloader,train_GPU=True)
+    history_MI = train_MINE(MINEnet,path_to_csv,500,infer_dataloader,train_GPU=True)
     fig, ax = plt.subplots(1,1)
     ax.plot(history_MI)
 
-    return history_MI[-1]
+    return history_MI
 
 
 #Load the appropriate CSV file
@@ -740,19 +740,35 @@ name_of_csv3 = 'DataSets/Sacha_Metadata_3dlatentVAEbigFAIL_20200525.csv'
 
 #compare_models([name_of_csv1,name_of_csv2,name_of_csv3],Metrics=[False,False,True],num_iteration=10)
 
-mse,spearman_r, kendall_r, figplotly = dist_preservation_err(name_of_csv3,with_plot=True,save_result=False)
-plotly.offline.plot(figplotly, filename='backboneModel-3.html', auto_open=False)
+#mse,spearman_r, kendall_r, figplotly = dist_preservation_err(name_of_csv3,with_plot=True,save_result=False)
+#plotly.offline.plot(figplotly, filename='backboneModel-3.html', auto_open=False)
 
 #%%
-print(spearman_r)
-print(kendall_r)
-#MI = MINE_metric(name_of_csv1)
+#print(spearman_r)
+#print(kendall_r)
+MI_1 = MINE_metric(name_of_csv1)
+MI_1_pkl = 'DataSets/Model_1_MI.pkl'
+with open(MI_1_pkl, 'wb') as f:
+    pkl.dump(MI_1, f, protocol=pkl.HIGHEST_PROTOCOL)
+
+MI_2 = MINE_metric(name_of_csv2)
+MI_2_pkl = 'DataSets/Model_2_MI.pkl'
+with open(MI_2_pkl, 'wb') as f:
+    pkl.dump(MI_2, f, protocol=pkl.HIGHEST_PROTOCOL)
+
+MI_3 = MINE_metric(name_of_csv3)
+MI_3_pkl = 'DataSets/Model_3_MI.pkl'
+with open(MI_3_pkl, 'wb') as f:
+    pkl.dump(MI_3, f, protocol=pkl.HIGHEST_PROTOCOL)
 
 
 
-
+# %%
+csvfile = '../Data_Horvath/200614_Horvath Synth Data complex set Manifolds.csv'
 plotly.colors.qualitative.Plotly[0]
-data = pd.read_csv(name_of_csv3)
+data = pd.read_csv(csvfile)
+#data['TSNE_60_clusters'] = data['TSNE_60_clusters'].astype(str)
+#without_NC = data['UMAP_23_clusters'] != 'non-clustered'
 data['GT_label'] = data['GT_label'].astype(str)
-fig = px.scatter_3d(data,x='x_coord',y='y_coord',z='z_coord',color='GT_colorB')
-plotly.offline.plot(fig, filename='GT_blue_model3.html', auto_open=True)
+fig = px.scatter_3d(data,x='x_coord',y='y_coord',z='z_coord',color='GT_label')
+#plotly.offline.plot(fig, filename = 'VAE.html', auto_open=True)

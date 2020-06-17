@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning Methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-05-29T11:18:40+10:00
+# @Last modified time: 2020-06-16T12:43:25+10:00
 
 '''
 File containing main function to train the VAE with proper single cell images dataset
@@ -188,15 +188,21 @@ def train_VAE_model(epochs, model, optimizer, dataloader, train_on_gpu):
 #####################################
 ### Training of InfoMax
 ####################################
-def train_infoM_epoch(epoch, VAE, MLP, opti_VAE, opti_MLP, train_loader, train_on_gpu):
+def train_infoM_epoch(epoch, VAE, MLP, opti_VAE, opti_MLP, train_loader, each_iteration=False, train_on_gpu=False):
     '''Train the infoMAX model for one epoch'''
     # toggle model to train mode
     VAE.train()
-    global_VAE_loss = 0
-    MI_estimation = 0
-    MI_estimator_loss = 0
-    kl_loss = 0
-    recon_loss = 0
+    # global_VAE_loss = 0
+    # MI_estimation = 0
+    # MI_estimator_loss = 0
+    # kl_loss = 0
+    # recon_loss = 0
+
+    global_VAE_iter = []
+    MI_estimation_iter = []
+    MI_estimator_loss_iter = []
+    kl_loss_iter = []
+    recon_loss_iter = []
 
     start = timer()
 
@@ -215,7 +221,9 @@ def train_infoM_epoch(epoch, VAE, MLP, opti_VAE, opti_MLP, train_loader, train_o
         t_xz_tilda = MLP(data,z_perm) #From product of marginal distribution
 
         #Estimation of the Mutual Info between X and Z
-        MI_xz = (t_xz.mean() - (torch.exp(t_xz_tilda -1).mean()))
+        et = torch.mean(torch.exp(t_xz_tilda))
+        MI_xz = torch.mean(t_xz) - torch.log(et)
+        #MI_xz = (t_xz.mean() - (torch.exp(t_xz_tilda -1).mean()))
 
         loss_recon = criterion_recon(x_recon,data)
         loss_recon *= data.size(1)*data.size(2)*data.size(3)
@@ -231,11 +239,16 @@ def train_infoM_epoch(epoch, VAE, MLP, opti_VAE, opti_MLP, train_loader, train_o
 
         MI_loss = -MI_xz
 
-        global_VAE_loss += loss_VAE.item()
-        recon_loss += loss_recon.item()
-        kl_loss += loss_kl.item()
-        MI_estimation += MI_xz.item()
-        MI_estimator_loss += MI_loss.item()
+        global_VAE_iter.append(loss_VAE.item())
+        recon_loss_iter.append(loss_recon.item())
+        kl_loss_iter.append(loss_kl.item())
+        MI_estimation_iter.append(MI_xz.item())
+        MI_estimator_loss_iter.append(MI_loss.item())
+        # global_VAE_loss += loss_VAE.item()
+        # recon_loss += loss_recon.item()
+        # kl_loss += loss_kl.item()
+        # MI_estimation += MI_xz.item()
+        # MI_estimator_loss += MI_loss.item()
 
         # Step 2 : Optimization of the MLP to improve the MI estimation
         opti_MLP.zero_grad()
@@ -248,23 +261,27 @@ def train_infoM_epoch(epoch, VAE, MLP, opti_VAE, opti_MLP, train_loader, train_o
                 epoch, batch_idx * len(data), len(train_loader.dataset),
                        100. * batch_idx / len(train_loader),
                        loss_VAE.item() ),end='\r')
-    global_VAE_loss /= len(train_loader)
-    recon_loss /= len(train_loader)
-    kl_loss /= len(train_loader)
-    MI_estimation /= len(train_loader)
-    MI_estimator_loss /= len(train_loader)
+
+    # global_VAE_loss = np.mean(global_VAE_iter)
+
+
+    # global_VAE_loss /= len(train_loader)
+    # recon_loss /= len(train_loader)
+    # kl_loss /= len(train_loader)
+    # MI_estimation /= len(train_loader)
+    # MI_estimator_loss /= len(train_loader)
     if epoch % 1 == 0:
-        print('==========> Epoch: {} ==========> Average loss: {:.4f}'.format(epoch, global_VAE_loss))
+        print('==========> Epoch: {} ==========> Average loss: {:.4f}'.format(epoch, np.mean(global_VAE_iter)))
         print(f'{timer() - start:.2f} seconds elapsed in epoch.')
-        print(f'Reconstruction loss : {recon_loss:.2f}, KL loss : {kl_loss:.2f} \n MI : {MI_estimation:.2f} ')
+        print(f'Reconstruction loss : {np.mean(recon_loss_iter):.2f}, KL loss : {np.mean(kl_loss_iter):.2f} \n MI : {np.mean(MI_estimation_iter):.2f} ')
 
 
     # visualize reconstrunction, synthesis, and latent space
-    if (epoch%5==0) or (epoch == 1):
+    if (epoch%1==0) or (epoch == 1):
 
         fig, ax, fig2, ax2 = plot_latent_space(VAE,train_loader,train_on_gpu)
         if ax != None and ax2 != None:
-            ax.set_title(f'2D Latent Space after {epoch} epochs, 1 color = 1 Well = 1 condition \n Reconstruction loss : {recon_loss:.2f}, KL loss : {kl_loss:.2f} \n MI : {MI_estimation:.2f} ')
+            ax.set_title(f'2D Latent Space after {epoch} epochs, 1 color = 1 Well = 1 condition \n Reconstruction loss : {np.mean(recon_loss_iter):.2f}, KL loss : {np.mean(kl_loss_iter):.2f} \n MI : {np.mean(MI_estimation_iter):.2f} ')
             ax2.set_title(f'2D Latent Space after {epoch} epochs,\n Ground truth clusters\' center of mass and 0.7std (51.6%) confidence ellipse are plotted')
         if fig != None :
             fig.show()
@@ -290,10 +307,12 @@ def train_infoM_epoch(epoch, VAE, MLP, opti_VAE, opti_MLP, train_loader, train_o
         plt.title(f'Random generated samples - epoch {epoch}')
         plt.show()
 
+    if each_iteration:
+        return global_VAE_iter, MI_estimation_iter, MI_estimator_loss_iter, kl_loss_iter, recon_loss_iter
+    else:
+        return np.mean(global_VAE_iter), np.mean(MI_estimation_iter), np.mean(MI_estimator_loss_iter), np.mean(kl_loss_iter), np.mean(recon_loss_iter)
 
-    return global_VAE_loss, MI_estimation, MI_estimator_loss, kl_loss, recon_loss
-
-def train_InfoMAX_model(epochs,VAE, MLP, opti_VAE, opti_MLP, dataloader, train_on_gpu):
+def train_InfoMAX_model(epochs,VAE, MLP, opti_VAE, opti_MLP, dataloader, each_iteration=False, train_on_gpu=False):
     '''
     Params :
         beta_init ([int]) : [max_value, start, reach]
@@ -306,18 +325,43 @@ def train_InfoMAX_model(epochs,VAE, MLP, opti_VAE, opti_MLP, dataloader, train_o
         VAE.epochs = 0
         print(f'Starting Training from Scratch.\n')
 
-    history = []
+
     overall_start = timer()
+
+    history = pd.DataFrame(
+        columns=['global_VAE_loss', 'MI_estimation', 'MI_estimator_loss', 'kl_loss', 'recon_loss'])#,'valid_loss','val_kl','val_recon'])
+
+
+
     for epoch in range(VAE.epochs+1,VAE.epochs+epochs+1):
 
-        global_VAE_loss, MI_estimation, MI_estimator_loss, kl_loss, recon_loss = train_infoM_epoch(epoch, VAE, MLP, opti_VAE, opti_MLP, dataloader['train'], train_on_gpu)
-        history.append([global_VAE_loss, MI_estimation, MI_estimator_loss, kl_loss, recon_loss])
+        if each_iteration:
+            global_VAE_loss, MI_estimation, MI_estimator_loss, kl_loss, recon_loss = train_infoM_epoch(epoch, VAE, MLP, opti_VAE, opti_MLP, dataloader['train'], each_iteration, train_on_gpu)
+
+            # temp_df = pd.DataFrame({'global_VAE_loss':global_VAE_loss,
+            #      'MI_estimation': MI_estimation,
+            #      'MI_estimator_loss': MI_estimator_loss,
+            #      'kl_loss': kl_loss,
+            #      'recon_loss': recon_loss})
+            temp_df = pd.DataFrame({'global_VAE_loss':[*global_VAE_loss],
+                 'MI_estimation': [*MI_estimation],
+                 'MI_estimator_loss': [*MI_estimator_loss],
+                 'kl_loss': [*kl_loss],
+                 'recon_loss': [*recon_loss]})
+            print(temp_df.head())
+            history = history.append(temp_df, ignore_index=True)
+
+
+        else:  #each epoch
+            global_VAE_loss, MI_estimation, MI_estimator_loss, kl_loss, recon_loss = train_infoM_epoch(epoch, VAE, MLP, opti_VAE, opti_MLP, dataloader['train'], each_iteration, train_on_gpu)
+            history = []
+            history.append([global_VAE_loss, MI_estimation, MI_estimator_loss, kl_loss, recon_loss])
+            history = pd.DataFrame(
+                history,
+                columns=['global_VAE_loss', 'MI_estimation', 'MI_estimator_loss', 'kl_loss', 'recon_loss'])#,'valid_loss','val_kl','val_recon'])
 
         VAE.epochs += 1
 
-    history = pd.DataFrame(
-        history,
-        columns=['global_VAE_loss', 'MI_estimation', 'MI_estimator_loss', 'kl_loss', 'recon_loss'])#,'valid_loss','val_kl','val_recon'])
 
     total_time = timer() - overall_start
     print(
