@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-06-10T10:24:49+10:00
+# @Last modified time: 2020-06-19T18:16:27+10:00
 
 '''File containing function to visualize data or to save it'''
 import torch
@@ -394,7 +394,7 @@ def show(img, train_on_gpu):
     plt.imshow(np.transpose(npimg, (1,2,0)), interpolation='nearest')
 
 
-def plot_train_result(history, infoMAX = False, only_train_data=True):
+def plot_train_result(history, best_epoch=None, infoMAX = False):
     """Display training and validation loss evolution over epochs
 
     Params
@@ -407,11 +407,8 @@ def plot_train_result(history, infoMAX = False, only_train_data=True):
 
     """
     fig, ((ax1 ,ax2),(ax3 ,ax4)) = plt.subplots(2,2,figsize=(10, 10))
-    #for c in ['train_loss', 'valid_loss']:
-    #    plt.plot(
-    #        history[c], label=c)
 
-    if only_train_data and not(infoMAX):
+    if  not(infoMAX):
 
         ax1.plot(history['train_loss'],color='dodgerblue',label='Global loss')
         ax1.set_title('General Loss')
@@ -422,30 +419,22 @@ def plot_train_result(history, infoMAX = False, only_train_data=True):
         #ax4.plot(history['beta'],color='dodgerblue',label='Beta')
         #ax4.set_title('KL Cost Weight')
 
-    if only_train_data and infoMAX:
-        ax1.plot(history['global_VAE_loss'][1:],color='dodgerblue',label='Global Loss')
-        ax1.set_title('global_VAE_loss')
-        ax2.plot(history['MI_estimator_loss'][1:],color='dodgerblue',label='MLP Loss')
-        ax2.plot(history['MI_estimation'][1:],color='lightsalmon',label='MI Estimation')
+    if  infoMAX:
+        ax1.plot(history['global_VAE_loss'][1:],color='dodgerblue',label='train')
+        ax1.plot(history['global_VAE_loss_val'][1:],color='lightsalmon',label='test')
+        ax1.set_title('Global VAE Loss')
+        if best_epoch != None:
+            ax1.axvline(best_epoch, linestyle='--', color='r',label='Early stopping')
+        ax2.plot(history['MI_estimation'][1:],color='dodgerblue',label='train')
+        ax2.plot(history['MI_estimation_val'][1:],color='lightsalmon',label='test')
         ax2.set_title('Mutual Information')
-        ax3.plot(history['recon_loss'][1:],color='dodgerblue',label='Reconstruction Loss')
-        ax3.set_title('recon_loss')
-        ax4.plot(history['kl_loss'][1:],color='dodgerblue',label='Fit to prior loss')
-        ax4.set_title('kl_loss')
+        ax3.plot(history['recon_loss'][1:],color='dodgerblue',label='train')
+        ax3.plot(history['recon_loss_val'][1:],color='lightsalmon',label='test')
+        ax3.set_title('Reconstruction Loss')
+        ax4.plot(history['kl_loss'][1:],color='dodgerblue',label='train')
+        ax4.plot(history['kl_loss_val'][1:],color='lightsalmon',label='test')
+        ax4.set_title('Fit to Prior')
 
-    # else:
-    #
-    #     ax1.plot(history['train_loss'],color='dodgerblue',label='train_loss')
-    #     ax1.plot(history['valid_loss'],color='lightsalmon',label='valid_loss')
-    #     ax1.set_title('General Loss')
-    #     ax2.plot(history['train_kl'],color='dodgerblue',label='train KL loss')
-    #     ax2.plot(history['val_kl'],color='lightsalmon',label='valid KL loss')
-    #     ax2.set_title('KL Loss')
-    #     ax3.plot(history['train_recon'],color='dodgerblue',label='train RECON loss')
-    #     ax3.plot(history['val_recon'],color='lightsalmon',label='valid RECON loss')
-    #     ax3.set_title('Reconstruction Loss')
-    #     ax4.plot(history['beta'],color='dodgerblue',label='Beta')
-    #     ax4.set_title('KL Cost Weight')
 
     ax1.legend()
     ax2.legend()
@@ -460,8 +449,64 @@ def plot_train_result(history, infoMAX = False, only_train_data=True):
 
 
 ############################
-######## SAVING
+######## SAVING & STOPPING
 ############################
+
+class EarlyStopping:
+    """Early stops the training if validation loss doesn't improve after a given patience.
+    This class is obtained from Bjarten Implementation (GitHub open source), thanks to him"""
+    def __init__(self, patience=7, verbose=False, delta=0, path='checkpoint.pt'):
+        """
+        Args:
+            patience (int): How long to wait after last time validation loss improved.
+                            Default: 7
+            verbose (bool): If True, prints a message for each validation loss improvement.
+                            Default: False
+            delta (float): Minimum change in the monitored quantity to qualify as an improvement.
+                            Default: 0
+            path (str): Path for the models to be saved to.
+                            Default: 'checkpoint.pt'
+        """
+        self.patience = patience
+        self.verbose = verbose
+        self.counter = 0
+        self.best_score = None
+        self.early_stop = False
+        self.stop_epoch = 0
+        self.val_loss_min = np.Inf
+        self.delta = delta
+        self.path = path
+
+    def __call__(self, val_loss, VAE, MLP=None):
+
+        score = -val_loss
+
+        if self.best_score is None:
+            self.best_score = score
+            self.save_model(val_loss, VAE, MLP)
+        elif score < self.best_score + self.delta:
+            self.counter += 1
+            print(f'EarlyStopping counter: {self.counter} out of {self.patience}')
+            if self.counter >= self.patience:
+                self.early_stop = True
+        else:
+            self.best_score = score
+            self.save_model(val_loss, VAE, MLP)
+            self.counter = 0
+
+    def save_model(self, val_loss, VAE, MLP):
+        '''Saves model when validation loss decrease.'''
+        self.stop_epoch = VAE.epochs
+        if self.verbose:
+            print(f'Validation loss decreased ({self.val_loss_min:.6f} --> {val_loss:.6f}).  Saving model ...')
+        #Save both models
+        pre, ext = os.path.splitext(self.path)
+        save_brute(VAE,pre+f'_VAE_.pth')
+        if MLP != None:
+            save_brute(MLP,pre+f'_MLP_.pth')
+        #torch.save(model.state_dict(), self.path)
+        self.val_loss_min = val_loss
+
 
 def save_checkpoint(model, path):
     """Save a vgg16 model to path.

@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning Methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-06-12T11:51:59+10:00
+# @Last modified time: 2020-06-19T18:07:56+10:00
 
 '''
 This file contains classes and function that are usefull to load the raw data,
@@ -11,46 +11,54 @@ organize it throughout batch, and preprocess it to be fed to a VAE network
 '''
 
 from torchvision import datasets
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, SubsetRandomSampler
 from skimage import io
 from skimage.util import img_as_float, pad
 from PIL import Image
 from torchvision import transforms
 from skimage.transform import resize, rotate
+from sklearn.model_selection import train_test_split
 import torch
 
 import matplotlib.pyplot as plt
 import numpy as np
 import random
+from copy import copy
 
-def get_dataloader(root_dir,img_transforms,batchsize):
+def get_train_val_dataloader(root_dir,input_size,batchsize,test_split=0.2):
     """
-    Return an appropriate DataLoader, to load data in batch and apply the desired
-    pipeline preprocess
+    From a unique folder that contains the whole dataset, divided in different subfolders
+    related to class belonging, return a train and validation dataloader that can be used
+    to train a VAE network.
+    Note that a stratified splitting is performed, ensuring that class proportion is maintained
+    is both sets.
     """
-    data = {
-        'train':
-        datasets.DatasetFolder(root=root_dir[0],loader=load_from_path(),extensions=('.png','.jpg','.tif','.tiff'), transform=img_transforms['train'])
-        #'val':
-        #datasets.DatasetFolder(root=root_dir[1],loader=load_from_path(),extensions=('.png','.jpg','.tif','.tiff'), transform=img_transforms['val']),
-        #'test':
-        #datasets.ImageFolder(root=root_dir[2], transform=img_transforms['test'])
-    }
+    trsfm = image_tranforms(input_size)
+    dataset = datasets.DatasetFolder(root=root_dir,loader=load_from_path(),extensions=('.png','.jpg','.tif','.tiff'), transform=trsfm)
+    targets = dataset.targets
 
+    #Stratify splitting
+    train_idx, valid_idx=train_test_split(np.arange(len(targets)),
+                                            test_size=test_split,
+                                            shuffle=True,
+                                            stratify=targets)
+
+    train_sampler = SubsetRandomSampler(train_idx)
+    valid_sampler = SubsetRandomSampler(valid_idx)
+
+    dataset_train = dataset
+    dataset_valid = copy(dataset) #To enable different transforms
+    dataset_valid.transform = transforms.Compose([
+        zPad_or_Rescale(input_size),
+        transforms.ToTensor(),
+        Double_to_Float()])
+    dataset_train.transform = trsfm
     #Create DataIterator, yield batch of img and label easily and in time, to not load full heavy set
     # Dataloader iterators
-    dataloaders = {
-        'train': DataLoader(data['train'], batch_size=batchsize, shuffle=True, drop_last=True)
-        #'val': DataLoader(data['val'], batch_size=batchsize, shuffle=True, drop_last=True),
-        #'test': DataLoader(data['test'], batch_size=batchsize, shuffle=True)
-    }
+    train_loader = DataLoader(dataset_train, batch_size=batchsize,sampler=train_sampler,drop_last=True)
+    valid_loader = DataLoader(dataset_valid, batch_size=batchsize,sampler=valid_sampler,drop_last=True)
 
-    return data, dataloaders
-#How to use it :
-#trainiter = iter(dataloaders['train'])
-#features, labels = next(trainiter)
-# The shape of a batch is (batch_size, color_channels, height, width)
-
+    return train_loader, valid_loader
 
 #Need to specify custom loader for a DataSetFolder, Because ImageFolder CAN'T be used,
 #because it opens image as PIL object, which do not support uint16...
@@ -125,10 +133,8 @@ class My_ID_Collator(object):
 def image_tranforms(input_size):
     """
     Basic preprocessing that will be apply on data throughout dataloader.
-    Apply this pipeline if dataset is already in PATCH (64,64), or other.
-    Few/None random transformation because patch already extracted
-    Mainly : Patch are bring to RGB, translate to tensor and then normalize according
-    to ImageNet Standard (Range of value that each channel expect to see)
+    Image are resize (zero/padded or reshape) to a given input size,
+    data augmentation is performed and image are translated to tensor
 
     Parameters
     ----------
@@ -143,10 +149,7 @@ def image_tranforms(input_size):
 
     # %% Bulding a tranformation pipeline on Pytorch thanks to Compose
     # Image transformations
-    img_transforms = {
-        # Train uses data augmentation
-        'train':
-        transforms.Compose([
+    img_transforms = transforms.Compose([
             #Data arrive as HxWx4 float64 0 - 1.0 ndarray
             # 1) Rescale and Pad to fixed
             zPad_or_Rescale(input_size),
@@ -155,27 +158,10 @@ def image_tranforms(input_size):
             RandomSmallRotation(),
             RandomVFlip(),
             RandomHFlip(),
-            # ROTATION ? WARP ? NOISE ?
+            # WARP ? NOISE ?
             transforms.ToTensor(), #Will rescale to 0-1 Float32
             Double_to_Float()
-
-        ]),
-        # Validation does not use augmentation
-        'val':
-        transforms.Compose([
-            zPad_or_Rescale(input_size),
-            transforms.ToTensor(),
-            Double_to_Float()
-        ]),
-        # Test does not use augmentation
-        'test':
-        transforms.Compose([
-            zPad_or_Rescale(input_size),
-            transforms.ToTensor(),
-            Double_to_Float()
-        ]),
-    }
-
+        ])
     return img_transforms
 
 

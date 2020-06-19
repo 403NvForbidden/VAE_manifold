@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-06-09T22:53:51+10:00
+# @Last modified time: 2020-06-18T17:15:30+10:00
 
 
 '''
@@ -125,3 +125,43 @@ ax3.set_title('LCMC')
 ax3.legend()
 fig.suptitle('Unsupervised evaluation of projection at different scale')
 plt.show()
+
+
+#%%
+#Local quality score color code in latent representation
+from local_quality import local_quality
+
+feature_size = 64*64*3
+metadata_csv = 'DataSets/Sacha_Metadata_3dlatentVAEbigFAIL_20200525.csv'
+MetaData_csv = pd.read_csv(metadata_csv)
+data_raw = MetaData_csv[['feature'+str(i) for i in range(feature_size)]].to_numpy()
+data_embedded = MetaData_csv[['x_coord','y_coord','z_coord']].to_numpy()
+
+local_quality_score = local_quality(data_raw, data_embedded, kt=70, ks=100)
+
+#One run in 3 minutes
+#%%
+import plotly.express as px
+import plotly.graph_objects as go
+import plotly.offline
+
+fig = px.scatter_3d(x=data_embedded[:,0],y=data_embedded[:,1],z=data_embedded[:,2],color=local_quality_score)
+plotly.offline.plot(fig, filename = 'Local_Qua_Model3_s100.html', auto_open=True)
+
+#%% Plot the heat map of coranking matrix
+from matplotlib.colors import LogNorm
+Q1_pkl = 'DataSets/coranking_matrix_3dlatentVAE_20200523.csv.pkl'
+Q2_pkl = 'DataSets/coranking_matrix_3dlatentVAEFAIL_20200524.csv.pkl'
+Q3_pkl = 'DataSets/coranking_matrix_3dlatentVAEbigFAIL_20200525.csv.pkl'
+with open(Q1_pkl, 'rb') as f:
+    Q1 = pkl.load(f)
+with open(Q2_pkl, 'rb') as f:
+    Q2 = pkl.load(f)
+with open(Q3_pkl, 'rb') as f:
+    Q3 = pkl.load(f)
+np.max(Q1)
+np.min(Q1)
+np.mean(Q3)
+plt.figure(figsize=(6,6))
+plt.imshow(Q1[:800,:800], cmap=plt.cm.gnuplot2_r, norm=LogNorm())
+plt.title('First 800 Ranks - Coranking Matrix - Model 1')

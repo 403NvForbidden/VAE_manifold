@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-06-16T23:27:15+10:00
+# @Last modified time: 2020-06-19T19:49:02+10:00
 
 
 ##########################################################
@@ -13,7 +13,7 @@
 from infoMAX_VAE import CNN_VAE, MLP_MI_estimator
 from torchsummary import summary
 from torch import cuda, optim
-from data_processing import get_dataloader, image_tranforms, imshow_tensor, get_inference_dataset
+from data_processing import get_train_val_dataloader, image_tranforms, imshow_tensor, get_inference_dataset
 from train_net import train_InfoMAX_model, inference_recon
 from helpers import plot_train_result, save_checkpoint, load_checkpoint, save_brute, load_brute, plot_latent_space, metadata_latent_space
 import torch
@@ -25,39 +25,28 @@ import numpy as np
 #plt.ion()
 
 ##########################################################
-# %% Define variable
+# %% DataLoader and Co
 ##########################################################
 # Location of data
-datadir = 'datadir/'
-datadir1 = 'DataSets/'
-#traindir = datadir + 'train/'
-#traindir = datadir1 + 'Synthetic_Data_1'
-traindir = datadir1 + 'Peter_Horvath_Data'
-validdir = datadir + 'val/'
-testdir = datadir + 'test/'
-# Change to fit hardware
-batch_size = 256
+datadir = 'DataSets/'
+datadir_BBBC = datadir + 'Synthetic_Data_1'
+datadir_Horvarth = datadir + 'Peter_Horvath_Data'
 
 # Check if GPU avalaible
 train_on_gpu = cuda.is_available()
 print(f'Train on gpu: {train_on_gpu}')
 
-
-##########################################################
-# %% DataLoader and Co
-##########################################################
-
 #Define the input size of the image
 # Data will be reshape   C x input_size x input_size
-
 input_size = 64
+# Change to fit hardware
+batch_size = 256
 
-trsfm = image_tranforms(input_size)
-_, dataloader = get_dataloader([traindir,validdir,testdir],trsfm,batch_size)
+train_loader, valid_loader = get_train_val_dataloader(datadir_BBBC,input_size,batch_size,test_split=0.15)
 
-trainiter = iter(dataloader['train'])
+#Qualitative inspection of one data example
+trainiter = iter(train_loader)
 features, labels = next(trainiter)
-
 _,_ = imshow_tensor(features[0])
 
 
@@ -65,8 +54,9 @@ _,_ = imshow_tensor(features[0])
 # %% Build custom VAE Model
 ##########################################################
 
-VAE = CNN_VAE(zdim=3, alpha=600, beta=40, base_enc=64, base_dec=32, depth_factor_dec=2)
+VAE = CNN_VAE(zdim=3, alpha=15, beta=1, base_enc=32, base_dec=32, depth_factor_dec=2)
 MLP = MLP_MI_estimator(zdim=3)
+
 
 opti_VAE = optim.Adam(VAE.parameters(), lr=0.00005, betas=(0.9, 0.999))
 opti_MLP = optim.Adam(MLP.parameters(), lr=0.00005, betas=(0.9, 0.999))
@@ -77,25 +67,21 @@ if train_on_gpu:
 
 summary(VAE,input_size=(3,64,64),batch_size=32)
 
-epochs = 2
+#Max number of epochs (can also early stopped if val loss not improve for a long period)
+epochs = 500
 
+model_name = '3chan_dataset1_3z_InfoMAX'
+save_model_path = 'temporary_save/'+f'{model_name}_{datetime.date.today()}.pth'
 
-VAE, MLP, history = train_InfoMAX_model(epochs, VAE, MLP, opti_VAE, opti_MLP, dataloader,each_iteration=True, train_on_gpu=train_on_gpu)
-fig = plot_train_result(history, infoMAX = True, only_train_data=True)
+VAE, MLP, history, best_epoch = train_InfoMAX_model(epochs, VAE, MLP, opti_VAE, opti_MLP, train_loader, valid_loader,saving_path=save_model_path,each_iteration=False, train_on_gpu=train_on_gpu)
+fig = plot_train_result(history, best_epoch, infoMAX = True)
 fig.show()
 plt.show()
-#model_name = '4chan_105e_512z_model2'
-#model_name = '3chan_dataset2_50e_3z_VAE'
 
 #SAVE TRAINED MODEL and history
-#history_save = 'outputs/plot_history/'+f'loss_evo_{model_name}_{datetime.date.today()}.pkl'
-#Save Training history
-#with open(history_save, 'wb') as f:
-    #pkl.dump(history, f, protocol=pkl.HIGHEST_PROTOCOL)
+history_save = 'temporary_save/'+f'loss_evo_{model_name}_{datetime.date.today()}.csv'
+history.to_csv(history_save)
 
-#save_model_path = 'outputs/saved_models/'+f'VAE_{model_name}_{datetime.date.today()}.pth'
-#save_checkpoint(model,save_model_path)
-#save_brute(VAE,save_model_path)
 
 ##########################################################
 # %% Visualize training history

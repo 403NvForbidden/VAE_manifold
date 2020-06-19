@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning Methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-06-16T12:43:25+10:00
+# @Last modified time: 2020-06-19T18:20:20+10:00
 
 '''
 File containing main function to train the VAE with proper single cell images dataset
@@ -11,6 +11,7 @@ File containing main function to train the VAE with proper single cell images da
 import torch
 from torch.autograd import Variable
 from torch import nn
+import torch.optim as optim
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -18,7 +19,7 @@ from timeit import default_timer as timer
 from torch import cuda
 from torchvision.utils import save_image, make_grid
 from networks import VAE
-from helpers import plot_latent_space, show
+from helpers import plot_latent_space, show, EarlyStopping
 
 def train(epoch, model, optimizer, train_loader, train_on_gpu):
     # toggle model to train mode
@@ -192,11 +193,6 @@ def train_infoM_epoch(epoch, VAE, MLP, opti_VAE, opti_MLP, train_loader, each_it
     '''Train the infoMAX model for one epoch'''
     # toggle model to train mode
     VAE.train()
-    # global_VAE_loss = 0
-    # MI_estimation = 0
-    # MI_estimator_loss = 0
-    # kl_loss = 0
-    # recon_loss = 0
 
     global_VAE_iter = []
     MI_estimation_iter = []
@@ -208,7 +204,7 @@ def train_infoM_epoch(epoch, VAE, MLP, opti_VAE, opti_MLP, train_loader, each_it
 
     criterion_recon = nn.BCEWithLogitsLoss().cuda() #more stable than handmade sigmoid as last layer and BCELoss
 
-    # each `data` is of BATCH_SIZE samples and has shape [batch_size, 4, 128, 128]
+    # each `data` is of BATCH_SIZE samples and has shape [batch_size, 4, H, W]
     for batch_idx, (data, _) in enumerate(train_loader):
         data = Variable(data)
         if train_on_gpu:
@@ -238,23 +234,16 @@ def train_infoM_epoch(epoch, VAE, MLP, opti_VAE, opti_MLP, train_loader, each_it
         opti_VAE.step()
 
         MI_loss = -MI_xz
+        # Step 2 : Optimization of the MLP to improve the MI estimation
+        opti_MLP.zero_grad()
+        MI_loss.backward()
+        opti_MLP.step()
 
         global_VAE_iter.append(loss_VAE.item())
         recon_loss_iter.append(loss_recon.item())
         kl_loss_iter.append(loss_kl.item())
         MI_estimation_iter.append(MI_xz.item())
         MI_estimator_loss_iter.append(MI_loss.item())
-        # global_VAE_loss += loss_VAE.item()
-        # recon_loss += loss_recon.item()
-        # kl_loss += loss_kl.item()
-        # MI_estimation += MI_xz.item()
-        # MI_estimator_loss += MI_loss.item()
-
-        # Step 2 : Optimization of the MLP to improve the MI estimation
-        opti_MLP.zero_grad()
-        MI_loss.backward()
-        opti_MLP.step()
-
 
         if batch_idx % 2 == 0:
             print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
@@ -262,60 +251,111 @@ def train_infoM_epoch(epoch, VAE, MLP, opti_VAE, opti_MLP, train_loader, each_it
                        100. * batch_idx / len(train_loader),
                        loss_VAE.item() ),end='\r')
 
-    # global_VAE_loss = np.mean(global_VAE_iter)
-
-
-    # global_VAE_loss /= len(train_loader)
-    # recon_loss /= len(train_loader)
-    # kl_loss /= len(train_loader)
-    # MI_estimation /= len(train_loader)
-    # MI_estimator_loss /= len(train_loader)
-    if epoch % 1 == 0:
+    if each_iteration:
         print('==========> Epoch: {} ==========> Average loss: {:.4f}'.format(epoch, np.mean(global_VAE_iter)))
         print(f'{timer() - start:.2f} seconds elapsed in epoch.')
         print(f'Reconstruction loss : {np.mean(recon_loss_iter):.2f}, KL loss : {np.mean(kl_loss_iter):.2f} \n MI : {np.mean(MI_estimation_iter):.2f} ')
-
-
-    # visualize reconstrunction, synthesis, and latent space
-    if (epoch%1==0) or (epoch == 1):
-
-        fig, ax, fig2, ax2 = plot_latent_space(VAE,train_loader,train_on_gpu)
-        if ax != None and ax2 != None:
-            ax.set_title(f'2D Latent Space after {epoch} epochs, 1 color = 1 Well = 1 condition \n Reconstruction loss : {np.mean(recon_loss_iter):.2f}, KL loss : {np.mean(kl_loss_iter):.2f} \n MI : {np.mean(MI_estimation_iter):.2f} ')
-            ax2.set_title(f'2D Latent Space after {epoch} epochs,\n Ground truth clusters\' center of mass and 0.7std (51.6%) confidence ellipse are plotted')
-        if fig != None :
-            fig.show()
-        if (fig2 != None) and (VAE.zdim==2) :
-            fig2.show()
-
-        img_grid = make_grid(torch.cat((data[:4,:3,:,:],nn.Sigmoid()(x_recon[:4,:3,:,:]))), nrow=4, padding=12, pad_value=1)
-
-        plt.figure(figsize=(10,5))
-        plt.imshow(img_grid.detach().cpu().permute(1,2,0))
-        plt.axis('off')
-        plt.title(f'Example data and its reconstruction - epoch {epoch}')
-        plt.show()
-
-        samples = torch.randn(8, VAE.zdim, 1, 1)
-        samples = Variable(samples,requires_grad=False).cuda()
-        recon = VAE.decode(samples)
-        img_grid = make_grid(nn.Sigmoid()(recon[:,:3,:,:]), nrow=4, padding=12, pad_value=1)
-
-        plt.figure(figsize=(10,5))
-        plt.imshow(img_grid.detach().cpu().permute(1,2,0))
-        plt.axis('off')
-        plt.title(f'Random generated samples - epoch {epoch}')
-        plt.show()
-
-    if each_iteration:
         return global_VAE_iter, MI_estimation_iter, MI_estimator_loss_iter, kl_loss_iter, recon_loss_iter
+
     else:
+        if (epoch%5==0) or (epoch == 1):
+            print('==========> Epoch: {} ==========> Average loss: {:.4f}'.format(epoch, np.mean(global_VAE_iter)))
+            print(f'{timer() - start:.2f} seconds elapsed in epoch.')
+            print(f'Reconstruction loss : {np.mean(recon_loss_iter):.2f}, KL loss : {np.mean(kl_loss_iter):.2f} \n MI : {np.mean(MI_estimation_iter):.2f} ')
+
         return np.mean(global_VAE_iter), np.mean(MI_estimation_iter), np.mean(MI_estimator_loss_iter), np.mean(kl_loss_iter), np.mean(recon_loss_iter)
 
-def train_InfoMAX_model(epochs,VAE, MLP, opti_VAE, opti_MLP, dataloader, each_iteration=False, train_on_gpu=False):
+def test_infoM_epoch(epoch, VAE, MLP, opti_VAE, opti_MLP, test_loader, each_iteration=False, train_on_gpu=False):
+    # toggle model to test / inference mode
+
+    with torch.no_grad():
+        VAE.eval()
+        global_VAE_iter = []
+        MI_estimation_iter = []
+        MI_estimator_loss_iter = []
+        kl_loss_iter = []
+        recon_loss_iter = []
+
+        criterion_recon = nn.BCEWithLogitsLoss().cuda() #more stable than handmade sigmoid as last layer and BCELoss
+
+
+        # each data is of BATCH_SIZE (default 128) samples
+        for batch_idx, (data, _) in enumerate(test_loader):
+            if train_on_gpu:
+                # make sure this lives on the GPU
+                data = data.cuda()
+
+            # we're only going to infer, so no autograd at all required
+            data = Variable(data, requires_grad=False)
+
+            #data feed to CNN-VAE
+            x_recon, mu_z, logvar_z, z = VAE(data)
+            t_xz = MLP(data,z) #From joint distribution
+            z_perm = VAE.permute_dims(z)
+            t_xz_tilda = MLP(data,z_perm) #From product of marginal distribution
+
+            #Estimation of the Mutual Info between X and Z
+            et = torch.mean(torch.exp(t_xz_tilda))
+            MI_xz = torch.mean(t_xz) - torch.log(et)
+            MI_loss = -MI_xz
+
+            loss_recon = criterion_recon(x_recon,data)
+            loss_recon *= data.size(1)*data.size(2)*data.size(3)
+            loss_recon.div(data.size(0))
+            loss_kl = VAE.kl_divergence(mu_z,logvar_z)
+
+            loss_VAE = loss_recon + VAE.beta * loss_kl - VAE.alpha * MI_xz
+
+            global_VAE_iter.append(loss_VAE.item())
+            recon_loss_iter.append(loss_recon.item())
+            kl_loss_iter.append(loss_kl.item())
+            MI_estimation_iter.append(MI_xz.item())
+            MI_estimator_loss_iter.append(MI_loss.item())
+
+    if each_iteration:
+        print('Test Errors for Epoch: {} ----> Average loss: {:.4f}'.format(epoch, np.mean(global_VAE_iter)))
+        return global_VAE_iter, MI_estimation_iter, MI_estimator_loss_iter, kl_loss_iter, recon_loss_iter
+
+    else:
+        if (epoch%5==0) or (epoch == 1):
+            print('Test Errors for Epoch: {} ----> Average loss: {:.4f}'.format(epoch, np.mean(global_VAE_iter)))
+        return np.mean(global_VAE_iter), np.mean(MI_estimation_iter), np.mean(MI_estimator_loss_iter), np.mean(kl_loss_iter), np.mean(recon_loss_iter)
+
+#THE FOLLOWING CODE NOW IS MADE OUTSIDE THE TRAINING LOOP
+# # visualize reconstrunction, synthesis, and latent space
+# if (epoch%1==0) or (epoch == 1):
+#
+#     fig, ax, fig2, ax2 = plot_latent_space(VAE,train_loader,train_on_gpu)
+#     if ax != None and ax2 != None:
+#         ax.set_title(f'2D Latent Space after {epoch} epochs, 1 color = 1 Well = 1 condition \n Reconstruction loss : {np.mean(recon_loss_iter):.2f}, KL loss : {np.mean(kl_loss_iter):.2f} \n MI : {np.mean(MI_estimation_iter):.2f} ')
+#         ax2.set_title(f'2D Latent Space after {epoch} epochs,\n Ground truth clusters\' center of mass and 0.7std (51.6%) confidence ellipse are plotted')
+#     if fig != None :
+#         fig.show()
+#     if (fig2 != None) and (VAE.zdim==2) :
+#         fig2.show()
+#
+#     img_grid = make_grid(torch.cat((data[:4,:3,:,:],nn.Sigmoid()(x_recon[:4,:3,:,:]))), nrow=4, padding=12, pad_value=1)
+#
+#     plt.figure(figsize=(10,5))
+#     plt.imshow(img_grid.detach().cpu().permute(1,2,0))
+#     plt.axis('off')
+#     plt.title(f'Example data and its reconstruction - epoch {epoch}')
+#     plt.show()
+#
+#     samples = torch.randn(8, VAE.zdim, 1, 1)
+#     samples = Variable(samples,requires_grad=False).cuda()
+#     recon = VAE.decode(samples)
+#     img_grid = make_grid(nn.Sigmoid()(recon[:,:3,:,:]), nrow=4, padding=12, pad_value=1)
+#
+#     plt.figure(figsize=(10,5))
+#     plt.imshow(img_grid.detach().cpu().permute(1,2,0))
+#     plt.axis('off')
+#     plt.title(f'Random generated samples - epoch {epoch}')
+#     plt.show()
+
+def train_InfoMAX_model(epochs,VAE, MLP, opti_VAE, opti_MLP, train_loader, valid_loader, saving_path='best_model.pth', each_iteration=False, train_on_gpu=False):
     '''
     Params :
-        beta_init ([int]) : [max_value, start, reach]
     '''
 
     # Number of epochs already trained (if using loaded in model weights)
@@ -325,55 +365,108 @@ def train_InfoMAX_model(epochs,VAE, MLP, opti_VAE, opti_MLP, dataloader, each_it
         VAE.epochs = 0
         print(f'Starting Training from Scratch.\n')
 
-
     overall_start = timer()
-
+    best_epoch = 0
     history = pd.DataFrame(
-        columns=['global_VAE_loss', 'MI_estimation', 'MI_estimator_loss', 'kl_loss', 'recon_loss'])#,'valid_loss','val_kl','val_recon'])
+        columns=['global_VAE_loss', 'MI_estimation', 'MI_estimator_loss', 'kl_loss', 'recon_loss',
+        'global_VAE_loss_val','MI_estimation_val','MI_estimator_loss_val','kl_loss_val','recon_loss_val'])
 
+    if each_iteration:
 
+        early_stopping = EarlyStopping(patience=2,verbose=True,path=saving_path)
+        lr_schedul_VAE = torch.optim.lr_scheduler.StepLR(optimizer=opti_VAE, step_size=1, gamma=0.5)
+        lr_schedul_MLP = torch.optim.lr_scheduler.StepLR(optimizer=opti_MLP, step_size=1, gamma=0.5)
 
-    for epoch in range(VAE.epochs+1,VAE.epochs+epochs+1):
+        for epoch in range(VAE.epochs+1,VAE.epochs+epochs+1):
+            global_VAE_loss, MI_estimation, MI_estimator_loss, kl_loss, recon_loss = train_infoM_epoch(epoch, VAE, MLP, opti_VAE, opti_MLP, train_loader, each_iteration, train_on_gpu)
+            global_VAE_loss_val, MI_estimation_val, MI_estimator_loss_val, kl_loss_val, recon_loss_val = test_infoM_epoch(epoch, VAE, MLP, opti_VAE, opti_MLP, valid_loader, each_iteration, train_on_gpu)
 
-        if each_iteration:
-            global_VAE_loss, MI_estimation, MI_estimator_loss, kl_loss, recon_loss = train_infoM_epoch(epoch, VAE, MLP, opti_VAE, opti_MLP, dataloader['train'], each_iteration, train_on_gpu)
-
-            # temp_df = pd.DataFrame({'global_VAE_loss':global_VAE_loss,
-            #      'MI_estimation': MI_estimation,
-            #      'MI_estimator_loss': MI_estimator_loss,
-            #      'kl_loss': kl_loss,
-            #      'recon_loss': recon_loss})
+            #ealy stopping takes the validation loss to check if it has decereased,
+            #if so, model is saved, if not for 'patience' time in a row, the training loop is broken
+            early_stopping(np.mean(global_VAE_loss_val),VAE,MLP)
+            best_epoch = early_stopping.stop_epoch
             temp_df = pd.DataFrame({'global_VAE_loss':[*global_VAE_loss],
                  'MI_estimation': [*MI_estimation],
                  'MI_estimator_loss': [*MI_estimator_loss],
                  'kl_loss': [*kl_loss],
-                 'recon_loss': [*recon_loss]})
-            print(temp_df.head())
+                 'recon_loss': [*recon_loss],
+                 'global_VAE_loss_val':[*global_VAE_loss_val],
+                 'MI_estimation_val': [*MI_estimation_val],
+                 'MI_estimator_loss_val': [*MI_estimator_loss_val],
+                 'kl_loss_val': [*kl_loss_val],
+                 'recon_loss_val': [*recon_loss_val]})
+
+
             history = history.append(temp_df, ignore_index=True)
+            VAE.epochs += 1
+
+            lr_schedul_VAE.step()
+            lr_schedul_MLP.step()
+
+            if early_stopping.early_stop:
+                print(f'#### Early stopping occured. Best model saved is from epoch {early_stopping.stop_epoch}')
+                break
+
+        total_time = timer() - overall_start
+        print(
+            f'{total_time:.2f} total seconds elapsed. {total_time / (epoch):.2f} seconds per epoch.'
+        )
+        print('######### TRAINING FINISHED ##########')
+
+        # Attach the optimizer
+        VAE.optimizer = opti_VAE
+        MLP.optimizer = opti_MLP
+
+        return VAE, MLP, history, best_epoch
+
+    else:  #each epoch
+        history = []
+        early_stopping = EarlyStopping(patience=40,verbose=True,path=saving_path)
+        lr_schedul_VAE = torch.optim.lr_scheduler.StepLR(optimizer=opti_VAE, step_size=40, gamma=0.5)
+        lr_schedul_MLP = torch.optim.lr_scheduler.StepLR(optimizer=opti_MLP, step_size=40, gamma=0.5)
+
+        for epoch in range(VAE.epochs+1,VAE.epochs+epochs+1):
+            global_VAE_loss, MI_estimation, MI_estimator_loss, kl_loss, recon_loss = train_infoM_epoch(epoch, VAE, MLP, opti_VAE, opti_MLP, train_loader, each_iteration, train_on_gpu)
+            global_VAE_loss_val, MI_estimation_val, MI_estimator_loss_val, kl_loss_val, recon_loss_val = test_infoM_epoch(epoch, VAE, MLP, opti_VAE, opti_MLP, valid_loader, each_iteration, train_on_gpu)
+
+            #ealy stopping takes the validation loss to check if it has decereased,
+            #if so, model is saved, if not for 'patience' time in a row, the training loop is broken
+            early_stopping(global_VAE_loss_val,VAE,MLP)
+            best_epoch = early_stopping.stop_epoch
+
+            history.append([global_VAE_loss, MI_estimation, MI_estimator_loss, kl_loss, recon_loss,global_VAE_loss_val, MI_estimation_val, MI_estimator_loss_val, kl_loss_val, recon_loss_val])
+            VAE.epochs += 1
+            lr_schedul_VAE.step()
+            lr_schedul_MLP.step()
+
+            if early_stopping.early_stop:
+                print(f'#### Early stopping occured. Best model saved is from epoch {early_stopping.stop_epoch}')
+                break
 
 
-        else:  #each epoch
-            global_VAE_loss, MI_estimation, MI_estimator_loss, kl_loss, recon_loss = train_infoM_epoch(epoch, VAE, MLP, opti_VAE, opti_MLP, dataloader['train'], each_iteration, train_on_gpu)
-            history = []
-            history.append([global_VAE_loss, MI_estimation, MI_estimator_loss, kl_loss, recon_loss])
-            history = pd.DataFrame(
-                history,
-                columns=['global_VAE_loss', 'MI_estimation', 'MI_estimator_loss', 'kl_loss', 'recon_loss'])#,'valid_loss','val_kl','val_recon'])
-
-        VAE.epochs += 1
+        history = pd.DataFrame(
+            history,
+            columns=['global_VAE_loss', 'MI_estimation', 'MI_estimator_loss', 'kl_loss', 'recon_loss',
+            'global_VAE_loss_val','MI_estimation_val','MI_estimator_loss_val','kl_loss_val','recon_loss_val'])
 
 
-    total_time = timer() - overall_start
-    print(
-        f'{total_time:.2f} total seconds elapsed. {total_time / (epoch):.2f} seconds per epoch.'
-    )
-    print('######### TRAINING FINISHED ##########')
+        total_time = timer() - overall_start
+        print(
+            f'{total_time:.2f} total seconds elapsed. {total_time / (epoch):.2f} seconds per epoch.'
+        )
+        print('######### TRAINING FINISHED ##########')
 
-    # Attach the optimizer
-    VAE.optimizer = opti_VAE
-    MLP.optimizer = opti_MLP
+        # Attach the optimizer
+        VAE.optimizer = opti_VAE
+        MLP.optimizer = opti_MLP
 
-    return VAE, MLP, history
+        return VAE, MLP, history, best_epoch
+
+
+
+
+
+
 
 
 

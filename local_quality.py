@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-06-18T00:15:19+10:00
+# @Last modified time: 2020-06-18T16:30:06+10:00
 
 '''
 This file reproduces the work from paper "Howto Evaluate Dimensionality Reduction ? -
@@ -87,37 +87,39 @@ def local_quality(high_data, low_data, kt, ks):
 
 
 
-# %%
-from sklearn.datasets import make_swiss_roll
-from sklearn.manifold import TSNE
-X, color = make_swiss_roll(n_samples=1500)
-X_embedded = TSNE(n_components=2,perplexity=150).fit_transform(X)
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
-Axes3D
-
-fig = plt.figure(figsize=(8,12))
-ax = fig.add_subplot(211, projection='3d')
-ax.scatter(X[:,0],X[:,1],X[:,2], c=color, cmap=plt.cm.Spectral)
-
-ax.set_title("Original Data")
-ax = fig.add_subplot(212)
-ax.scatter(X_embedded[:,0],X_embedded[:,1],c=color, cmap=plt.cm.Spectral)
-plt.axis('tight')
-plt.xticks([]), plt.yticks([])
-plt.title('projected data')
-plt.show()
-
-#%%
-local_quality_score = local_quality(X, X_embedded, kt=70, ks=100)
-
-fig = plt.figure(figsize=(8,6))
-
-ax.set_title("Projection Colored by Local quality contribution")
-ax = fig.add_subplot(111)
-bar = ax.scatter(X_embedded[:,0],X_embedded[:,1],c=local_quality_score, cmap=plt.cm.cool_r)
-cbar = fig.colorbar(bar)
-plt.axis('tight')
-plt.xticks([]), plt.yticks([])
-plt.title('projected data')
-plt.show()
+# %% TOY EXAMPLE
+# from sklearn.datasets import make_swiss_roll
+# from sklearn.manifold import TSNE
+# X, color = make_swiss_roll(n_samples=1500)
+# X_embedded = TSNE(n_components=2,perplexity=50).fit_transform(X)
+# import matplotlib.pyplot as plt
+# from mpl_toolkits.mplot3d import Axes3D
+# Axes3D
+#
+# fig = plt.figure(figsize=(8,12))
+# ax = fig.add_subplot(211, projection='3d')
+# ax.scatter(X[:,0],X[:,1],X[:,2], c=color, cmap=plt.cm.Spectral)
+#
+# ax.set_title("Original Data")
+# ax = fig.add_subplot(212)
+# ax.scatter(X_embedded[:,0],X_embedded[:,1],c=color, cmap=plt.cm.Spectral)
+# plt.axis('tight')
+# plt.xticks([]), plt.yticks([])
+# plt.title('projected data')
+# plt.show()
+#
+# #%%
+# kt = 700
+# ks = 700
+# local_quality_score = local_quality(X, X_embedded, kt=kt, ks=ks)
+#
+# fig = plt.figure(figsize=(8,6))
+#
+# ax.set_title("Projection Colored by Local quality contribution")
+# ax = fig.add_subplot(111)
+# bar = ax.scatter(X_embedded[:,0],X_embedded[:,1],c=local_quality_score, cmap=plt.cm.cool_r)
+# cbar = fig.colorbar(bar)
+# plt.axis('tight')
+# plt.xticks([]), plt.yticks([])
+# plt.title(f"Projection Colored by Local quality contribution - kt : {kt}, ks = {ks}")
+# plt.show()
