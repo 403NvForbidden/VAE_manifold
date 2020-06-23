@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-06-19T19:49:02+10:00
+# @Last modified time: 2020-06-21T18:03:14+10:00
 
 
 ##########################################################
@@ -15,13 +15,14 @@ from torchsummary import summary
 from torch import cuda, optim
 from data_processing import get_train_val_dataloader, image_tranforms, imshow_tensor, get_inference_dataset
 from train_net import train_InfoMAX_model, inference_recon
-from helpers import plot_train_result, save_checkpoint, load_checkpoint, save_brute, load_brute, plot_latent_space, metadata_latent_space
+from helpers import plot_train_result, save_checkpoint, load_checkpoint, save_brute, load_brute, plot_latent_space, metadata_latent_space, save_reconstruction
 import torch
 import datetime
 import pickle as pkl
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
+import plotly.offline
 #plt.ion()
 
 ##########################################################
@@ -31,6 +32,10 @@ import numpy as np
 datadir = 'DataSets/'
 datadir_BBBC = datadir + 'Synthetic_Data_1'
 datadir_Horvarth = datadir + 'Peter_Horvath_Data'
+dataset_path = datadir_BBBC
+
+#path_to_GT = 'DataSets/MetaData2_PeterHorvath_GT_link_CP.csv'
+path_to_GT = 'DataSets/MetaData1_GT_link_CP.csv'
 
 # Check if GPU avalaible
 train_on_gpu = cuda.is_available()
@@ -51,7 +56,7 @@ _,_ = imshow_tensor(features[0])
 
 
 ##########################################################
-# %% Build custom VAE Model
+# %% Build custom VAE Model and TRAIN IT
 ##########################################################
 
 VAE = CNN_VAE(zdim=3, alpha=15, beta=1, base_enc=32, base_dec=32, depth_factor_dec=2)
@@ -70,18 +75,41 @@ summary(VAE,input_size=(3,64,64),batch_size=32)
 #Max number of epochs (can also early stopped if val loss not improve for a long period)
 epochs = 500
 
-model_name = '3chan_dataset1_3z_InfoMAX'
-save_model_path = 'temporary_save/'+f'{model_name}_{datetime.date.today()}.pth'
+model_name = f'3chan_dataset1_3z_InfoMAX_{datetime.date.today()}'
+save_model_path = 'temporary_save/'+f'{model_name}.pth'
 
 VAE, MLP, history, best_epoch = train_InfoMAX_model(epochs, VAE, MLP, opti_VAE, opti_MLP, train_loader, valid_loader,saving_path=save_model_path,each_iteration=False, train_on_gpu=train_on_gpu)
-fig = plot_train_result(history, best_epoch, infoMAX = True)
+fig = plot_train_result(history, best_epoch,save_path=None, infoMAX = True)
 fig.show()
 plt.show()
 
 #SAVE TRAINED MODEL and history
-history_save = 'temporary_save/'+f'loss_evo_{model_name}_{datetime.date.today()}.csv'
+history_save = 'temporary_save/'+f'loss_evo_{model_name}.csv'
 history.to_csv(history_save)
 
+##########################################################
+# %% Visualize latent space and save it
+##########################################################
+
+#Visualize on the WHOLE dataset (train & validation)
+infer_data, infer_dataloader = get_inference_dataset(datadir_BBBC,batch_size,input_size,droplast=False)
+#Load the model that has been trained above
+#model_VAE = load_brute(save_model_path)
+model_VAE = load_brute('temporary_save/3chan_dataset1_3z_InfoMAX_2020-06-19_VAE_.pth')
+model_name='3chan_dataset1_3z_InfoMAX_2020-06-19_VAE_'
+#Where to save csv with metadata
+csv_save_output = 'temporary_save/'+f'{model_name}_metedata.csv'
+save_csv = False
+#Store raw image data in csv (results in heavy file, but raw data is needed for some metrics)
+store_raw = False
+
+figplotly = metadata_latent_space(model_VAE, infer_dataloader, train_on_gpu, GT_csv_path=path_to_GT, save_csv=save_csv, with_rawdata=store_raw,csv_path=csv_save_output)
+html_save = 'temporary_save/'+f'{model_name}_Representation.html'
+plotly.offline.plot(figplotly, filename=html_save, auto_open=False)
+
+#save image of reconstruction and generated samples
+image_save = 'temporary_save/'+f'{model_name}.png'
+save_reconstruction(infer_dataloader,model_VAE,image_save,train_on_gpu)
 
 ##########################################################
 # %% Visualize training history
@@ -98,34 +126,28 @@ history.to_csv(history_save)
 # ##########################################################
 # # %% Load an existing model and continue to train it (or make pred)
 # ##########################################################
-#
-date = '2020-04-17'
-model_name = 'testMODEL_z2_e300'
-load_model_path = 'outputs/saved_models/'+f'VAE_{model_name}_{date}.pth'
-
-
-#%% INFERENCE LATENT REPRESENTATION PLOT
+# INFERENCE LATENT REPRESENTATION PLOT
 batch_size = 128
 input_size = 64
-dataset_name = 'Peter_Horvath_Data'
+dataset_name = 'Synthetic_Data_1'
 infer_data, infer_dataloader = get_inference_dataset('DataSets/'+dataset_name,batch_size,input_size,droplast=False)
-infer_iter = iter(infer_dataloader)
-features, labels, file_names = next(infer_iter)
 
 
-#model_VAE = load_brute('outputs/Intermediate Dataset2/20200609 -First runs/VAE_3chan_dataset2_final_3e_3z_VAE_2020-06-09.pth')
+
+model_VAE = load_brute('temporary_save/3chan_dataset1_3z_InfoMAX_2020-06-19_VAE_.pth')
 
 #Path to CSV that contains GT of the dataset
-path_to_GT = 'DataSets/MetaData2_PeterHorvath_GT_link_CP.csv'
+#path_to_GT = 'DataSets/MetaData2_PeterHorvath_GT_link_CP.csv'
+path_to_GT = 'DataSets/MetaData1_GT_link_CP.csv'
 #Where to save csv with metadata
 csv_save_output = 'DataSets/John_Metadata_PeterHorvarth_VAELatentCode_20200610.csv'
 save_csv = False
 #Store raw image data in csv (results in heavy file, but raw data is needed for some metrics)
 store_raw = False
-figplotly = metadata_latent_space(VAE, infer_dataloader, train_on_gpu, GT_csv_path=path_to_GT, save_csv=save_csv, with_rawdata=store_raw,csv_path=csv_save_output)
+figplotly = metadata_latent_space(model_VAE, infer_dataloader, train_on_gpu, GT_csv_path=path_to_GT, save_csv=save_csv, with_rawdata=store_raw,csv_path=csv_save_output)
 
 import plotly.offline
-plotly.offline.plot(figplotly, filename='test3.html', auto_open=True)
+plotly.offline.plot(figplotly, filename='test.html', auto_open=True)
 
 
 # %%

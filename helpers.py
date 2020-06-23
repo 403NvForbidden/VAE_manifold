@@ -3,11 +3,12 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-06-19T18:16:27+10:00
+# @Last modified time: 2020-06-21T18:16:51+10:00
 
 '''File containing function to visualize data or to save it'''
 import torch
 from torch.autograd import Variable
+from torch import nn
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -195,6 +196,33 @@ def show_in_window(fig):
     web.show()
     sys.exit(app.exec_())
 
+def save_reconstruction(loader,VAE,save_path,train_on_gpu):
+
+    data, _, _ = next(iter(loader))
+    if train_on_gpu:
+        data = Variable(data,requires_grad=False).cuda()
+    x_recon,_,_,_=VAE(data)
+    img_grid = make_grid(torch.cat((data[:4,:3,:,:],nn.Sigmoid()(x_recon[:4,:3,:,:]))), nrow=4, padding=12, pad_value=1)
+
+    pre,ext = os.path.splitext(save_path)
+
+    plt.figure(figsize=(10,5))
+    plt.imshow(img_grid.detach().cpu().permute(1,2,0))
+    plt.axis('off')
+    plt.title(f'Example data and its reconstruction')
+    plt.savefig(pre+'reconstructions.png')
+
+    samples = torch.randn(8, VAE.zdim, 1, 1)
+    samples = Variable(samples,requires_grad=False).cuda()
+    recon = VAE.decode(samples)
+    img_grid = make_grid(nn.Sigmoid()(recon[:,:3,:,:]), nrow=4, padding=12, pad_value=1)
+
+    plt.figure(figsize=(10,5))
+    plt.imshow(img_grid.detach().cpu().permute(1,2,0))
+    plt.axis('off')
+    plt.title(f'Random generated samples')
+    plt.savefig(pre+'generatedSamples.png')
+
 
 def metadata_latent_space(model, infer_dataloader, train_on_gpu, GT_csv_path, save_csv=False, with_rawdata=False, csv_path='no_name_specified.csv'):
 
@@ -239,8 +267,9 @@ def metadata_latent_space(model, infer_dataloader, train_on_gpu, GT_csv_path, sa
 
     ###### Store raw data in a separate data frame #####
     if with_rawdata:
-        raw_data = torch.cat(list_of_tensors,0)
-        raw_data = raw_data.data.cpu().numpy()
+        raw_data = np.concatenate(list_of_tensors,axis=0)
+        #raw_data = torch.cat(list_of_tensors,0)
+        #raw_data = raw_data.data.cpu().numpy()
         rawdata_frame = pd.DataFrame(data=raw_data[0:,0:],
                                 index=[i for i in range(raw_data.shape[0])],
                                columns=['feature'+str(i) for i in range(raw_data.shape[1])])
@@ -394,7 +423,7 @@ def show(img, train_on_gpu):
     plt.imshow(np.transpose(npimg, (1,2,0)), interpolation='nearest')
 
 
-def plot_train_result(history, best_epoch=None, infoMAX = False):
+def plot_train_result(history, best_epoch=None,save_path=None, infoMAX = False):
     """Display training and validation loss evolution over epochs
 
     Params
@@ -440,6 +469,8 @@ def plot_train_result(history, best_epoch=None, infoMAX = False):
     ax2.legend()
     ax3.legend()
     ax4.legend()
+    if save_path != None:
+        plt.savefig(save_path+'los_evolution.png')
 
     return fig
 
