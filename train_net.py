@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning Methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-06-19T18:20:20+10:00
+# @Last modified time: 2020-06-27T02:23:06+10:00
 
 '''
 File containing main function to train the VAE with proper single cell images dataset
@@ -20,6 +20,7 @@ from torch import cuda
 from torchvision.utils import save_image, make_grid
 from networks import VAE
 from helpers import plot_latent_space, show, EarlyStopping
+from infoMAX_VAE import infoNCE_bound
 
 def train(epoch, model, optimizer, train_loader, train_on_gpu):
     # toggle model to train mode
@@ -212,14 +213,17 @@ def train_infoM_epoch(epoch, VAE, MLP, opti_VAE, opti_MLP, train_loader, each_it
 
         #data feed to CNN-VAE
         x_recon, mu_z, logvar_z, z = VAE(data)
-        t_xz = MLP(data,z) #From joint distribution
-        z_perm = VAE.permute_dims(z)
-        t_xz_tilda = MLP(data,z_perm) #From product of marginal distribution
+        scores = MLP(data,z)
+
+        #t_xz = MLP(data,z) #From joint distribution
+        #z_perm = VAE.permute_dims(z)
+        #t_xz_tilda = MLP(data,z_perm) #From product of marginal distribution
 
         #Estimation of the Mutual Info between X and Z
-        et = torch.mean(torch.exp(t_xz_tilda))
-        MI_xz = torch.mean(t_xz) - torch.log(et)
+        #et = torch.mean(torch.exp(t_xz_tilda))
+        #MI_xz = torch.mean(t_xz) - torch.log(et)
         #MI_xz = (t_xz.mean() - (torch.exp(t_xz_tilda -1).mean()))
+        MI_xz = infoNCE_bound(scores)
 
         loss_recon = criterion_recon(x_recon,data)
         loss_recon *= data.size(1)*data.size(2)*data.size(3)
@@ -290,13 +294,16 @@ def test_infoM_epoch(epoch, VAE, MLP, opti_VAE, opti_MLP, test_loader, each_iter
 
             #data feed to CNN-VAE
             x_recon, mu_z, logvar_z, z = VAE(data)
-            t_xz = MLP(data,z) #From joint distribution
-            z_perm = VAE.permute_dims(z)
-            t_xz_tilda = MLP(data,z_perm) #From product of marginal distribution
+            scores = MLP(data,z)
+            MI_xz = infoNCE_bound(scores)
+
+            #t_xz = MLP(data,z) #From joint distribution
+            #z_perm = VAE.permute_dims(z)
+            #t_xz_tilda = MLP(data,z_perm) #From product of marginal distribution
 
             #Estimation of the Mutual Info between X and Z
-            et = torch.mean(torch.exp(t_xz_tilda))
-            MI_xz = torch.mean(t_xz) - torch.log(et)
+            #et = torch.mean(torch.exp(t_xz_tilda))
+            #MI_xz = torch.mean(t_xz) - torch.log(et)
             MI_loss = -MI_xz
 
             loss_recon = criterion_recon(x_recon,data)
@@ -421,9 +428,9 @@ def train_InfoMAX_model(epochs,VAE, MLP, opti_VAE, opti_MLP, train_loader, valid
 
     else:  #each epoch
         history = []
-        early_stopping = EarlyStopping(patience=40,verbose=True,path=saving_path)
-        lr_schedul_VAE = torch.optim.lr_scheduler.StepLR(optimizer=opti_VAE, step_size=40, gamma=0.5)
-        lr_schedul_MLP = torch.optim.lr_scheduler.StepLR(optimizer=opti_MLP, step_size=40, gamma=0.5)
+        early_stopping = EarlyStopping(patience=30,verbose=True,path=saving_path)
+        lr_schedul_VAE = torch.optim.lr_scheduler.StepLR(optimizer=opti_VAE, step_size=40, gamma=0.6)
+        lr_schedul_MLP = torch.optim.lr_scheduler.StepLR(optimizer=opti_MLP, step_size=40, gamma=0.6)
 
         for epoch in range(VAE.epochs+1,VAE.epochs+epochs+1):
             global_VAE_loss, MI_estimation, MI_estimator_loss, kl_loss, recon_loss = train_infoM_epoch(epoch, VAE, MLP, opti_VAE, opti_MLP, train_loader, each_iteration, train_on_gpu)

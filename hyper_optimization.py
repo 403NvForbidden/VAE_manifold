@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-06-23T02:26:01+10:00
+# @Last modified time: 2020-06-28T11:12:49+10:00
 
 '''
 File running and saving results of several training of same models with
@@ -29,7 +29,7 @@ import matplotlib.pyplot as plt
 #####################################
 #### Define main variable ###########
 #####################################
-EXPERIMENT_TAG = f'run1_alpha-beta_{datetime.date.today()}'
+EXPERIMENT_TAG = f'run2_MIupgrade_alpha-beta_{datetime.date.today()}'
 DOC_TEXT = []
 
 MODEL_TAG = 3 # 1: Vanilla 2: SKIP-connection 3: InfoMax 4: InfoMAX + SkipConnection
@@ -110,7 +110,7 @@ zdim=3
 base_enc=32
 base_dec=32
 depth_factor_dec=2
-epochs = 200 #Max epoch (early stopping is also implemented)
+epochs = 150 #Max epoch (early stopping is also implemented)
 
 alpha_range = [0,5,20,100,500,1000]
 beta_range = [0,1,5,20,100,500]
@@ -132,6 +132,10 @@ for alpha in alpha_range:
         print('###################################################')
         print(f'Start Model Combination {counter} out of {len(alpha_range)*len(beta_range)}')
         print('###################################################')
+
+
+        plt.close('all')
+
         #Create one distinct folder per model
         model_folder = f'{save_folder}alpha_{alpha}_beta_{beta}/'
         if os.path.exists(model_folder):
@@ -139,10 +143,10 @@ for alpha in alpha_range:
         os.makedirs(model_folder)
 
         VAE = CNN_VAE(zdim=zdim, alpha=alpha, beta=beta, base_enc=base_enc, base_dec=base_dec, depth_factor_dec=depth_factor_dec)
-        MLP = MLP_MI_estimator(zdim=zdim)
+        MLP = MLP_MI_estimator(64*64*3,zdim=3)
 
         opti_VAE = optim.Adam(VAE.parameters(), lr=0.0001, betas=(0.9, 0.999))
-        opti_MLP = optim.Adam(MLP.parameters(), lr=0.0001, betas=(0.9, 0.999))
+        opti_MLP = optim.Adam(MLP.parameters(), lr=0.0005, betas=(0.9, 0.999))
 
         if train_on_gpu:
             VAE.cuda()
@@ -175,8 +179,10 @@ for alpha in alpha_range:
         image_save = model_folder+f'{model_name}.png'
         save_reconstruction(infer_dataloader,VAE,image_save,train_on_gpu)
 
+
         counter+=1
 
 print("#### Full Optimization is terminated")
 
 #31h run
+# -> to 23h of run with new MI bounds

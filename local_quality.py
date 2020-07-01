@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-06-18T16:30:06+10:00
+# @Last modified time: 2020-07-01T09:38:37+10:00
 
 '''
 This file reproduces the work from paper "Howto Evaluate Dimensionality Reduction ? -
@@ -61,8 +61,8 @@ def ws(rho_ij,r_ij,ks):
 
 def local_quality(high_data, low_data, kt, ks):
     '''
-    :param high_data: DataFrame containing the higher dimensional data.
-    :param low_data: DataFrame containing the lower dimensional data.
+    :param high_data: ndarray containing the higher dimensional data.
+    :param low_data: ndarray containing the lower dimensional data.
     :returns: a score for each data_point that express the local quality. Data
     points are kept in the same order than in input
     '''
@@ -87,7 +87,7 @@ def local_quality(high_data, low_data, kt, ks):
 
 
 
-# %% TOY EXAMPLE
+# %% TOY EXAMPLE with Swiss Roll
 # from sklearn.datasets import make_swiss_roll
 # from sklearn.manifold import TSNE
 # X, color = make_swiss_roll(n_samples=1500)
@@ -109,8 +109,8 @@ def local_quality(high_data, low_data, kt, ks):
 # plt.show()
 #
 # #%%
-# kt = 700
-# ks = 700
+# kt = 70
+# ks = 100
 # local_quality_score = local_quality(X, X_embedded, kt=kt, ks=ks)
 #
 # fig = plt.figure(figsize=(8,6))

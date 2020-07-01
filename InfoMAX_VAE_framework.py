@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-06-21T18:03:14+10:00
+# @Last modified time: 2020-07-01T17:10:16+10:00
 
 
 ##########################################################
@@ -60,11 +60,11 @@ _,_ = imshow_tensor(features[0])
 ##########################################################
 
 VAE = CNN_VAE(zdim=3, alpha=15, beta=1, base_enc=32, base_dec=32, depth_factor_dec=2)
-MLP = MLP_MI_estimator(zdim=3)
+MLP = MLP_MI_estimator(64*63*3,zdim=3)
 
 
-opti_VAE = optim.Adam(VAE.parameters(), lr=0.00005, betas=(0.9, 0.999))
-opti_MLP = optim.Adam(MLP.parameters(), lr=0.00005, betas=(0.9, 0.999))
+opti_VAE = optim.Adam(VAE.parameters(), lr=0.00001, betas=(0.9, 0.999))
+opti_MLP = optim.Adam(MLP.parameters(), lr=0.0005, betas=(0.9, 0.999))
 
 if train_on_gpu:
     VAE.cuda()
@@ -73,7 +73,7 @@ if train_on_gpu:
 summary(VAE,input_size=(3,64,64),batch_size=32)
 
 #Max number of epochs (can also early stopped if val loss not improve for a long period)
-epochs = 500
+epochs = 150
 
 model_name = f'3chan_dataset1_3z_InfoMAX_{datetime.date.today()}'
 save_model_path = 'temporary_save/'+f'{model_name}.pth'

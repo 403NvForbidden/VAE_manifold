@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-06-15T11:15:02+10:00
+# @Last modified time: 2020-07-01T23:30:08+10:00
 
 '''
 File containing different metrics that are used to evaluate the
@@ -23,19 +23,21 @@ import plotly.graph_objects as go
 import plotly.offline
 from helpers import plot_from_csv
 from data_processing import get_inference_dataset
-from MINE_net import MINE, train_MINE
+from MINE_net import MINE, train_MINE, compute_MI
 from scipy import stats
 import pickle as pkl
 
+# TODO: Classifier perf is really specific to dataset. Create a new function for dataset 2 and 3
 
-
-def classifier_performance(path_to_csv,Metrics=[True,False,False],num_iteration=5):
+def classifier_performance(path_to_csv,low_dim_names=['x_coord','y_coord','z_coord'],Metrics=[True,False,False],num_iteration=5):
     '''
     Given a CSV-file containing a 3D latent code to evaluate, built a simple
     (200 unit single hidden layer) NN classifier. Test accuracy can be used as
     a numerical value to assess the quality of the latent code.
     High accuracy -> the latent dimensions present the data in a way where ground
     truth cluster can easily be discriminate
+
+    Return the classifiier performance over num_iteration (to compute mean and std)
 
     Metric 1 : Test classification performance on all single cell except uniform cluster (7)
     Metric 2 : Same, but only strong phenotype change (>0.5)
@@ -67,9 +69,9 @@ def classifier_performance(path_to_csv,Metrics=[True,False,False],num_iteration=
             dataset_test.reset_index(inplace=True)
 
             #Built train and test dataset/dataloader
-            tr_dataset = Dataset_from_csv(dataset_train,'GT_label')
+            tr_dataset = Dataset_from_csv(dataset_train,'GT_label',low_dim_names)
             tr_dataloader = DataLoader(tr_dataset,batch_size=128,shuffle=True)
-            te_dataset = Dataset_from_csv(dataset_test,'GT_label')
+            te_dataset = Dataset_from_csv(dataset_test,'GT_label',low_dim_names)
             te_dataloader = DataLoader(te_dataset,batch_size=128,shuffle=True)
 
             model_1 = Classifier_Net()
@@ -94,7 +96,7 @@ def classifier_performance(path_to_csv,Metrics=[True,False,False],num_iteration=
     if Metrics[1]:
         latentCode_frame = pd.read_csv(path_to_csv)
         non_last_cluster = latentCode_frame['GT_label'] != 7
-        strong_phenotype = latentCode_frame['GT_dist_toMax_phenotype']>=0.5
+        strong_phenotype = latentCode_frame['GT_dist_toInit_state']>=0.5
         latentCode_frame = latentCode_frame[non_last_cluster & strong_phenotype]
         #For NN, the class must be between 0 - num_class-1
         latentCode_frame['GT_label'] = latentCode_frame['GT_label'].subtract(1)
@@ -114,9 +116,9 @@ def classifier_performance(path_to_csv,Metrics=[True,False,False],num_iteration=
             dataset_test.reset_index(inplace=True)
 
             #Built train and test dataset/dataloader
-            tr_dataset = Dataset_from_csv(dataset_train,'GT_label')
+            tr_dataset = Dataset_from_csv(dataset_train,'GT_label',low_dim_names)
             tr_dataloader = DataLoader(tr_dataset,batch_size=128,shuffle=True)
-            te_dataset = Dataset_from_csv(dataset_test,'GT_label')
+            te_dataset = Dataset_from_csv(dataset_test,'GT_label',low_dim_names)
             te_dataloader = DataLoader(te_dataset,batch_size=128,shuffle=True)
 
             model_2 = Classifier_Net()
@@ -142,7 +144,7 @@ def classifier_performance(path_to_csv,Metrics=[True,False,False],num_iteration=
     if Metrics[2]:
         latentCode_frame = pd.read_csv(path_to_csv)
         non_last_cluster = latentCode_frame['GT_label'] != 7
-        strong_phenotype = latentCode_frame['GT_dist_toMax_phenotype']>=0.5
+        strong_phenotype = latentCode_frame['GT_dist_toInit_state']>=0.5
         latentCode_frame = latentCode_frame[non_last_cluster & strong_phenotype]
         #For NN, the class must be between 0 - num_class-1
         latentCode_frame['GT_label'] = latentCode_frame['GT_label'].subtract(1)
@@ -169,9 +171,9 @@ def classifier_performance(path_to_csv,Metrics=[True,False,False],num_iteration=
             dataset_test.reset_index(inplace=True)
 
             #Built train and test dataset/dataloader
-            tr_dataset = Dataset_from_csv(dataset_train,'GT_label')
+            tr_dataset = Dataset_from_csv(dataset_train,'GT_label',low_dim_names)
             tr_dataloader = DataLoader(tr_dataset,batch_size=128,shuffle=True)
-            te_dataset = Dataset_from_csv(dataset_test,'GT_label')
+            te_dataset = Dataset_from_csv(dataset_test,'GT_label',low_dim_names)
             te_dataloader = DataLoader(te_dataset,batch_size=128,shuffle=True)
 
             model_3 = Classifier_Net(num_of_class=3)
@@ -200,7 +202,7 @@ def compare_models(list_of_csv,Metrics=[True,False,False],num_iteration=5):
 
         train_acc, test_acc, perclass_te_acc = classifier_performance(csv_file,Metrics,num_iteration)
 
-        #In future, probably don-t care about test accuracy
+        #In future, probably don-t care about train accuracy
         all_means.append(np.mean(train_acc))
         all_stds.append(np.std(train_acc))
         model_names.append(f'Model {i+1} -Train')
@@ -716,59 +718,38 @@ def dist_preservation_err(path_to_csv,with_plot=False,save_result=False):
 
     return overall_mse, spearman_r, kendall_r, figplotly
 
-
-def MINE_metric(path_to_csv):
-
-    batch_size = 250
-    input_size = 64
-    _, infer_dataloader = get_inference_dataset('DataSets/Synthetic_Data_1',batch_size,input_size,shuffle=True,droplast=True)
-
-    MINEnet = MINE(input_size*input_size*3,zdim=3)
-    MINEnet.cuda()
-
-    history_MI = train_MINE(MINEnet,path_to_csv,500,infer_dataloader,train_GPU=True)
-    fig, ax = plt.subplots(1,1)
-    ax.plot(history_MI)
-
-    return history_MI
-
-
-#Load the appropriate CSV file
+#
+#
+# #Load the appropriate CSV file
 name_of_csv1 = 'DataSets/Sacha_Metadata_3dlatentVAE_20200523.csv'
-name_of_csv2 = 'DataSets/Sacha_Metadata_3dlatentVAEFAIL_20200524.csv'
-name_of_csv3 = 'DataSets/Sacha_Metadata_3dlatentVAEbigFAIL_20200525.csv'
+# name_of_csv2 = 'DataSets/Sacha_Metadata_3dlatentVAEFAIL_20200524.csv'
+# name_of_csv3 = 'DataSets/Sacha_Metadata_3dlatentVAEbigFAIL_20200525.csv'
+umap_CSV = 'UMAP-tSNE/20200630_UMAP_vs_VAEUMAP_61_X_light_metadata.csv'
+#
+# #compare_models([name_of_csv1,name_of_csv2,name_of_csv3],Metrics=[False,False,True],num_iteration=10)
+#
+# #mse,spearman_r, kendall_r, figplotly = dist_preservation_err(name_of_csv3,with_plot=True,save_result=False)
+# #plotly.offline.plot(figplotly, filename='backboneModel-3.html', auto_open=False)
+#
+#
+MI_score = compute_MI(name_of_csv1,save_path=None,batch_size=512,alpha_logit=-2.0,bound_type='interpolated')
+MI_score = compute_MI(umap_CSV,low_dim_names=['UMAP_61_X','UMAP_61_Y','UMAP_61_Z'],save_path=None,batch_size=512,alpha_logit=-2.0,bound_type='interpolated')
 
-#compare_models([name_of_csv1,name_of_csv2,name_of_csv3],Metrics=[False,False,True],num_iteration=10)
-
-#mse,spearman_r, kendall_r, figplotly = dist_preservation_err(name_of_csv3,with_plot=True,save_result=False)
-#plotly.offline.plot(figplotly, filename='backboneModel-3.html', auto_open=False)
-
-#%%
-#print(spearman_r)
-#print(kendall_r)
-MI_1 = MINE_metric(name_of_csv1)
-MI_1_pkl = 'DataSets/Model_1_MI.pkl'
-with open(MI_1_pkl, 'wb') as f:
-    pkl.dump(MI_1, f, protocol=pkl.HIGHEST_PROTOCOL)
-
-MI_2 = MINE_metric(name_of_csv2)
-MI_2_pkl = 'DataSets/Model_2_MI.pkl'
-with open(MI_2_pkl, 'wb') as f:
-    pkl.dump(MI_2, f, protocol=pkl.HIGHEST_PROTOCOL)
-
-MI_3 = MINE_metric(name_of_csv3)
-MI_3_pkl = 'DataSets/Model_3_MI.pkl'
-with open(MI_3_pkl, 'wb') as f:
-    pkl.dump(MI_3, f, protocol=pkl.HIGHEST_PROTOCOL)
-
-
-
-# %%
-csvfile = '../Data_Horvath/200614_Horvath Synth Data complex set Manifolds.csv'
-plotly.colors.qualitative.Plotly[0]
-data = pd.read_csv(csvfile)
-#data['TSNE_60_clusters'] = data['TSNE_60_clusters'].astype(str)
-#without_NC = data['UMAP_23_clusters'] != 'non-clustered'
-data['GT_label'] = data['GT_label'].astype(str)
-fig = px.scatter_3d(data,x='x_coord',y='y_coord',z='z_coord',color='GT_label')
-#plotly.offline.plot(fig, filename = 'VAE.html', auto_open=True)
+#
+#
+#
+#
+#
+#
+# # %%
+# csvfile = '../Data_Horvath/200614_Horvath Synth Data complex set Manifolds.csv'
+# plotly.colors.qualitative.Plotly[0]
+# data = pd.read_csv(csvfile)
+# #data['TSNE_60_clusters'] = data['TSNE_60_clusters'].astype(str)
+# #without_NC = data['UMAP_23_clusters'] != 'non-clustered'
+# data['GT_label'] = data['GT_label'].astype(str)
+# fig = px.scatter_3d(data,x='x_coord',y='y_coord',z='z_coord',color='GT_label')
+# #plotly.offline.plot(fig, filename = 'VAE.html', auto_open=True)
+#
+#
+#

@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-06-21T18:16:51+10:00
+# @Last modified time: 2020-06-30T11:14:25+10:00
 
 '''File containing function to visualize data or to save it'''
 import torch

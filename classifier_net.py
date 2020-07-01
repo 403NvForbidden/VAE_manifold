@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-05-25T17:09:30+10:00
+# @Last modified time: 2020-07-01T17:28:42+10:00
 
 '''
 File containing the small FC network that is used as a
@@ -69,7 +69,7 @@ def train_net(model,epochs,trainloader):
                 #      (epoch + 1, i + 1, running_loss / 2000))
                 running_loss = 0.0
 
-    print('Finished Training')
+    #print('Finished Training')
 
 def perf_eval(model,testloader):
     correct = 0
@@ -82,7 +82,7 @@ def perf_eval(model,testloader):
             total += labels.size(0)
             correct += (predicted == labels).sum().item()
 
-    print('Accuracy of the network on the test set: %d %%' % (100 * correct / total))
+    # print('Accuracy of the network on the test set: %d %%' % (100 * correct / total))
     return 100 * correct / total
 
 def perf_eval_perclass(model,testloader):
@@ -99,10 +99,10 @@ def perf_eval_perclass(model,testloader):
                 label = labels[i]
                 class_correct[label] += c[i].item() #add 1 only if predict true class
                 class_total[label] += 1
-    for i in range(model.num_of_class):
-        print('Accuracy of class %5s : %2d %%' % (
-            i, 100 * class_correct[i] / class_total[i]))
-        per_class_acc.append(100 * class_correct[i] / class_total[i])
+    # for i in range(model.num_of_class):
+    #     print('Accuracy of class %5s : %2d %%' % (
+    #         i, 100 * class_correct[i] / class_total[i]))
+    #     per_class_acc.append(100 * class_correct[i] / class_total[i])
     return per_class_acc
 
 
@@ -111,7 +111,7 @@ def perf_eval_perclass(model,testloader):
 class Dataset_from_csv(Dataset):
     """Latent Code dataset."""
 
-    def __init__(self, latentCode_frame, GT_class, transform=None):
+    def __init__(self, latentCode_frame, GT_class,low_dim_names=['x_coord','y_coord','z_coord'], transform=None):
         """
         Args:
             latentCode_frame (pandas DataFrame): DataFrame containing latent code and class
@@ -131,9 +131,9 @@ class Dataset_from_csv(Dataset):
             idx = idx.tolist()
 
 
-        x_coord = self.latentCode_frame.loc[idx,'x_coord']
-        y_coord = self.latentCode_frame.loc[idx,'y_coord']
-        z_coord = self.latentCode_frame.loc[idx,'z_coord']
+        x_coord = self.latentCode_frame.loc[idx,low_dim_names[0]]
+        y_coord = self.latentCode_frame.loc[idx,low_dim_names[1]]
+        z_coord = self.latentCode_frame.loc[idx,low_dim_names[2]]
 
         #samples = np.array(list(zip(x_coord,y_coord,z_coord))) # batch x 3
         sample = np.array([x_coord,y_coord,z_coord])

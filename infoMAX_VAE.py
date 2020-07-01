@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-06-16T23:27:16+10:00
+# @Last modified time: 2020-06-27T02:23:04+10:00
 
 
 '''File containing the architecture of InfoMax VAE, a VAE framework that
@@ -16,6 +16,7 @@ from torch import nn
 from torch.nn import functional as F
 from torch.nn.init import xavier_normal_
 from nn_modules import Conv, ConvUpsampling
+import numpy as np
 
 
 ################################################
@@ -29,36 +30,77 @@ class MLP_MI_estimator(nn.Module):
     representation of a f-divergence. Finding t() that maximize this f-divergence,
     lead to a variation representation that is an exact estimator of mutual information.
     '''
-    def __init__(self, zdim=3):
+    def __init__(self,input_dim,zdim=3):
         super(MLP_MI_estimator, self).__init__()
 
+        self.input_dim = input_dim
         self.zdim = zdim
-        ## TODO: This is for a 64x64 3 channels images data. Modularize it
-        self.MLP = nn.Sequential(
-            nn.Linear(64*64*3 + zdim, 1000),
-            nn.LeakyReLU(0.2, True),
-            #nn.Linear(2000, 1000),
-            #nn.LeakyReLU(0.2, True),
-            nn.Linear(1000, 100),
-            nn.LeakyReLU(0.2, True),
-            #nn.Linear(100, 10),
-            #nn.LeakyReLU(0.2, True),
-            nn.Linear(100, 1),
+
+        self.MLP_g = nn.Sequential(
+            nn.Linear(input_dim, 1024),
+            nn.ReLU(),
+            nn.Linear(1024, 512),
+            nn.ReLU(),
+            nn.Linear(512, 32),
+        )
+        self.MLP_h = nn.Sequential(
+            nn.Linear(zdim, 256),
+            nn.ReLU(),
+            nn.Linear(256, 256),
+            nn.ReLU(),
+            nn.Linear(256, 32),
         )
 
-        for m in self.modules():
-            if isinstance(m, nn.Linear):
-                xavier_normal_(m.weight,gain=math.sqrt(2./(1+0.2))) #Gain adapted for LeakyReLU activation function
-                m.bias.data.fill_(0.01)
+        # for m in self.modules():
+        #     if isinstance(m, nn.Linear):
+        #         xavier_normal_(m.weight,gain=math.sqrt(2./(1+0.01))) #Gain adapted for LeakyReLU activation function
+        #         m.bias.data.fill_(0.01)
 
     def forward(self, x, z):
-        x = x.view(-1,64*64*3)
-        x = torch.cat((x,z),1) #Simple concatenation of x and z
-        value = self.MLP(x).squeeze()
+        x = x.view(-1,self.input_dim)
+        z = z.view(-1,self.zdim)
+        x_g = self.MLP_g(x) #Batchsize x 32
+        y_h = self.MLP_h(z) #Batchsize x 32
+        scores = torch.matmul(y_h,torch.transpose(x_g,0,1))
 
-        return value #Output is a scalar in R
+        return scores #Each element i,j is a scalar in R. f(xi,proj_j)
+    # def __init__(self, zdim=3):
+    #     super(MLP_MI_estimator, self).__init__()
+    #
+    #     self.zdim = zdim
+    #     ## TODO: This is for a 64x64 3 channels images data. Modularize it
+    #     self.MLP = nn.Sequential(
+    #         nn.Linear(64*64*3 + zdim, 1000),
+    #         nn.LeakyReLU(0.2, True),
+    #         #nn.Linear(2000, 1000),
+    #         #nn.LeakyReLU(0.2, True),
+    #         nn.Linear(1000, 100),
+    #         nn.LeakyReLU(0.2, True),
+    #         #nn.Linear(100, 10),
+    #         #nn.LeakyReLU(0.2, True),
+    #         nn.Linear(100, 1),
+    #     )
+    #
+    #     for m in self.modules():
+    #         if isinstance(m, nn.Linear):
+    #             xavier_normal_(m.weight,gain=math.sqrt(2./(1+0.2))) #Gain adapted for LeakyReLU activation function
+    #             m.bias.data.fill_(0.01)
+    #
+    # def forward(self, x, z):
+    #     x = x.view(-1,64*64*3)
+    #     x = torch.cat((x,z),1) #Simple concatenation of x and z
+    #     value = self.MLP(x).squeeze()
+    #
+    #     return value #Output is a scalar in R
 
+#Compute the Noise Constrastive Estimation (NCE) loss
+def infoNCE_bound(scores):
+    '''Bound from Van Den Oord and al. (2018)'''
+    nll = torch.mean( torch.diag(scores) - torch.logsumexp(scores,dim=1))
+    k =scores.size()[0]
+    mi = np.log(k) + nll
 
+    return mi
 ################################################
 ### CNN-VAE architecture
 ################################################

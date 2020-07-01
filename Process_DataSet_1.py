@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-06-12T14:30:36+10:00
+# @Last modified time: 2020-06-24T12:47:30+10:00
 
 
 
@@ -322,14 +322,13 @@ CP_file.head()
 
 
 
-# %%
-import pickle as pkl
-import torch
-with open('DataSets/Model_3_MI.pkl', 'rb') as f:
-    MI1 = pkl.load(f)
-MI1 = np.asarray([a.detach().cpu().numpy() for a in MI1])
-type(MI1[0])
-MI_f = np.mean(MI1[-50:])
-plt.plot(MI1)
-plt.hlines(MI_f,0,500)
-plt.text(10,MI_f+np.max(MI1)/50,str(np.round(MI_f,2)))
+
+#%%
+import time
+
+counter=0
+
+while(True):
+    print(counter,end='\r')
+    counter+=1
+    time.sleep(1)
