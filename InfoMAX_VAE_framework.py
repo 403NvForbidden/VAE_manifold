@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-07-11T13:09:24+10:00
+# @Last modified time: 2020-07-13T09:03:28+10:00
 
 
 ##########################################################
@@ -103,7 +103,8 @@ save_csv = False
 #Store raw image data in csv (results in heavy file, but raw data is needed for some metrics)
 store_raw = False
 
-figplotly = metadata_latent_space(model_VAE, infer_dataloader, train_on_gpu, GT_csv_path=path_to_GT, save_csv=save_csv, with_rawdata=store_raw,csv_path=csv_save_output)
+metadata_csv = metadata_latent_space(model_VAE, infer_dataloader, train_on_gpu, GT_csv_path=path_to_GT, save_csv=save_csv, with_rawdata=store_raw,csv_path=csv_save_output)
+figplotly = plot_from_csv(metadata_csv,dim=3,num_class=7)
 html_save = 'temporary_save/'+f'{model_name}_Representation.html'
 plotly.offline.plot(figplotly, filename=html_save, auto_open=False)
 
