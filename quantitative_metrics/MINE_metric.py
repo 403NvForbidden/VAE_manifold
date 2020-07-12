@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-07-01T15:37:34+10:00
+# @Last modified time: 2020-07-06T12:31:57+10:00
 
 '''
 MINE (Mutual Information Neural Estimation) implementation.
@@ -200,15 +200,18 @@ def train_MINE(MINE,path_to_csv,low_dim_names,epochs,infer_dataloader,bound_type
     #######################################
     alpha_logit = alpha_logit
 
-    Metadata_csv = pd.read_csv(path_to_csv)
+    if isinstance(path_to_csv,str):
+        Metadata_csv = pd.read_csv(path_to_csv)
+    else:
+        Metadata_csv = path_to_csv
 
     optimizer = optim.Adam(MINE.parameters(),lr=0.0005)
     if bound_type=='interpolated':
         assert baseline!=None, "please provide a valid NN to represent the baseline a(y)"
         optimizer = optim.Adam(list(MINE.parameters())+list(baseline.parameters()),lr=0.0005)
 
-    #decayRate = 0.6
-    #lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer=optimizer, step_size=300, gamma=decayRate)
+    decayRate = 0.2
+    #lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer=optimizer, step_size=80, gamma=decayRate)
 
     history_MI = []
 
@@ -286,7 +289,7 @@ def train_MINE(MINE,path_to_csv,low_dim_names,epochs,infer_dataloader,bound_type
 
 
 
-def compute_MI(data_csv,low_dim_names=['x_coord','y_coord','z_coord'],path_to_raw_data='DataSets/Synthetic_Data_1',save_path=None,batch_size=512,alpha_logit=-5.,bound_type='infoNCE'):
+def compute_MI(data_csv,low_dim_names=['x_coord','y_coord','z_coord'],path_to_raw_data='DataSets/Synthetic_Data_1',save_path=None,batch_size=512,alpha_logit=-5.,bound_type='infoNCE',epochs=300):
     '''Compute MI (MINE framework) between input data and latent representation.
     Projection coordinates need to be store in the csv file under the columns 'low_dim_names'
     Raw data (image) are loaded by batch from 'path_to_raw_data'
@@ -304,7 +307,7 @@ def compute_MI(data_csv,low_dim_names=['x_coord','y_coord','z_coord'],path_to_ra
 
     batch_size = batch_size
     input_size = 64
-    epochs = 500
+    epochs = epochs
     _, infer_dataloader = get_inference_dataset(path_to_raw_data,batch_size,input_size,shuffle=True,droplast=True)
 
     MINEnet = MINE(input_size*input_size*3,zdim=3)
@@ -328,7 +331,7 @@ def compute_MI(data_csv,low_dim_names=['x_coord','y_coord','z_coord'],path_to_ra
     plt.hlines(MI_Score,0,len(MI_history))
     plt.text(10,MI_Score+np.max(MI_history)/50,str(np.round(MI_Score,2)))
     if save_path != None:
-        plt.savefig(save_path+f'MI_score_plot.png')
+        plt.savefig(save_path+f'/MI_score_plot.png')
     plt.title(f"Mutual information estimation with bound '{bound_type}'")
     plt.show()
 

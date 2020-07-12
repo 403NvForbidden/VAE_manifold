@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-07-01T17:10:16+10:00
+# @Last modified time: 2020-07-11T13:09:24+10:00
 
 
 ##########################################################
@@ -63,7 +63,7 @@ VAE = CNN_VAE(zdim=3, alpha=15, beta=1, base_enc=32, base_dec=32, depth_factor_d
 MLP = MLP_MI_estimator(64*63*3,zdim=3)
 
 
-opti_VAE = optim.Adam(VAE.parameters(), lr=0.00001, betas=(0.9, 0.999))
+opti_VAE = optim.Adam(VAE.parameters(), lr=0.0001, betas=(0.9, 0.999))
 opti_MLP = optim.Adam(MLP.parameters(), lr=0.0005, betas=(0.9, 0.999))
 
 if train_on_gpu:

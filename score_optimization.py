@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-06-30T11:58:35+10:00
+# @Last modified time: 2020-07-06T10:22:06+10:00
 
 '''
 From a hyper optimization run, go over each model that has been trained and compute
@@ -11,17 +11,51 @@ all the different qualitative and quantitative metrics
 '''
 
 import os
-from r_LCMC import compute_coranking, unsupervised_score
-from performance_metrics import classifier_performance
 from sklearn import metrics
-from MINE_net import compute_MI
 import pandas as pd
 import numpy as np
 from matplotlib.colors import LogNorm
 import matplotlib.pyplot as plt
 
+from quantitative_metrics.performance_metrics import compute_perf_metrics
 
-path_to_run = 'optimization/InfoMAX_VAE/Dataset1/run2_MIupgrade_alpha-beta_2020-06-27'+'/'
+
+path_to_run = 'optimization/InfoMAX_VAE/Dataset1/run2_MIupgrade_alpha-beta_2020-06-27/models'+'/'
+
+#######################################
+### Fill this dict with desired params
+#######################################
+### Note, for all save_* params :
+# False  -> to NOT compute a given metric
+# 'no_save' -> to compute a metric but NOT save results
+# True -> to compute the metric and save results
+params_preferences = {
+    'feature_size':64*64*3,
+    'path_to_raw_data':'DataSets/Synthetic_Data_1',
+    'low_dim_names':['UMAP_61_X','UMAP_61_Y','UMAP_61_Z'],
+
+    'global_saving_path':'', #Different for each model, this one is update during optimization
+
+    ### Unsupervised metrics
+    'save_unsupervised_metric':'None',
+    'only_local_Q':True,
+    'kt':300,
+    'ks':500,
+
+    ### Mutual Information
+    'save_mine_metric':'None',
+    'batch_size':512,
+    'bound_type':'interpolated',
+    'alpha_logit':-2.,
+    'epochs':20,
+
+    ### Classifier accuracy
+    'save_classifier_metric':'None',
+    'num_iteration':4,
+
+    ### BackBone Metric
+    'save_backbone_metric':'None'
+}
 
 all_model_folder = [f for f in os.listdir(path_to_run) if not f.startswith('.')]
 
@@ -33,14 +67,12 @@ for model_i in all_model_folder:
 
         model_folder = f'{path_to_run}{model_i}/'
 
-        feature_size = 64*64*3
-
         metadata_csv = ''
         path_to_VAE = ''
 
         all_files = [f for f in os.listdir(model_folder) if not f.startswith('.')]
         for file_i in all_files:
-            if file_i.endswith('metedata.csv'):
+            if file_i.endswith('training_metadata.csv'):
                 metadata_csv = model_folder+file_i
             if file_i.endswith('VAE_.pth'):
                 path_to_VAE = model_folder+file_i
@@ -52,7 +84,15 @@ for model_i in all_model_folder:
         except FileExistsError as e:
             pass
 
+        params_preferences['global_saving_path']=save_folder
 
+        ###################################################
+        ###### Compute all desired metric (in params_preferences)
+        ###################################################
+
+        compute_perf_metrics(metadata_csv,params_preferences=params_preferences)
+
+        counter += 1
 
         ###################################################
         ###### Unsupervised Metric and Local Quality Score
@@ -126,36 +166,34 @@ for model_i in all_model_folder:
         ###### Classifer test accuracy score
         ###################################################
 
-        num_iter=8
-        print(f'Computation of classifier accuracy ({num_iter} iterations)')
+        # num_iter=8
+        # print(f'Computation of classifier accuracy ({num_iter} iterations)')
+        #
+        # print('Metric 1...')
+        # #Metric 1 : Acc on all test single cells except uniform cluster 7
+        # _, test_accuracies_m1, _ = classifier_performance(metadata_csv,Metrics=[True,False,False],num_iteration=num_iter)
+        #
+        # print('Metric 2...')
+        # #Metric 2 : Acc on all strong phenotypical change test single cells except uniform cluster 7
+        # _, test_accuracies_m2, _ = classifier_performance(metadata_csv,Metrics=[False,True,False],num_iteration=num_iter)
+        #
+        # print('Metric 3...')
+        # #Metric 3 : Acc on all strong phenotypical change + META_CLUSTER (1&2, 3&4 and 5&6 grouped) test single cells except uniform cluster 7
+        # _, test_accuracies_m3, _ = classifier_performance(metadata_csv,Metrics=[False,False,True],num_iteration=num_iter)
+        #
+        # mean_acc_m1 = np.mean(test_accuracies_m1)
+        # std_acc_m1 = np.std(test_accuracies_m1)
+        # mean_acc_m2 = np.mean(test_accuracies_m2)
+        # std_acc_m2 = np.std(test_accuracies_m2)
+        # mean_acc_m3 = np.mean(test_accuracies_m3)
+        # std_acc_m3 = np.std(test_accuracies_m3)
+        #
+        # accuracy_df = pd.DataFrame({'test_accuracies_m1':test_accuracies_m1,'test_accuracies_m2':test_accuracies_m2,
+        #     'test_accuracies_m3':test_accuracies_m3,'mean_acc_m1':mean_acc_m1,
+        #     'std_acc_m1':std_acc_m1,'mean_acc_m2':mean_acc_m2,
+        #     'std_acc_m2':std_acc_m2,'mean_acc_m3':mean_acc_m3,'std_acc_m3':std_acc_m3})
+        # accuracy_df.to_csv(f'{save_folder}classifier_acc_score.csv')
 
-        print('Metric 1...')
-        #Metric 1 : Acc on all test single cells except uniform cluster 7
-        _, test_accuracies_m1, _ = classifier_performance(metadata_csv,Metrics=[True,False,False],num_iteration=num_iter)
-
-        print('Metric 2...')
-        #Metric 2 : Acc on all strong phenotypical change test single cells except uniform cluster 7
-        _, test_accuracies_m2, _ = classifier_performance(metadata_csv,Metrics=[False,True,False],num_iteration=num_iter)
-
-        print('Metric 3...')
-        #Metric 3 : Acc on all strong phenotypical change + META_CLUSTER (1&2, 3&4 and 5&6 grouped) test single cells except uniform cluster 7
-        _, test_accuracies_m3, _ = classifier_performance(metadata_csv,Metrics=[False,False,True],num_iteration=num_iter)
-
-        mean_acc_m1 = np.mean(test_accuracies_m1)
-        std_acc_m1 = np.std(test_accuracies_m1)
-        mean_acc_m2 = np.mean(test_accuracies_m2)
-        std_acc_m2 = np.std(test_accuracies_m2)
-        mean_acc_m3 = np.mean(test_accuracies_m3)
-        std_acc_m3 = np.std(test_accuracies_m3)
-
-        accuracy_df = pd.DataFrame({'test_accuracies_m1':test_accuracies_m1,'test_accuracies_m2':test_accuracies_m2,
-            'test_accuracies_m3':test_accuracies_m3,'mean_acc_m1':mean_acc_m1,
-            'std_acc_m1':std_acc_m1,'mean_acc_m2':mean_acc_m2,
-            'std_acc_m2':std_acc_m2,'mean_acc_m3':mean_acc_m3,'std_acc_m3':std_acc_m3})
-        accuracy_df.to_csv(f'{save_folder}classifier_acc_score.csv')
-
-
-        counter += 1
 
 
 

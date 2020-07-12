@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-06-30T11:14:25+10:00
+# @Last modified time: 2020-07-11T12:49:33+10:00
 
 '''File containing function to visualize data or to save it'''
 import torch
@@ -225,7 +225,10 @@ def save_reconstruction(loader,VAE,save_path,train_on_gpu):
 
 
 def metadata_latent_space(model, infer_dataloader, train_on_gpu, GT_csv_path, save_csv=False, with_rawdata=False, csv_path='no_name_specified.csv'):
-
+    '''
+    One a VAE model is trained, take its predictions (3D latent code) and store it in a csv
+    file alongside the ground truth information. Useful for plots and analysis.
+    '''
     labels_list = []
     z_list = []
     id_list = []
@@ -283,13 +286,13 @@ def metadata_latent_space(model, infer_dataloader, train_on_gpu, GT_csv_path, sa
     true_label = np.concatenate(labels_list,axis=0)
     #link_to_metadata = list(itertools.chain.from_iterable(id_list)) #[Well,Site,CellID] of each cells
 
-    temp_matching_df = pd.DataFrame(columns=['x_coord','y_coord','z_coord','Unique_ID'])
-    temp_matching_df.x_coord = z_points[:,0]
-    temp_matching_df.y_coord = z_points[:,1]
+    temp_matching_df = pd.DataFrame(columns=['VAE_x_coord','VAE_y_coord','VAE_z_coord','Unique_ID'])
+    temp_matching_df.VAE_x_coord = z_points[:,0]
+    temp_matching_df.VAE_y_coord = z_points[:,1]
     if model.zdim == 3 :
-        temp_matching_df.z_coord = z_points[:,2]
+        temp_matching_df.VAE_z_coord = z_points[:,2]
     else:
-        temp_matching_df.z_coord = 0
+        temp_matching_df.VAE_z_coord = 0
     temp_matching_df.Unique_ID = unique_ids
     temp_matching_df = temp_matching_df.sort_values(by=['Unique_ID'])
 
@@ -312,81 +315,86 @@ def metadata_latent_space(model, infer_dataloader, train_on_gpu, GT_csv_path, sa
         MetaData_csv.to_csv(csv_path,index=False)
         print(f'Final CSV saved to : {csv_path}')
 
+    return MetaData_csv
+
     ###### Plotting part - 3 Dimensional #####
     #################################################
 
-    if model.zdim == 3:
+    # if model.zdim == 3:
+    #
+    #     ##### Fig 1 : Plot each single cell in latent space with GT cluster labels
+    #     traces = []
+    #     for i in np.unique(true_label):
+    #         scatter = go.Scatter3d(x=MetaData_csv[MetaData_csv['GT_label']==i+1].x_coord.values,y=MetaData_csv[MetaData_csv['GT_label']==i+1].y_coord.values,
+    #             z=MetaData_csv[MetaData_csv['GT_label']==i+1].z_coord.values, mode='markers',
+    #             marker=dict(size=3, opacity=1),
+    #             name=f'Process {i+1}')#, text=MetaData_csv.GT_Shape.values)
+    #         traces.append(scatter)
+    #
+    #     layout= dict(title='Latent Representation, colored by GT cluster')
+    #     fig_3d_1 = go.Figure(data=traces, layout=layout)
+    #     fig_3d_1.update_layout(margin=dict(l=0,r=0,b=0,t=0),showlegend=True,legend=dict(y=-.1))
+    #
+    #     return fig_3d_1
+    #
+    #
+    # ###### Plotting part - 2 Dimensional #####
+    # #################################################
+    #
+    # if model.zdim == 2:
+    #
+    #     ##### Plot 1 : Latent representation - Sample labelled by classes #####
+    #     traces = []
+    #     MS = MetaData_csv
+    #     for i in np.unique(true_label):
+    #         scatter = go.Scatter(x=MS[MetaData_csv['GT_label']==i+1].x_coord.values,y=MS[MetaData_csv['GT_label']==i+1].y_coord.values,
+    #             mode='markers',
+    #             marker=dict(size=3, opacity=0.8),
+    #             name=f'Process {i+1}')
+    #         traces.append(scatter)
+    #
+    #     layout= dict(title='Latent Representation, colored by GT clustered')
+    #     fig_2d_1 = go.Figure(data=traces, layout=layout)
+    #     fig_2d_1.update_layout(margin=dict(l=0,r=0,b=0,t=0),showlegend=True)
+    #
+    #     # MetaData_csv = pd.read_csv('DataSets/MetaData1_GT_link_CP.csv')
+    #     #
+    #     # cmap_blues = plt.get_cmap('copper')
+    #     # norm = matplotlib.colors.Normalize(vmin=MetaData_csv['GT_Shape'].min(), vmax=MetaData_csv['GT_Shape'].max())
+    #     #
+    #     # for i in range(len(z_points)):
+    #     #     well=link_to_metadata[i][0]
+    #     #     site=int(link_to_metadata[i][1])
+    #     #     cell_id=int(link_to_metadata[i][2])
+    #     #     #print(np.any(MetaData_csv['Well']==well),np.any(MetaData_csv['Site']==site),np.any(MetaData_csv['GT_Cell_id']==cell_id))
+    #     #
+    #     #     shape_factor=MetaData_csv[(MetaData_csv['Well']==well) & (MetaData_csv['Site']==site) & (MetaData_csv['GT_Cell_id']==cell_id)]['GT_Shape'].values
+    #     #     ax2.scatter(z_points[i,0],z_points[i,1],s=5,color=cmap_blues(norm(shape_factor)))
+    #     # cbaxes = inset_axes(ax2,width="30%",height="3%",loc=3)
+    #     # cbar = fig2.colorbar(matplotlib.cm.ScalarMappable(norm=norm,cmap=cmap_blues),cax=cbaxes,orientation='horizontal',ticks=[MetaData_csv['GT_Shape'].min(),MetaData_csv['GT_Shape'].max()])
+    #     # cbar.ax.set_xticklabels(['Rounded','Deformed'],rotation=45,ha='left')
+    #     # cbar.ax.xaxis.set_label_position('top')
+    #     # cbar.ax.xaxis.set_ticks_position('top')
+    #     #cbar.ax.axis["top"].major_ticklabels.set_ha("right")
+    #     return fig_2d_1
 
-        ##### Fig 1 : Plot each single cell in latent space with GT cluster labels
-        traces = []
-        for i in np.unique(true_label):
-            scatter = go.Scatter3d(x=MetaData_csv[MetaData_csv['GT_label']==i+1].x_coord.values,y=MetaData_csv[MetaData_csv['GT_label']==i+1].y_coord.values,
-                z=MetaData_csv[MetaData_csv['GT_label']==i+1].z_coord.values, mode='markers',
-                marker=dict(size=3, opacity=1),
-                name=f'Process {i+1}')#, text=MetaData_csv.GT_Shape.values)
-            traces.append(scatter)
 
-        layout= dict(title='Latent Representation, colored by GT cluster')
-        fig_3d_1 = go.Figure(data=traces, layout=layout)
-        fig_3d_1.update_layout(margin=dict(l=0,r=0,b=0,t=0),showlegend=True,legend=dict(y=-.1))
+def plot_from_csv(path_to_csv,low_dim_names=['VAE_x_coord','VAE_y_coord','VAE_z_coord'],dim=3,num_class=7):
 
-        return fig_3d_1
-
-
-    ###### Plotting part - 2 Dimensional #####
-    #################################################
-
-    if model.zdim == 2:
-
-        ##### Plot 1 : Latent representation - Sample labelled by classes #####
-        traces = []
-        MS = MetaData_csv
-        for i in np.unique(true_label):
-            scatter = go.Scatter(x=MS[MetaData_csv['GT_label']==i+1].x_coord.values,y=MS[MetaData_csv['GT_label']==i+1].y_coord.values,
-                mode='markers',
-                marker=dict(size=3, opacity=0.8),
-                name=f'Process {i+1}')
-            traces.append(scatter)
-
-        layout= dict(title='Latent Representation, colored by GT clustered')
-        fig_2d_1 = go.Figure(data=traces, layout=layout)
-        fig_2d_1.update_layout(margin=dict(l=0,r=0,b=0,t=0),showlegend=True)
-
-        # MetaData_csv = pd.read_csv('DataSets/MetaData1_GT_link_CP.csv')
-        #
-        # cmap_blues = plt.get_cmap('copper')
-        # norm = matplotlib.colors.Normalize(vmin=MetaData_csv['GT_Shape'].min(), vmax=MetaData_csv['GT_Shape'].max())
-        #
-        # for i in range(len(z_points)):
-        #     well=link_to_metadata[i][0]
-        #     site=int(link_to_metadata[i][1])
-        #     cell_id=int(link_to_metadata[i][2])
-        #     #print(np.any(MetaData_csv['Well']==well),np.any(MetaData_csv['Site']==site),np.any(MetaData_csv['GT_Cell_id']==cell_id))
-        #
-        #     shape_factor=MetaData_csv[(MetaData_csv['Well']==well) & (MetaData_csv['Site']==site) & (MetaData_csv['GT_Cell_id']==cell_id)]['GT_Shape'].values
-        #     ax2.scatter(z_points[i,0],z_points[i,1],s=5,color=cmap_blues(norm(shape_factor)))
-        # cbaxes = inset_axes(ax2,width="30%",height="3%",loc=3)
-        # cbar = fig2.colorbar(matplotlib.cm.ScalarMappable(norm=norm,cmap=cmap_blues),cax=cbaxes,orientation='horizontal',ticks=[MetaData_csv['GT_Shape'].min(),MetaData_csv['GT_Shape'].max()])
-        # cbar.ax.set_xticklabels(['Rounded','Deformed'],rotation=45,ha='left')
-        # cbar.ax.xaxis.set_label_position('top')
-        # cbar.ax.xaxis.set_ticks_position('top')
-        #cbar.ax.axis["top"].major_ticklabels.set_ha("right")
-        return fig_2d_1
-
-
-def plot_from_csv(path_to_csv,dim=3,num_class=7):
-
-    MetaData_csv = pd.read_csv(path_to_csv)
+    if isinstance(path_to_csv,str):
+        MetaData_csv = pd.read_csv(path_to_csv)
+    else:
+        MetaData_csv = path_to_csv
 
     if dim == 3:
 
         ##### Fig 1 : Plot each single cell in latent space with GT cluster labels
         traces = []
         for i in range(num_class):
-            scatter = go.Scatter3d(x=MetaData_csv[MetaData_csv['GT_label']==i+1].x_coord.values,y=MetaData_csv[MetaData_csv['GT_label']==i+1].y_coord.values,
-                z=MetaData_csv[MetaData_csv['GT_label']==i+1].z_coord.values, mode='markers',
+            scatter = go.Scatter3d(x=MetaData_csv[MetaData_csv['GT_label']==i+1][low_dim_names[0]].values,y=MetaData_csv[MetaData_csv['GT_label']==i+1][low_dim_names[1]].values,
+                z=MetaData_csv[MetaData_csv['GT_label']==i+1][low_dim_names[2]].values, mode='markers',
                 marker=dict(size=3, opacity=1),
-                name=f'Process {i+1}', text=MetaData_csv.GT_Shape.values)
+                name=f'Cluster {i+1}')
             traces.append(scatter)
 
         layout= dict(title='Latent Representation, colored by GT clustered')
@@ -401,10 +409,10 @@ def plot_from_csv(path_to_csv,dim=3,num_class=7):
         #MetaSubset = MetaData_csv['GT_dist_toMax_phenotype']>0.5
         MS = MetaData_csv
         for i in range(num_class):
-            scatter = go.Scatter(x=MS[MetaData_csv['GT_label']==i+1].x_coord.values,y=MS[MetaData_csv['GT_label']==i+1].y_coord.values,
+            scatter = go.Scatter(x=MS[MetaData_csv['GT_label']==i+1][low_dim_names[0]].values,y=MS[MetaData_csv['GT_label']==i+1][low_dim_names[1]].values,
                 mode='markers',
                 marker=dict(size=3, opacity=0.8),
-                name=f'Process {i+1}', text=MS.GT_Shape.values)
+                name=f'Cluster {i+1}')
             traces.append(scatter)
 
         layout= dict(title='Latent Representation, colored by GT clustered')
@@ -435,20 +443,30 @@ def plot_train_result(history, best_epoch=None,save_path=None, infoMAX = False):
     --------
 
     """
-    fig, ((ax1 ,ax2),(ax3 ,ax4)) = plt.subplots(2,2,figsize=(10, 10))
 
     if  not(infoMAX):
+        fig = plt.figure(figsize=(10,10))
+        ax1 = fig.add_subplot(2,1,1) #Frist full row
+        ax2 = fig.add_subplot(2,2,3) # bottom left on 4x4 grid
+        ax3 = fig.add_subplot(2,2,4) # bottom right on a 4x4 grid
+        ax1.plot(history['global_VAE_loss'][1:],color='dodgerblue',label='train')
+        ax1.plot(history['global_VAE_loss_val'][1:],color='lightsalmon',label='test')
+        ax1.set_title('Global VAE Loss')
+        if best_epoch != None:
+            ax1.axvline(best_epoch, linestyle='--', color='r',label='Early stopping')
+        ax2.plot(history['recon_loss'][1:],color='dodgerblue',label='train')
+        ax2.plot(history['recon_loss_val'][1:],color='lightsalmon',label='test')
+        ax2.set_title('Reconstruction Loss')
+        ax3.plot(history['kl_loss'][1:],color='dodgerblue',label='train')
+        ax3.plot(history['kl_loss_val'][1:],color='lightsalmon',label='test')
+        ax3.set_title('Fit to Prior')
+        ax1.legend()
+        ax2.legend()
+        ax3.legend()
 
-        ax1.plot(history['train_loss'],color='dodgerblue',label='Global loss')
-        ax1.set_title('General Loss')
-        ax2.plot(history['train_kl'],color='dodgerblue',label='KL loss')
-        ax2.set_title('KL Loss')
-        ax3.plot(history['train_recon'],color='dodgerblue',label='RECON loss')
-        ax3.set_title('Reconstruction Loss')
-        #ax4.plot(history['beta'],color='dodgerblue',label='Beta')
-        #ax4.set_title('KL Cost Weight')
 
     if  infoMAX:
+        fig, ((ax1 ,ax2),(ax3 ,ax4)) = plt.subplots(2,2,figsize=(10, 10))
         ax1.plot(history['global_VAE_loss'][1:],color='dodgerblue',label='train')
         ax1.plot(history['global_VAE_loss_val'][1:],color='lightsalmon',label='test')
         ax1.set_title('Global VAE Loss')
@@ -463,12 +481,11 @@ def plot_train_result(history, best_epoch=None,save_path=None, infoMAX = False):
         ax4.plot(history['kl_loss'][1:],color='dodgerblue',label='train')
         ax4.plot(history['kl_loss_val'][1:],color='lightsalmon',label='test')
         ax4.set_title('Fit to Prior')
+        ax1.legend()
+        ax2.legend()
+        ax3.legend()
+        ax4.legend()
 
-
-    ax1.legend()
-    ax2.legend()
-    ax3.legend()
-    ax4.legend()
     if save_path != None:
         plt.savefig(save_path+'los_evolution.png')
 

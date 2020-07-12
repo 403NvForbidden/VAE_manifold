@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-06-27T02:23:04+10:00
+# @Last modified time: 2020-07-11T13:01:59+10:00
 
 
 '''File containing the architecture of InfoMax VAE, a VAE framework that

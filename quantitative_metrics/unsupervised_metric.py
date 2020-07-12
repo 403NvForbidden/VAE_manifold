@@ -3,18 +3,19 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-07-01T16:41:11+10:00
+# @Last modified time: 2020-07-06T09:45:35+10:00
 
 
 import coranking
 from coranking.metrics import trustworthiness, continuity, LCMC
-from local_quality import wt, ws
+from quantitative_metrics.local_quality import wt, ws
 import torch
 from torch import cuda
 import pickle as pkl
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from matplotlib.colors import LogNorm
 from sklearn import metrics
 from scipy.spatial import distance
 from data_processing import get_inference_dataset
@@ -24,7 +25,7 @@ import plotly.graph_objects as go
 import plotly.offline
 
 
-def unsup_metric_and_local_Q(metadata_csv,low_dim_names=['x_coord','y_coord','z_coord'],raw_data_included=False, feature_size=64*64*3, path_to_raw_data='DataSets/Synthetic_Data_1', saving_path=None, kt=300, ks=500):
+def unsup_metric_and_local_Q(metadata_csv,low_dim_names=['x_coord','y_coord','z_coord'],raw_data_included=False, feature_size=64*64*3, path_to_raw_data='DataSets/Synthetic_Data_1', saving_path=None, kt=300, ks=500, only_local_Q=False):
     '''From a csv file containg 3D projection of single cell data, compute unsupervised metric
     (continuity, trustworthiness and LCMC), as well as return a local quality score per sample.
 
@@ -36,7 +37,10 @@ def unsup_metric_and_local_Q(metadata_csv,low_dim_names=['x_coord','y_coord','z_
     ################################
 
     print('##### Data is processed ...')
-    MetaData_csv = pd.read_csv(metadata_csv)#,usecols=low_dim_names+['Unique_ID','GT_label'])
+    if isinstance(metadata_csv,str):
+        MetaData_csv = pd.read_csv(metadata_csv)
+    else:
+        MetaData_csv = metadata_csv
     data_embedded = None
     data_raw = None
 
@@ -110,9 +114,12 @@ def unsup_metric_and_local_Q(metadata_csv,low_dim_names=['x_coord','y_coord','z_
 
     if saving_path != None:
         #part_name = metadata_csv.split('_')
+        coranking_matrix_plot(Q,saving_path=saving_path)
         name_pkl = f'{saving_path}/{low_dim_names[0]}_coranking_matrix.pkl'
         with open(name_pkl, 'wb') as f:
             pkl.dump(Q, f, protocol=pkl.HIGHEST_PROTOCOL)
+
+
 
     #####################################
     ##### Compote local quality score (keep same order than csv)
@@ -129,15 +136,29 @@ def unsup_metric_and_local_Q(metadata_csv,low_dim_names=['x_coord','y_coord','z_
     MetaData_csv['local_Q_score']=np.nan
     MetaData_csv.local_Q_score=local_quality_score
 
-    light_df = MetaData_csv[low_dim_names+['Unique_ID','GT_label','local_Q_score']]
+    #If old run of UMAP, some GT info are missing, manage that
+    ## TODO:  to remove when all UMAP runs will be up to date
+    if 'GT_dist_toMax_phenotype' in MetaData_csv.columns:
+        MetaData_csv = MetaData_csv.rename(columns={'GT_dist_toMax_phenotype':'GT_dist_toInit_state'})
+        to_GT = 'DataSets/MetaData1_GT_link_CP.csv'
+        GT_df = pd.read_csv(to_GT,usecols=['Unique_ID','GT_initial_state'])
+        MetaData_csv = MetaData_csv.join(GT_df.set_index('Unique_ID'), on='Unique_ID')
+
+
+    light_df = MetaData_csv[low_dim_names+['Unique_ID','GT_label','local_Q_score','GT_Shape','GT_dist_toInit_state','GT_initial_state']]
     if saving_path != None:
         light_df.to_csv(f'{saving_path}/{low_dim_names[0]}_light_metadata.csv')
+
+
+    if only_local_Q:
+        return None, None, None, light_df
+
 
     #####################################
     ##### Compute Unsupervised Score based on Q
     #####################################
 
-    print('##### Unsupervised computation ...')
+    print('##### Unsupervised score computation ...')
 
     trust, cont, lcmc = unsupervised_score(Q)
 
@@ -148,6 +169,7 @@ def unsup_metric_and_local_Q(metadata_csv,low_dim_names=['x_coord','y_coord','z_
     lcmc_AUC = metrics.auc(x,lcmc)
     aggregate_AUC = metrics.auc(x,aggregate_score)
 
+
     if saving_path != None:
         unsup_score_df = pd.DataFrame({'trust':trust,'cont':cont,
             'lcmc':lcmc,'aggregate_score':aggregate_score,
@@ -155,6 +177,7 @@ def unsup_metric_and_local_Q(metadata_csv,low_dim_names=['x_coord','y_coord','z_
             'lcmc_AUC':lcmc_AUC,'aggregate_AUC':aggregate_AUC})
         #Save the unsupervised_score to a CSV file
         unsup_score_df.to_csv(f'{saving_path}/{low_dim_names[0]}_unsupervised_score.csv')
+        lcmc_curves_plot(trust,trust_AUC,cont,cont_AUC,lcmc,lcmc_AUC,saving_path=saving_path)
 
     return trust_AUC, cont_AUC, lcmc_AUC, light_df
 
@@ -171,7 +194,10 @@ def compute_coranking(metadata_csv, feature_size, save_matrix=True, saving_path=
     Compute coranking matrix between input data and projected data, from the raw
     data and latent code saved in csv file
     '''
-    MetaData_csv = pd.read_csv(metadata_csv)
+    if isinstance(path_to_csv,str):
+        MetaData_csv = pd.read_csv(metadata_csv)
+    else:
+        MetaData_csv = metadata_csv
 
 
     data_raw = MetaData_csv[['feature'+str(i) for i in range(feature_size)]].to_numpy()
@@ -182,7 +208,7 @@ def compute_coranking(metadata_csv, feature_size, save_matrix=True, saving_path=
 
     if save_matrix:
         #part_name = metadata_csv.split('_')
-        name_pkl = f'{saving_path}coranking_matrix.pkl'
+        name_pkl = f'{saving_path}/coranking_matrix.pkl'
         with open(name_pkl, 'wb') as f:
             pkl.dump(Q_final, f, protocol=pkl.HIGHEST_PROTOCOL)
 
@@ -208,6 +234,39 @@ def unsupervised_score(coranking_matrix):
 
     return trust, cont, lcmc
 
+def coranking_matrix_plot(Q,saving_path=None):
+    #Save CoRanking plot Image
+    plt.figure(figsize=(6,6))
+    plt.imshow(Q[:800,:800], cmap=plt.cm.gnuplot2_r, norm=LogNorm())
+    plt.title('First 800 Ranks - Coranking Matrix')
+    plt.savefig(saving_path+'/coranking_plot_zoom.png')
+    plt.close()
+    plt.figure(figsize=(6,6))
+    plt.imshow(Q, cmap=plt.cm.gnuplot2_r, norm=LogNorm())
+    plt.title('Full Coranking Matrix')
+    if saving_path != None:
+        plt.savefig(saving_path+'/coranking_plot.png')
+    plt.close()
+
+def lcmc_curves_plot(trust,trust_AUC,cont,cont_AUC,lcmc,lcmc_AUC,saving_path=None):
+    fig, (ax1,ax2,ax3) = plt.subplots(3,1,sharex=True,figsize=(12,12))
+    ax1.plot(trust,label=f'Model - AUC : {trust_AUC:.2f}')
+    ax1.set_title('Trustworthiness')
+    ax1.legend()
+    ax3.set_xlabel('Neighborhood size - % of total datasize')
+    ax3.set_xticks(range(0,20))
+    ax3.set_xticklabels(range(1,21))
+    ax2.plot(cont,label=f'Model - AUC : {cont_AUC:.2f}')
+    ax2.set_title('Continuity')
+    ax2.legend()
+    ax3.plot(lcmc,label=f'Model - AUC : {lcmc_AUC:.2f}')
+    ax3.set_title('LCMC')
+    ax3.legend()
+    fig.suptitle('Unsupervised evaluation of projection at different scale')
+    if saving_path != None:
+        plt.savefig(saving_path+'/unsup_score_plot.png')
+    plt.close()
+
 
 def save_representation_plot(model_dataframe,saving_path,low_dim_names=['x_coord','y_coord','z_coord']):
     '''
@@ -225,32 +284,36 @@ def save_representation_plot(model_dataframe,saving_path,low_dim_names=['x_coord
     # GT cluster colored plot
     model_dataframe['GT_label'] = model_dataframe['GT_label'].astype(str)
     fig = px.scatter_3d(model_dataframe,x=low_dim_names[0],y=low_dim_names[1],z=low_dim_names[2],color='GT_label')
-    plotly.offline.plot(fig, filename = saving_path+f'/{low_dim_names[0]}_GT_label.html', auto_open=False)
+    if saving_path != None:
+        plotly.offline.plot(fig, filename = saving_path+f'/{low_dim_names[0]}_GT_label.html', auto_open=False)
 
     # Local Q score colored plot
-    fig = px.scatter_3d(light_df,x=low_dim_names[0],y=low_dim_names[1],z=low_dim_names[2],color='local_Q_score')
-    plotly.offline.plot(fig, filename = save_path+f'/{low_dim_names[0]}_GT_local_score.html', auto_open=False)
+    fig = px.scatter_3d(model_dataframe,x=low_dim_names[0],y=low_dim_names[1],z=low_dim_names[2],color='local_Q_score')
+    if saving_path != None:
+        plotly.offline.plot(fig, filename = saving_path+f'/{low_dim_names[0]}_GT_local_score.html', auto_open=False)
 
 
-
-# %% Put Both VAE and UMPA at same scale
-VAE_csv = 'UMAP-tSNE/20200630_UMAP_vs_VAEx_coord_light_metadata.csv'
-UMAP_csv = 'UMAP-tSNE/20200630_UMAP_vs_VAEUMAP_61_X_light_metadata.csv'
-
-VAE_df = pd.read_csv(VAE_csv)
-UMAP_df = pd.read_csv(UMAP_csv)
-whithout_outliers = UMAP_df['UMAP_61_X'] > -100
-
-min_color = np.min(VAE_df.local_Q_score.tolist()+UMAP_df[whithout_outliers].local_Q_score.tolist())
-max_color = np.max(VAE_df.local_Q_score.tolist()+UMAP_df[whithout_outliers].local_Q_score.tolist())
-
-low_dim_names = ['x_coord','y_coord','z_coord']
-fig = px.scatter_3d(VAE_df,x=low_dim_names[0],y=low_dim_names[1],z=low_dim_names[2],color='local_Q_score',range_color=(min_color,max_color))
-plotly.offline.plot(fig, filename = save_path+'/VAEa20b5_localscore_SCALED.html', auto_open=True)
-
-low_dim_names = ['UMAP_61_X','UMAP_61_Y','UMAP_61_Z']
-fig = px.scatter_3d(UMAP_df[whithout_outliers],x=low_dim_names[0],y=low_dim_names[1],z=low_dim_names[2],color='local_Q_score',range_color=(min_color,max_color))
-plotly.offline.plot(fig, filename = save_path+'/UMAP61_localscore_SCALED.html', auto_open=True)
+# %%
+# trust_AUC, cont_AUC, lcmc_AUC, light_df = unsup_metric_and_local_Q('UMAP-tSNE/20200630_UMAP_vs_VAE/200624_Horvath_Simple_DS_with_tSNE_UMAP_VAE-UMAP.csv',low_dim_names=['UMAP_61_X','UMAP_61_Y','UMAP_61_Z'],raw_data_included=False, feature_size=64*64*3, path_to_raw_data='DataSets/Synthetic_Data_1', saving_path='UMAP-tSNE/20200630_UMAP_vs_VAE', kt=300, ks=500)
+#
+# # %% Put Both VAE and UMPA at same scale
+# VAE_csv = 'UMAP-tSNE/20200630_UMAP_vs_VAEx_coord_light_metadata.csv'
+# UMAP_csv = 'UMAP-tSNE/20200630_UMAP_vs_VAEUMAP_61_X_light_metadata.csv'
+#
+# VAE_df = pd.read_csv(VAE_csv)
+# UMAP_df = pd.read_csv(UMAP_csv)
+# whithout_outliers = UMAP_df['UMAP_61_X'] > -100
+#
+# min_color = np.min(VAE_df.local_Q_score.tolist()+UMAP_df[whithout_outliers].local_Q_score.tolist())
+# max_color = np.max(VAE_df.local_Q_score.tolist()+UMAP_df[whithout_outliers].local_Q_score.tolist())
+#
+# low_dim_names = ['x_coord','y_coord','z_coord']
+# fig = px.scatter_3d(VAE_df,x=low_dim_names[0],y=low_dim_names[1],z=low_dim_names[2],color='local_Q_score',range_color=(min_color,max_color))
+# plotly.offline.plot(fig, filename = save_path+'/VAEa20b5_localscore_SCALED.html', auto_open=True)
+#
+# low_dim_names = ['UMAP_61_X','UMAP_61_Y','UMAP_61_Z']
+# fig = px.scatter_3d(UMAP_df[whithout_outliers],x=low_dim_names[0],y=low_dim_names[1],z=low_dim_names[2],color='local_Q_score',range_color=(min_color,max_color))
+# plotly.offline.plot(fig, filename = save_path+'/UMAP61_localscore_SCALED.html', auto_open=True)
 
 
 

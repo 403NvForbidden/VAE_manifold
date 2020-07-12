@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning Methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-06-12T12:06:18+10:00
+# @Last modified time: 2020-07-11T13:02:11+10:00
 
 '''
 File containing different VAE architectures, to reconstruct 4xHxW single cell images,
@@ -45,7 +45,7 @@ class VAE(nn.Module):
             Conv(base_enc*2,base_enc*4,4,stride=2,padding=1), #8x8
             Conv(base_enc*4,base_enc*8,4,stride=2,padding=1),
             Conv(base_enc*8,base_enc*16,4,stride=2,padding=1),  #2x2
-            nn.Conv2d(base_enc*8, 2*zdim, 2, 1),#MLP  #1x1 -> encoded in channels
+            nn.Conv2d(base_enc*16, 2*zdim, 2, 1),#MLP  #1x1 -> encoded in channels
         )
 
         ###########################
@@ -126,20 +126,23 @@ class Skip_VAE(nn.Module):
             Skip_Conv_down(3,base_enc), # resolution is splitted by half
             Skip_Conv_down(base_enc,base_enc*2,kernel_size=4, stride=2, padding=1),
             Skip_Conv_down(base_enc*2,base_enc*4,kernel_size=4, stride=2, padding=1),
-            Skip_Conv_down(base_enc*4,base_enc*4,kernel_size=4, stride=2, padding=1),
-            Skip_Conv_down(base_enc*4,base_enc*8,kernel_size=4, stride=2, padding=1), #HxW is 2x2
-            Skip_Conv_down(base_enc*8,2*zdim,kernel_size=2,stride=1,padding=0,LastLayer=True) #Equivalent to a MLP
+            Skip_Conv_down(base_enc*4,base_enc*8,kernel_size=4, stride=2, padding=1),
+            Skip_Conv_down(base_enc*8,base_enc*16,kernel_size=4, stride=2, padding=1), #HxW is 2x2
+            Skip_Conv_down(base_enc*16,2*zdim,kernel_size=2,stride=1,padding=0,LastLayer=True) #Equivalent to a MLP
         )
 
         self.decoder = nn.Sequential(
-            Skip_Conv_down(zdim,int(base_dec*(depth_factor_dec**3)),kernel_size=1,stride=1,padding=0,factor=1,mode='nearest'), #equivalent to a MLP
+            Skip_Conv_down(zdim,int(base_dec*(depth_factor_dec**4)),kernel_size=1,stride=1,padding=0,factor=1,mode='nearest'), #equivalent to a MLP
+            Skip_DeConv_up(int(base_dec*(depth_factor_dec**4)),int(base_dec*(depth_factor_dec**3))),
             Skip_DeConv_up(int(base_dec*(depth_factor_dec**3)),int(base_dec*(depth_factor_dec**2))),
-            Skip_DeConv_up(int(base_dec*(depth_factor_dec**2)),int(base_dec*(depth_factor_dec**2))),
             Skip_DeConv_up(int(base_dec*(depth_factor_dec**2)),int(base_dec*(depth_factor_dec**1))),
             Skip_DeConv_up(int(base_dec*(depth_factor_dec**1)),int(base_dec*(depth_factor_dec**0))),
             Skip_DeConv_up(int(base_dec*(depth_factor_dec**0)),int(base_dec*(depth_factor_dec**0))),
             Skip_DeConv_up(int(base_dec*(depth_factor_dec**0)), 3, LastLayer=True)
         )
+
+        self.stabilize_exp = nn.Hardtanh(min_val=-6.,max_val=2.) #linear between min and max
+
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d) or isinstance(m, nn.ConvTranspose2d):
@@ -160,7 +163,7 @@ class Skip_VAE(nn.Module):
     def encode(self, x):
         learnt_stats = self.encoder(x) #Mu encode in the first half channels
         mu_z = learnt_stats[:,self.zdim:]
-        logvar_z = learnt_stats[:, :self.zdim]
+        logvar_z = self.stabilize_exp(learnt_stats[:, :self.zdim])
 
         return mu_z, logvar_z
 
