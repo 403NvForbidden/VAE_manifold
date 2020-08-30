@@ -12,13 +12,14 @@
 
 ### Custom
 single_cell_image/*
-datadir/*
-OLD/*
-data/*
+DataSets/*
+DataSets
+old/*
 outputs/*
 outputs
-single_cell_processed/*
-DataSets/*
+optimization/*
+optimization
+
 
 ### macOS ###
 # General
