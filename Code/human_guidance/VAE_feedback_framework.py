@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-08-29T23:52:04+10:00
+# @Last modified time: 2020-08-31T12:51:57+10:00
 
 '''
 Playground to train a VAE on a toy dataset, a fine tune it with human feedback
@@ -42,10 +42,10 @@ from torchvision import transforms, datasets
 from torch import cuda, optim
 from torch.autograd import Variable
 
-from helpers import save_brute, load_brute
-from train_net import train_Simple_VAE
-from networks import Simple_VAE
-from data_processing import imshow_tensor
+from util.helpers import save_brute, load_brute
+from models.train_net import train_Simple_VAE
+from models.networks import Simple_VAE
+from util.data_processing import imshow_tensor
 from human_guidance.feedback_helpers import latent_to_index, sample_latent, show_images_grid, show_density, DSpritesDataset, save_latent_code, plot_train_history
 
 ###############################################
@@ -102,6 +102,8 @@ rotation_mask2 = [GT_class[i,3] in [0] for i in range(GT_class.shape[0])] #Selec
 final_mask2 = [np.all(tup) for tup in zip(shape_mask2,rotation_mask2)]
 sub_sample2 = GT_class[final_mask2]
 sub_sample2.shape
+
+
 sub_sample=np.concatenate((sub_sample1,sub_sample2))
 indices_sampled = latent_to_index(sub_sample)
 

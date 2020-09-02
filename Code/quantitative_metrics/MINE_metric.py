@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-08-30T14:23:52+10:00
+# @Last modified time: 2020-08-31T11:18:07+10:00
 
 '''
 MINE (Mutual Information Neural Estimation) implementation.
@@ -18,7 +18,7 @@ import math
 from torch import nn
 from torch.nn import functional as F
 from torch.nn.init import xavier_normal_
-from data_processing import get_inference_dataset
+from util.data_processing import get_inference_dataset
 import torch.optim as optim
 import pandas as pd
 import numpy as np

@@ -362,6 +362,10 @@ class EarlyStopping:
 
     def save_model(self, val_loss, VAE, MLP):
         '''Saves model when validation loss decrease.'''
+        if self.path == '': # dont save
+            print("====>NOT saving")
+            return
+
         self.stop_epoch = VAE.epochs
         if self.verbose:
             print(f'Validation loss decreased ({self.val_loss_min:.6f} --> {val_loss:.6f}).  Saving model ...')
@@ -411,7 +415,7 @@ def save_brute(model, path):
     '''Save the entire model
     For fast development purpose only'''
 
-    torch.save(model,path)
+    torch.save(model, path)
 
 def load_brute(path):
     '''To reload entire model

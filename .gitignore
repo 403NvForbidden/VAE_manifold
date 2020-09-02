@@ -9,6 +9,7 @@
 *.ptx
 *.cubin
 *.fatbin
+*.idea
 
 ### Custom
 single_cell_image/*

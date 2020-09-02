@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-08-23T18:18:56+10:00
+# @Last modified time: 2020-08-31T10:19:46+10:00
 
 
 '''File containing the architecture of InfoMax VAE, a VAE framework that
@@ -15,7 +15,7 @@ import math
 from torch import nn
 from torch.nn import functional as F
 from torch.nn.init import xavier_normal_
-from nn_modules import Conv, ConvUpsampling
+from models.nn_modules import Conv, ConvUpsampling
 import numpy as np
 
 

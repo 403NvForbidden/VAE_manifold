@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-08-30T13:31:52+10:00
+# @Last modified time: 2020-08-31T11:19:20+10:00
 
 '''
 Man function to compute ALL the performance metrics to assess the quality a learnt representation
@@ -67,7 +67,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import plotly.offline
 import pickle as pkl
-from helpers import plot_from_csv
+from util.helpers import plot_from_csv
 
 
 from quantitative_metrics.unsupervised_metric import unsup_metric_and_local_Q, save_representation_plot

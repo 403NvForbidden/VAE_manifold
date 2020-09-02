@@ -3,7 +3,16 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-07-06T10:44:57+10:00
+# @Last modified time: 2020-08-31T11:16:59+10:00
+
+'''
+Computer and plot a BACKBONE inside the learnt representation
+Based on prior knowledge on the dataset, it this latter is expected to show
+a smooth trajectory or manifold and a ground truth for continuity is available (time,
+concentration of treatment...), the backbone is the projected continuum.
+It can help to visualize the structure of the latent space and to evaluate
+to what extent the expected continuum is retrieved.
+'''
 
 
 import pandas as pd
@@ -14,7 +23,7 @@ from sklearn import metrics
 import plotly.express as px
 import plotly.graph_objects as go
 import plotly.offline
-from helpers import plot_from_csv
+from util.helpers import plot_from_csv
 from scipy import stats
 import pickle as pkl
 

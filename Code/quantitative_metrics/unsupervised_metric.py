@@ -3,7 +3,7 @@
 # @Email:  sacha.haidinger@epfl.ch
 # @Project: Learning methods for Cell Profiling
 # @Last modified by:   sachahai
-# @Last modified time: 2020-08-30T12:59:44+10:00
+# @Last modified time: 2020-08-31T11:18:21+10:00
 
 '''Main file that contains all the function necessary to compute the unsupervised performance metrics
 used to assess the quality of a learnt representation
@@ -26,7 +26,7 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
 from sklearn import metrics
 from scipy.spatial import distance
-from data_processing import get_inference_dataset
+from util.data_processing import get_inference_dataset
 import itertools
 import plotly.express as px
 import plotly.graph_objects as go
