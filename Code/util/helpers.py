@@ -143,7 +143,7 @@ def metadata_latent_space(model, infer_dataloader, train_on_gpu, GT_csv_path, sa
 ######## Visualization
 ##############################################
 
-def save_reconstruction(loader,VAE,save_path,train_on_gpu):
+def save_reconstruction(loader, VAE, save_path, device):
     ''' Show (and save) reconstruction produced by a trained VAE model of 4 random
     samples, alongside 8 newly generated samples, sampled from the prior dataset3_class_distribution
 
@@ -155,21 +155,21 @@ def save_reconstruction(loader,VAE,save_path,train_on_gpu):
     '''
 
     data, _, _ = next(iter(loader))
-    if train_on_gpu:
-        data = Variable(data,requires_grad=False).cuda()
-    x_recon,_,_,_=VAE(data)
+    data = Variable(data,requires_grad=False).to(device)
+
+    x_recon, _, _, _ = VAE(data)
     img_grid = make_grid(torch.cat((data[:4,:3,:,:],nn.Sigmoid()(x_recon[:4,:3,:,:]))), nrow=4, padding=12, pad_value=1)
 
     pre,ext = os.path.splitext(save_path)
 
-    plt.figure(figsize=(10,5))
+    plt.figure(figsize=(10, 5))
     plt.imshow(img_grid.detach().cpu().permute(1,2,0))
     plt.axis('off')
     plt.title(f'Example data and its reconstruction')
     plt.savefig(pre+'reconstructions.png')
 
     samples = torch.randn(8, VAE.zdim, 1, 1)
-    samples = Variable(samples,requires_grad=False).cuda()
+    samples = Variable(samples, requires_grad=False).to(device)
     recon = VAE.decode(samples)
     img_grid = make_grid(nn.Sigmoid()(recon[:,:3,:,:]), nrow=4, padding=12, pad_value=1)
 
@@ -247,7 +247,7 @@ def plot_from_csv(path_to_csv,low_dim_names=['VAE_x_coord','VAE_y_coord','VAE_z_
 
 
 
-def plot_train_result(history, best_epoch=None,save_path=None, infoMAX = False, two_stage=True):
+def plot_train_result(history, best_epoch=None, save_path=None):
     """Display training and validation loss evolution over epochs
 
     Params
@@ -264,73 +264,31 @@ def plot_train_result(history, best_epoch=None,save_path=None, infoMAX = False, 
     Return a matplotlib Figure
     --------
     """
-    if two_stage:
-        print(">>>>>>>>>PLOTING")
-        # columns=['global_VAE_loss', 'kl_loss_1', 'kl_loss_2', 'recon_loss_1', 'recon_loss_2'])
-        fig = plt.figure(figsize=(15,15))
-        ax1 = fig.add_subplot(2,1,1) #Frist full row
-        ax2 = fig.add_subplot(2,2,3) # bottom left on 4x4 grid
-        ax3 = fig.add_subplot(2,2,4) # bottom right on a 4x4 grid
-        #  plot the overall loss
-        ax1.plot(history['global_VAE_loss'][0:], color='dodgerblue',label='train')
-        # ax1.plot(history['global_VAE_loss_val'][0:],color='lightsalmon',label='test')
-        ax1.set_title('Global VAE Loss')
-        '''
-        if best_epoch != None:
-            ax1.axvline(best_epoch, linestyle='--', color='r',label='Early stopping')
-        '''
-        ax2.set_title('Reconstruction Loss')
-        ax2.plot(history['recon_loss_1'][0:], color='dodgerblue',label='VAE_1')
-        ax2.plot(history['recon_loss_2'][0:], color='lightsalmon',label='VAE_2')
+    print(">>>>>>>>>PLOTING")
+    # columns=['global_VAE_loss', 'kl_loss_1', 'kl_loss_2', 'recon_loss_1', 'recon_loss_2'])
+    fig = plt.figure(figsize=(15,15))
+    ax1 = fig.add_subplot(2,1,1) #Frist full row
+    ax2 = fig.add_subplot(2,2,3) # bottom left on 4x4 grid
+    ax3 = fig.add_subplot(2,2,4) # bottom right on a 4x4 grid
+    #  plot the overall loss
+    ax1.plot(history['global_VAE_loss'][0:], color='dodgerblue',label='train')
+    # ax1.plot(history['global_VAE_loss_val'][0:],color='lightsalmon',label='test')
+    ax1.set_title('Global VAE Loss')
+    '''
+    if best_epoch != None:
+        ax1.axvline(best_epoch, linestyle='--', color='r',label='Early stopping')
+    '''
+    ax2.set_title('Reconstruction Loss')
+    ax2.plot(history['recon_loss_1'][0:], color='dodgerblue',label='VAE_1')
+    ax2.plot(history['recon_loss_2'][0:], color='lightsalmon',label='VAE_2')
 
-        ax3.set_title('Fit to Prior')
-        ax3.plot(history['kl_loss_1'][0:], color='dodgerblue',label='train')
-        ax3.plot(history['kl_loss_2'][0:], color='lightsalmon',label='test')
+    ax3.set_title('Fit to Prior')
+    ax3.plot(history['kl_loss_1'][0:], color='dodgerblue',label='train')
+    ax3.plot(history['kl_loss_2'][0:], color='lightsalmon',label='test')
 
-        ax1.legend()
-        ax2.legend()
-        ax3.legend()
-    # elif infoMAX:
-    #     fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(10, 10))
-    #     ax1.plot(history['global_VAE_loss'][1:], color='dodgerblue', label='train')
-    #     ax1.plot(history['global_VAE_loss_val'][1:], color='lightsalmon', label='test')
-    #     ax1.set_title('Global VAE Loss')
-    #     if best_epoch != None:
-    #         ax1.axvline(best_epoch, linestyle='--', color='r', label='Early stopping')
-    #     ax2.plot(history['MI_estimation'][1:], color='dodgerblue', label='train')
-    #     ax2.plot(history['MI_estimation_val'][1:], color='lightsalmon', label='test')
-    #     ax2.set_title('Mutual Information')
-    #     ax3.plot(history['recon_loss'][1:], color='dodgerblue', label='train')
-    #     ax3.plot(history['recon_loss_val'][1:], color='lightsalmon', label='test')
-    #     ax3.set_title('Reconstruction Loss')
-    #     ax4.plot(history['kl_loss'][1:], color='dodgerblue', label='train')
-    #     ax4.plot(history['kl_loss_val'][1:], color='lightsalmon', label='test')
-    #     ax4.set_title('Fit to Prior')
-    #     ax1.legend()
-    #     ax2.legend()
-    #     ax3.legend()
-    #     ax4.legend()
-    # else:
-    #     # columns=['global_VAE_loss', 'kl_loss', 'recon_loss', 'global_VAE_loss_val','kl_loss_val','recon_loss_val'])
-    #     fig = plt.figure(figsize=(10,10))
-    #     ax1 = fig.add_subplot(2,1,1) #Frist full row
-    #     ax2 = fig.add_subplot(2,2,3) # bottom left on 4x4 grid
-    #     ax3 = fig.add_subplot(2,2,4) # bottom right on a 4x4 grid
-    #
-    #     ax1.plot(history['global_VAE_loss'][1:],color='dodgerblue',label='train')
-    #     ax1.plot(history['global_VAE_loss_val'][1:],color='lightsalmon',label='test')
-    #     ax1.set_title('Global VAE Loss')
-    #     if best_epoch != None:
-    #         ax1.axvline(best_epoch, linestyle='--', color='r',label='Early stopping')
-    #     ax2.plot(history['recon_loss'][1:],color='dodgerblue',label='train')
-    #     ax2.plot(history['recon_loss_val'][1:],color='lightsalmon',label='test')
-    #     ax2.set_title('Reconstruction Loss')
-    #     ax3.plot(history['kl_loss'][1:],color='dodgerblue',label='train')
-    #     ax3.plot(history['kl_loss_val'][1:],color='lightsalmon',label='test')
-    #     ax3.set_title('Fit to Prior')
-    #     ax1.legend()
-    #     ax2.legend()
-    #     ax3.legend()
+    ax1.legend()
+    ax2.legend()
+    ax3.legend()
 
     if save_path != None:
         plt.savefig(save_path+'los_evolution.png')
@@ -368,39 +326,36 @@ class EarlyStopping:
         self.delta = delta
         self.path = path
 
-    def __call__(self, val_loss, VAE, MLP=None):
+    def __call__(self, val_loss, model_epoch):
 
         score = -val_loss
 
-        if self.best_score is None:
+        if self.best_score is None or score > self.best_score + self.delta: # loss decreased
             self.best_score = score
-            self.save_model(val_loss, VAE, MLP)
-        elif score < self.best_score + self.delta:
+            # update the min loss so far
+            self.val_loss_min = val_loss
+            self.counter = 0
+            # update the best epoch
+            self.stop_epoch = model_epoch
+            if self.verbose:
+                print(f'Validation loss decreased ({self.val_loss_min:.6f} --> {val_loss:.6f})')
+        else: # loss not decreasing
             self.counter += 1
             print(f'EarlyStopping counter: {self.counter} out of {self.patience}')
             if self.counter >= self.patience:
+                # end training
                 self.early_stop = True
-        else:
-            self.best_score = score
-            self.save_model(val_loss, VAE, MLP)
-            self.counter = 0
 
-    def save_model(self, val_loss, VAE, MLP):
-        '''Saves model when validation loss decrease.'''
+    def save_model(self, VAE, MLP):
         if self.path == '': # dont save
             print("====>NOT saving")
             return
-
-        self.stop_epoch = VAE.epochs
-        if self.verbose:
-            print(f'Validation loss decreased ({self.val_loss_min:.6f} --> {val_loss:.6f}).  Saving model ...')
-        #Save both models
-        pre, ext = os.path.splitext(self.path)
-        save_brute(VAE,pre+f'_VAE_.pth')
-        if MLP != None:
-            save_brute(MLP,pre+f'_MLP_.pth')
-        #torch.save(model.state_dict(), self.path)
-        self.val_loss_min = val_loss
+        else:
+            print(f'========Saving model========')
+            # Save both models
+            save_brute(VAE, self.path + 'VAE_1.pth')
+            if MLP != None:
+                save_brute(MLP, self.path + 'VAE_2.pth')
 
 
 def save_checkpoint(model, path):

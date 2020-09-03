@@ -23,7 +23,6 @@ train_feedback(), train_Simple_VAE() :
 
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
 from timeit import default_timer as timer
 
 import torch
@@ -52,7 +51,7 @@ def scalar_loss(data, loss_recon, mu_z, logvar_z, beta):
 ###################################################
 ##### 2 stage VAE training ##############
 ###################################################
-def train_2_stage_VAE_epoch(num_epochs, VAE_1, VAE_2, optimizer_1, optimizer_2, train_loader, train_on_gpu=True):
+def train_2_stage_VAE_epoch(num_epochs, VAE_1, VAE_2, optimizer_1, optimizer_2, train_loader, device=True):
     '''
         Train a VAE model with standard ELBO objective function for one single epoch
 
@@ -75,15 +74,11 @@ def train_2_stage_VAE_epoch(num_epochs, VAE_1, VAE_2, optimizer_1, optimizer_2, 
 
     start = timer()
 
-    criterion_recon = nn.BCEWithLogitsLoss()  # more stable than handmade sigmoid as last layer and BCELoss
-    if train_on_gpu:
-        criterion_recon = criterion_recon.cuda()
+    criterion_recon = nn.BCEWithLogitsLoss().to(device)  # more stable than handmade sigmoid as last layer and BCELoss
 
     # each `data` is of BATCH_SIZE samples and has shape [batch_size, 4, 128, 128]
     for batch_idx, (data, _) in enumerate(train_loader):
-        data = Variable(data)
-        if train_on_gpu:
-            data = data.cuda()
+        data = Variable(data).to(device)
 
         # push whole batch of data through VAE.forward() to get recon_loss
         x_recon_1, mu_z_1, logvar_z_1, _ = VAE_1(data)
@@ -116,7 +111,7 @@ def train_2_stage_VAE_epoch(num_epochs, VAE_1, VAE_2, optimizer_1, optimizer_2, 
                        100. * batch_idx / len(train_loader),
                 loss_VAE_1.item(), loss_VAE_2.item()), end='\r')
 
-    if (num_epochs % 10 == 0) or (num_epochs == 1):
+    if (num_epochs % 5 == 0) or (num_epochs == 1):
         print('==========> Epoch: {} ==========> Average loss: {:.4f}'.format(num_epochs, np.mean(loss_overall_iter)))
         print(f'{timer() - start:.2f} seconds elapsed in epoch.')
         print(f'VAE_1 VAE loss: {np.mean(global_VAE_iter_1):.2f}, KL loss : {np.mean(global_VAE_iter_2):.2f}')
@@ -128,7 +123,8 @@ def train_2_stage_VAE_epoch(num_epochs, VAE_1, VAE_2, optimizer_1, optimizer_2, 
 def test_2_stage_VAE_epoch(epoch, model, optimizer, test_loader, train_on_gpu=True):
     pass
 
-def train_2_stage_VAE_model(num_epochs, VAE_1, VAE_2, optimizer1, optimizer2, train_loader, valid_loader, saving_path='best_model.pth', train_on_gpu=True):
+def train_2_stage_VAE_model(num_epochs, VAE_1, VAE_2, optimizer1, optimizer2, train_loader, valid_loader,
+                            save_path='', device='cpu'):
     '''
         Define VAE 1:
 
@@ -153,22 +149,25 @@ def train_2_stage_VAE_model(num_epochs, VAE_1, VAE_2, optimizer1, optimizer2, tr
     best_epoch = 0
 
     history = []
-    early_stopping = EarlyStopping(patience=30, verbose=True, path=saving_path)
+    early_stopping = EarlyStopping(patience=30, verbose=True, path=save_path)
     lr_schedul_VAE_1 = torch.optim.lr_scheduler.StepLR(optimizer=optimizer1, step_size=40, gamma=0.6)
     lr_schedul_VAE_2 = torch.optim.lr_scheduler.StepLR(optimizer=optimizer2, step_size=40, gamma=0.6)
 
     for epoch in range(num_epochs):
-        global_VAE_loss, kl_loss_1, kl_loss_2, recon_loss_1, recon_loss_2 = train_2_stage_VAE_epoch(epoch, VAE_1, VAE_2, optimizer1, optimizer2, train_loader, train_on_gpu)
+        global_VAE_loss, kl_loss_1, kl_loss_2, recon_loss_1, recon_loss_2 = train_2_stage_VAE_epoch(epoch, VAE_1, VAE_2,
+                                                                                                    optimizer1,
+                                                                                                    optimizer2,
+                                                                                                    train_loader,
+                                                                                                    device)
         # global_VAE_loss_val, kl_loss_val, recon_loss_val = test_2_stage_VAE_epoch(num_epochs, VAE1, VAE2, optimizer, valid_loader, train_on_gpu)
 
         # early stopping takes the validation loss to check if it has decereased,
         # if so, model is saved, if not for 'patience' time in a row, the training loop is broken
-        early_stopping(global_VAE_loss, VAE=VAE_2, MLP=None)
+        early_stopping(global_VAE_loss, VAE_1.epochs)
         best_epoch = early_stopping.stop_epoch
 
         history.append([global_VAE_loss, kl_loss_1, kl_loss_2, recon_loss_1, recon_loss_2])
         VAE_1.epochs, VAE_2.epochs = VAE_1.epochs + 1, VAE_2.epochs + 1
-
 
         lr_schedul_VAE_1.step()
         lr_schedul_VAE_2.step()
@@ -177,15 +176,16 @@ def train_2_stage_VAE_model(num_epochs, VAE_1, VAE_2, optimizer1, optimizer2, tr
             print(f'#### Early stopping occured. Best model saved is from epoch {early_stopping.stop_epoch}')
             break
 
+    ### SAVE the model
+    early_stopping.save_model(VAE_1, VAE_2)
+
     history = pd.DataFrame(
         history,
         columns=['global_VAE_loss', 'kl_loss_1', 'kl_loss_2', 'recon_loss_1', 'recon_loss_2'])
 
     # time
     total_time = timer() - overall_start
-    print(
-        f'{total_time:.2f} total seconds elapsed. {total_time / (num_epochs):.2f} seconds per epoch.'
-    )
+    print(f'{total_time:.2f} total seconds elapsed. {total_time / (num_epochs):.2f} seconds per epoch.')
     print('######### TRAINING FINISHED ##########')
 
     # Attach the optimizer
