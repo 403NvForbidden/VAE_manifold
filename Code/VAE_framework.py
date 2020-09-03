@@ -84,19 +84,23 @@ if train_on_gpu:
 optimizer1 = optim.Adam(VAE_1.parameters(), lr=0.0001, betas=(0.9, 0.999))
 optimizer2 = optim.Adam(VAE_2.parameters(), lr=0.0001, betas=(0.9, 0.999))
 
-epochs = 1
+epochs = 10
 
 model_name = f'2_stage_VAE_{datetime.date.today()}'
-save_model_path = '' #  f'{model_name}.pth'
+save_model_path = '' # f'{model_name}.pth'
 
-VAE_1, VAE_2, history, best_epoch = train_2_stage_VAE_model(epochs, VAE_1, VAE_2, optimizer1, optimizer2, train_loader, valid_loader,saving_path=save_model_path, train_on_gpu=train_on_gpu)
+VAE_1, VAE_2, history, best_epoch = train_2_stage_VAE_model(epochs, VAE_1, VAE_2, optimizer1, optimizer2, train_loader, valid_loader, saving_path=save_model_path, train_on_gpu=train_on_gpu)
+
+##########################################################
+ # %% Plot results
+##########################################################
+
+
+fig = plot_train_result(history, best_epoch, save_path='', infoMAX=False, two_stage=True)
+# fig.show()
+# plt.show()
 
 '''
-fig = plot_train_result(history, best_epoch,save_path=None, infoMAX = False)
-fig.show()
-plt.show()
-
-
 #SAVE TRAINED MODEL and history
 history_save = f'loss_evo_{model_name}.csv'
 history.to_csv(history_save)

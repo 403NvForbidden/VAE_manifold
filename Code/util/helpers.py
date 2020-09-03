@@ -247,7 +247,7 @@ def plot_from_csv(path_to_csv,low_dim_names=['VAE_x_coord','VAE_y_coord','VAE_z_
 
 
 
-def plot_train_result(history, best_epoch=None,save_path=None, infoMAX = False):
+def plot_train_result(history, best_epoch=None,save_path=None, infoMAX = False, two_stage=True):
     """Display training and validation loss evolution over epochs
 
     Params
@@ -264,48 +264,73 @@ def plot_train_result(history, best_epoch=None,save_path=None, infoMAX = False):
     Return a matplotlib Figure
     --------
     """
-
-    if  not(infoMAX):
-        fig = plt.figure(figsize=(10,10))
+    if two_stage:
+        print(">>>>>>>>>PLOTING")
+        # columns=['global_VAE_loss', 'kl_loss_1', 'kl_loss_2', 'recon_loss_1', 'recon_loss_2'])
+        fig = plt.figure(figsize=(15,15))
         ax1 = fig.add_subplot(2,1,1) #Frist full row
         ax2 = fig.add_subplot(2,2,3) # bottom left on 4x4 grid
         ax3 = fig.add_subplot(2,2,4) # bottom right on a 4x4 grid
-        ax1.plot(history['global_VAE_loss'][1:],color='dodgerblue',label='train')
-        ax1.plot(history['global_VAE_loss_val'][1:],color='lightsalmon',label='test')
+        #  plot the overall loss
+        ax1.plot(history['global_VAE_loss'][0:], color='dodgerblue',label='train')
+        # ax1.plot(history['global_VAE_loss_val'][0:],color='lightsalmon',label='test')
         ax1.set_title('Global VAE Loss')
+        '''
         if best_epoch != None:
             ax1.axvline(best_epoch, linestyle='--', color='r',label='Early stopping')
-        ax2.plot(history['recon_loss'][1:],color='dodgerblue',label='train')
-        ax2.plot(history['recon_loss_val'][1:],color='lightsalmon',label='test')
+        '''
         ax2.set_title('Reconstruction Loss')
-        ax3.plot(history['kl_loss'][1:],color='dodgerblue',label='train')
-        ax3.plot(history['kl_loss_val'][1:],color='lightsalmon',label='test')
+        ax2.plot(history['recon_loss_1'][0:], color='dodgerblue',label='VAE_1')
+        ax2.plot(history['recon_loss_2'][0:], color='lightsalmon',label='VAE_2')
+
         ax3.set_title('Fit to Prior')
+        ax3.plot(history['kl_loss_1'][0:], color='dodgerblue',label='train')
+        ax3.plot(history['kl_loss_2'][0:], color='lightsalmon',label='test')
+
         ax1.legend()
         ax2.legend()
         ax3.legend()
-
-
-    if  infoMAX:
-        fig, ((ax1 ,ax2),(ax3 ,ax4)) = plt.subplots(2,2,figsize=(10, 10))
-        ax1.plot(history['global_VAE_loss'][1:],color='dodgerblue',label='train')
-        ax1.plot(history['global_VAE_loss_val'][1:],color='lightsalmon',label='test')
-        ax1.set_title('Global VAE Loss')
-        if best_epoch != None:
-            ax1.axvline(best_epoch, linestyle='--', color='r',label='Early stopping')
-        ax2.plot(history['MI_estimation'][1:],color='dodgerblue',label='train')
-        ax2.plot(history['MI_estimation_val'][1:],color='lightsalmon',label='test')
-        ax2.set_title('Mutual Information')
-        ax3.plot(history['recon_loss'][1:],color='dodgerblue',label='train')
-        ax3.plot(history['recon_loss_val'][1:],color='lightsalmon',label='test')
-        ax3.set_title('Reconstruction Loss')
-        ax4.plot(history['kl_loss'][1:],color='dodgerblue',label='train')
-        ax4.plot(history['kl_loss_val'][1:],color='lightsalmon',label='test')
-        ax4.set_title('Fit to Prior')
-        ax1.legend()
-        ax2.legend()
-        ax3.legend()
-        ax4.legend()
+    # elif infoMAX:
+    #     fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(10, 10))
+    #     ax1.plot(history['global_VAE_loss'][1:], color='dodgerblue', label='train')
+    #     ax1.plot(history['global_VAE_loss_val'][1:], color='lightsalmon', label='test')
+    #     ax1.set_title('Global VAE Loss')
+    #     if best_epoch != None:
+    #         ax1.axvline(best_epoch, linestyle='--', color='r', label='Early stopping')
+    #     ax2.plot(history['MI_estimation'][1:], color='dodgerblue', label='train')
+    #     ax2.plot(history['MI_estimation_val'][1:], color='lightsalmon', label='test')
+    #     ax2.set_title('Mutual Information')
+    #     ax3.plot(history['recon_loss'][1:], color='dodgerblue', label='train')
+    #     ax3.plot(history['recon_loss_val'][1:], color='lightsalmon', label='test')
+    #     ax3.set_title('Reconstruction Loss')
+    #     ax4.plot(history['kl_loss'][1:], color='dodgerblue', label='train')
+    #     ax4.plot(history['kl_loss_val'][1:], color='lightsalmon', label='test')
+    #     ax4.set_title('Fit to Prior')
+    #     ax1.legend()
+    #     ax2.legend()
+    #     ax3.legend()
+    #     ax4.legend()
+    # else:
+    #     # columns=['global_VAE_loss', 'kl_loss', 'recon_loss', 'global_VAE_loss_val','kl_loss_val','recon_loss_val'])
+    #     fig = plt.figure(figsize=(10,10))
+    #     ax1 = fig.add_subplot(2,1,1) #Frist full row
+    #     ax2 = fig.add_subplot(2,2,3) # bottom left on 4x4 grid
+    #     ax3 = fig.add_subplot(2,2,4) # bottom right on a 4x4 grid
+    #
+    #     ax1.plot(history['global_VAE_loss'][1:],color='dodgerblue',label='train')
+    #     ax1.plot(history['global_VAE_loss_val'][1:],color='lightsalmon',label='test')
+    #     ax1.set_title('Global VAE Loss')
+    #     if best_epoch != None:
+    #         ax1.axvline(best_epoch, linestyle='--', color='r',label='Early stopping')
+    #     ax2.plot(history['recon_loss'][1:],color='dodgerblue',label='train')
+    #     ax2.plot(history['recon_loss_val'][1:],color='lightsalmon',label='test')
+    #     ax2.set_title('Reconstruction Loss')
+    #     ax3.plot(history['kl_loss'][1:],color='dodgerblue',label='train')
+    #     ax3.plot(history['kl_loss_val'][1:],color='lightsalmon',label='test')
+    #     ax3.set_title('Fit to Prior')
+    #     ax1.legend()
+    #     ax2.legend()
+    #     ax3.legend()
 
     if save_path != None:
         plt.savefig(save_path+'los_evolution.png')

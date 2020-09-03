@@ -158,7 +158,7 @@ def train_2_stage_VAE_model(num_epochs, VAE_1, VAE_2, optimizer1, optimizer2, tr
     lr_schedul_VAE_2 = torch.optim.lr_scheduler.StepLR(optimizer=optimizer2, step_size=40, gamma=0.6)
 
     for epoch in range(num_epochs):
-        global_VAE_loss, kl_loss_1, kl_loss_2, recon_loss_1, recon_loss_2 = train_2_stage_VAE_epoch(num_epochs, VAE_1, VAE_2, optimizer1, optimizer2, train_loader, train_on_gpu)
+        global_VAE_loss, kl_loss_1, kl_loss_2, recon_loss_1, recon_loss_2 = train_2_stage_VAE_epoch(epoch, VAE_1, VAE_2, optimizer1, optimizer2, train_loader, train_on_gpu)
         # global_VAE_loss_val, kl_loss_val, recon_loss_val = test_2_stage_VAE_epoch(num_epochs, VAE1, VAE2, optimizer, valid_loader, train_on_gpu)
 
         # early stopping takes the validation loss to check if it has decereased,
