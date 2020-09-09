@@ -91,7 +91,8 @@ def train_2_stage_VAE_epoch(num_epochs, VAE_1, VAE_2, optimizer_1, optimizer_2, 
         loss_recon_2= criterion_recon(x_recon_2, data)
         loss_VAE_2, loss_kl_2  = scalar_loss(data, loss_recon_2, mu_z_2, logvar_z_2, VAE_2.beta)
         # total loss
-        loss_overall = loss_VAE_1 + 0.8 * loss_VAE_2
+        # loss_overall = loss_VAE_1 + 0.8 * loss_VAE_2
+        loss_overall = loss_VAE_2 + 0.8 * loss_VAE_1
 
         optimizer_1.zero_grad()
         optimizer_2.zero_grad()

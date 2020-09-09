@@ -38,6 +38,7 @@ from util.helpers import plot_train_result, save_checkpoint, load_checkpoint, sa
 ##########################################################
 # %% META
 ##########################################################
+# datadir = '/content/drive/My Drive/Colab Notebooks/Thesis/Datasets/' # colab
 datadir = '../DataSets/'
 outdir = '../outputs/'
 save = True
@@ -125,5 +126,5 @@ html_save = f'{model_name}_Representation.html'
 plotly.offline.plot(figplotly, filename=html_save, auto_open=True)
 '''
 #save image of reconstruction and generated samples
-image_save = save_model_path + 'reconstructed.png'
-save_reconstruction(infer_dataloader, VAE_1, image_save, device)
+image_save = save_model_path + 'lofi'
+save_reconstruction(infer_dataloader, VAE_2, image_save, device)
