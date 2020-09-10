@@ -113,3 +113,32 @@ plt.show()
 #SAVE TRAINED MODEL and history
 if save:
     history.to_csv(save_model_path + 'epochs.csv')
+
+##########################################################
+ # %% Visualize latent space and save it
+##########################################################
+#Visualize on the WHOLE dataset (train & validation)
+infer_data, infer_dataloader = get_inference_dataset(dataset_path, batch_size, input_size, shuffle=True, droplast=False)
+'''
+#Possibility of reloading a model trained in the past, or use the variable defined above
+#model_VAE = load_brute(save_model_path)
+#model_VAE = load_brute('path_to_model.pth')
+#model_name='Model_name_string'
+
+#Where to save csv with metadata
+csv_save_output = f'{model_name}_metedata.csv'
+save_csv = True
+#Store raw image data in csv (results in heavy file
+store_raw = False
+
+metadata_csv = metadata_latent_space(VAE, infer_dataloader, device, GT_csv_path=path_to_GT, save_csv=save_csv, with_rawdata=store_raw,csv_path=csv_save_output)
+figplotly = plot_from_csv(metadata_csv,dim=3,num_class=7)#column='Sub_population',as_str=True)
+#For Chaffer Dataset
+#figplotly = plot_from_csv(metadata_csv,dim=3,column='Sub_population',as_str=True)
+
+html_save = f'{model_name}_Representation.html'
+plotly.offline.plot(figplotly, filename=html_save, auto_open=True)
+'''
+#save image of reconstruction and generated samples
+image_save = save_model_path + 'lofi_'
+save_reconstruction(infer_dataloader, VAE_2, image_save, device)
