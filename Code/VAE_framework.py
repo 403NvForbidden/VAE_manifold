@@ -61,7 +61,7 @@ print(f'\tTrain on: {device}\t')
 input_size = 64 # the input size of the image
 batch_size = 32 # Change to fit hardware
 
-EPOCHS = 50
+EPOCHS = 150
 train_loader, valid_loader = get_train_val_dataloader(dataset_path, input_size, batch_size, test_split=0.1)
 model_name = f'2stage_VAE_{datetime.datetime.now().strftime("%Y-%m-%d-%H:%M")}'
 save_model_path = outdir + f'{model_name}_{EPOCHS}/' if save else ''
@@ -92,7 +92,7 @@ VAE_1, VAE_2, history, best_epoch = train_2_stage_VAE_model(EPOCHS, VAE_1, VAE_2
 ##########################################################
 
 
-fig = plot_train_result(history, best_epoch, save_path=save_model_path, info=False)
+fig = plot_train_result(history, best_epoch, save_path=save_model_path)
 fig.show()
 plt.show()
 
@@ -126,5 +126,5 @@ html_save = f'{model_name}_Representation.html'
 plotly.offline.plot(figplotly, filename=html_save, auto_open=True)
 '''
 #save image of reconstruction and generated samples
-image_save = save_model_path + 'lofi'
-save_reconstruction(infer_dataloader, VAE_2, image_save, device)
+image_save = save_model_path + 'hifi'
+save_reconstruction(infer_dataloader, VAE_1, image_save, device)

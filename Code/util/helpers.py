@@ -19,6 +19,7 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib.patches import Ellipse
 import matplotlib.transforms as transforms
+from matplotlib.gridspec import GridSpec
 import matplotlib.colors
 import matplotlib.cm
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
@@ -249,10 +250,12 @@ def plot_train_result_info(history, best_epoch=None, save_path=None):
     print(">>>>>>>>>PLOTING INFOz")
     # columns=['global_VAE_loss', 'kl_loss_1', 'kl_loss_2', 'recon_loss_1', 'recon_loss_2'])
     fig = plt.figure(figsize=(15, 15))
-    ax1 = fig.add_subplot(1, 2, 1)  # Frist full row right of 4x4 grid ()
-    ax4 = fig.add_subplot(1, 2, 2)  # Frist full row right of 4x4 grid
-    ax2 = fig.add_subplot(2, 2, 3)  # bottom left on 4x4 grid
-    ax3 = fig.add_subplot(2, 2, 4)  # bottom right on a 4x4 grid
+    gs = GridSpec(3, 2, figure=fig)
+    ax1 = fig.add_subplot(gs[0, :]) #Frist full row
+    ax2 = fig.add_subplot(gs[1, 0]) # bottom left on 4x4 grid
+    ax3 = fig.add_subplot(gs[1, 1]) # bottom right on a 4x4 grid
+    ax4 = fig.add_subplot(gs[2, 0])  # bottom right on a 4x4 grid
+    ax5 = fig.add_subplot(gs[2, 1])  # bottom right on a 4x4 grid
     #  plot the overall loss
     ax1.plot(history['global_VAE_loss'][0:], color='dodgerblue', label='train')
     # ax1.plot(history['global_VAE_loss_val'][0:],color='lightsalmon',label='test')
@@ -271,13 +274,17 @@ def plot_train_result_info(history, best_epoch=None, save_path=None):
 
     ax4.set_title('MI')  # 'MI_iter_1', 'MI_iter_2', 'MI_loss_1', 'MI_loss_2'
     ax4.plot(history['MI_iter_1'][0:], color='dodgerblue', label='MI1')
-    ax4.plot(history['MI_loss_1'][0:], color='dodgerblue', dashes=[6, 2], label='loss_1')
     ax4.plot(history['MI_iter_2'][0:], color='lightsalmon', label='MI2')
-    ax4.plot(history['MI_loss_2'][0:], color='dodgerblue', dashes=[6, 2], label='loss_2')
+
+    ax5.set_title('MI loss')
+    ax5.plot(history['MI_loss_1'][0:], color='dodgerblue', dashes=[6, 2], label='loss_1')
+    ax5.plot(history['MI_loss_2'][0:], color='lightsalmon', dashes=[6, 2], label='loss_2')
 
     ax1.legend()
     ax2.legend()
     ax3.legend()
+    ax4.legend()
+    ax5.legend()
 
     if save_path != None:
         plt.savefig(save_path+'los_evolution.png')
