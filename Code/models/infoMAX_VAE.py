@@ -30,7 +30,7 @@ class MLP_MI_estimator(nn.Module):
     representation of a f-divergence. Finding t() that maximize this f-divergence,
     lead to a variation representation that is a tight bound estimator of mutual information.
     '''
-    def __init__(self,input_dim,zdim=3):
+    def __init__(self, input_dim, zdim=3):
         super(MLP_MI_estimator, self).__init__()
 
         self.input_dim = input_dim
@@ -52,8 +52,8 @@ class MLP_MI_estimator(nn.Module):
         )
 
     def forward(self, x, z):
-        x = x.view(-1,self.input_dim)
-        z = z.view(-1,self.zdim)
+        x = x.view(-1, self.input_dim)
+        z = z.view(-1, self.zdim)
         x_g = self.MLP_g(x) #Batchsize x 32
         y_h = self.MLP_h(z) #Batchsize x 32
         scores = torch.matmul(y_h,torch.transpose(x_g,0,1))
@@ -64,7 +64,7 @@ class MLP_MI_estimator(nn.Module):
 #Compute the Noise Constrastive Estimation (NCE) loss
 def infoNCE_bound(scores):
     '''Bound from Van Den Oord and al. (2018)'''
-    nll = torch.mean( torch.diag(scores) - torch.logsumexp(scores,dim=1))
+    nll = torch.mean( torch.diag(scores) - torch.logsumexp(scores, dim=1))
     k =scores.size()[0]
     mi = np.log(k) + nll
 

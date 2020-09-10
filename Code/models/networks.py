@@ -20,7 +20,7 @@ from torch.nn.init import xavier_normal_
 from models.nn_modules import Conv, ConvTranspose, ConvUpsampling, Skip_Conv_down, Skip_DeConv_up
 
 class VAE2(nn.Module):
-    def __init__(self, VAE1_conv_encoder, VAE1_linear_encoder, input_channels=3, zdim=3, beta=1, base_dec_size=32, loss='BCE'):
+    def __init__(self, VAE1_conv_encoder, VAE1_linear_encoder, input_channels=3, zdim=3, alpha=1, beta=1, base_dec_size=32, loss='BCE'):
         super(VAE2, self).__init__()
         '''
         param :
@@ -33,6 +33,7 @@ class VAE2(nn.Module):
 
         self.zdim = zdim
         self.input_channels = input_channels
+        self.alpha = alpha
         self.beta = beta
         self.loss = loss
         self.base_dec = base_dec_size
@@ -141,7 +142,7 @@ class VAE2(nn.Module):
         return kld
 
 class VAE(nn.Module):
-    def __init__(self, zdim=3, input_channels=3, beta=1, base_enc=32, base_dec=32, depth_factor_dec=2, loss='BCE'):
+    def __init__(self, zdim=3, input_channels=3, alpha=1, beta=1, base_enc=32, base_dec=32, depth_factor_dec=2, loss='BCE'):
         super(VAE, self).__init__()
         '''
         param :
@@ -151,6 +152,7 @@ class VAE(nn.Module):
         '''
 
         self.zdim = zdim
+        self.alpha = alpha
         self.beta = beta
         self.loss = loss
         self.input_channels = input_channels
