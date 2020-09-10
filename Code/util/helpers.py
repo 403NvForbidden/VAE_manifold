@@ -245,7 +245,44 @@ def plot_from_csv(path_to_csv,low_dim_names=['VAE_x_coord','VAE_y_coord','VAE_z_
 
         return fig_2d_1
 
+def plot_train_result_info(history, best_epoch=None, save_path=None):
+    print(">>>>>>>>>PLOTING INFOz")
+    # columns=['global_VAE_loss', 'kl_loss_1', 'kl_loss_2', 'recon_loss_1', 'recon_loss_2'])
+    fig = plt.figure(figsize=(15, 15))
+    ax1 = fig.add_subplot(1, 2, 1)  # Frist full row right of 4x4 grid ()
+    ax4 = fig.add_subplot(1, 2, 2)  # Frist full row right of 4x4 grid
+    ax2 = fig.add_subplot(2, 2, 3)  # bottom left on 4x4 grid
+    ax3 = fig.add_subplot(2, 2, 4)  # bottom right on a 4x4 grid
+    #  plot the overall loss
+    ax1.plot(history['global_VAE_loss'][0:], color='dodgerblue', label='train')
+    # ax1.plot(history['global_VAE_loss_val'][0:],color='lightsalmon',label='test')
+    ax1.set_title('Global VAE Loss')
+    '''
+    if best_epoch != None:
+        ax1.axvline(best_epoch, linestyle='--', color='r',label='Early stopping')
+    '''
+    ax2.set_title('Reconstruction Loss')
+    ax2.plot(history['recon_loss_1'][0:], color='dodgerblue', label='VAE_1')
+    ax2.plot(history['recon_loss_2'][0:], color='lightsalmon', label='VAE_2')
 
+    ax3.set_title('Fit to Prior')
+    ax3.plot(history['kl_loss_1'][0:], color='dodgerblue', label='VAE_1')
+    ax3.plot(history['kl_loss_2'][0:], color='lightsalmon', label='VAE_2')
+
+    ax4.set_title('MI')  # 'MI_iter_1', 'MI_iter_2', 'MI_loss_1', 'MI_loss_2'
+    ax4.plot(history['MI_iter_1'][0:], color='dodgerblue', label='MI1')
+    ax4.plot(history['MI_loss_1'][0:], color='dodgerblue', dashes=[6, 2], label='loss_1')
+    ax4.plot(history['MI_iter_2'][0:], color='lightsalmon', label='MI2')
+    ax4.plot(history['MI_loss_2'][0:], color='dodgerblue', dashes=[6, 2], label='loss_2')
+
+    ax1.legend()
+    ax2.legend()
+    ax3.legend()
+
+    if save_path != None:
+        plt.savefig(save_path+'los_evolution.png')
+
+    return fig
 
 def plot_train_result(history, best_epoch=None, save_path=None):
     """Display training and validation loss evolution over epochs
