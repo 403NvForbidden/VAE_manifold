@@ -195,7 +195,6 @@ def train_2_stage_VAE_model(num_epochs, VAE_1, VAE_2, optimizer1, optimizer2, tr
 
     return VAE_1, VAE_2, history, best_epoch
 
-
 ###################################################
 ##### 2 stage VAE_withInfoMax ##############
 ###################################################
@@ -243,23 +242,22 @@ def train_2_stage_infoVAE_epoch(num_epochs, VAE_1, VAE_2, optim_VAE1, optim_VAE2
         loss_recon_1 = criterion_recon(x_recon_1, data)
         loss_VAE_1, loss_kl_1 = scalar_loss(data, loss_recon_1, mu_z_1, logvar_z_1, VAE_1.beta)
         # calculate scalar loss of VAE2
-        loss_recon_2= criterion_recon(x_recon_2, data)
-        loss_VAE_2, loss_kl_2  = scalar_loss(data, loss_recon_2, mu_z_2, logvar_z_2, VAE_2.beta)
+        loss_recon_2 = criterion_recon(x_recon_2, data)
+        loss_VAE_2, loss_kl_2 = scalar_loss(data, loss_recon_2, mu_z_2, logvar_z_2, VAE_2.beta)
         # total loss
         # loss_overall = loss_VAE_1 + gamma * loss_VAE_2
         loss_overall = (loss_VAE_2 - VAE_2.alpha * MI_xz_2) + 0.8 * (loss_VAE_1 - VAE_1.alpha * MI_xz_1)
-
 
         # Step 1 : Optimization of VAE based on the current MI estimation
         optim_VAE1.zero_grad()
         optim_VAE2.zero_grad()
         loss_overall.backward(retain_graph=True) #Important argument, we backpropagated two times over MI_xz)
         optim_VAE1.step()
-        optim_VAE1.step()
+        optim_VAE2.step()
 
         # Step 2 : Optimization of the MLP to improve the MI estimation
         opti_MLP1.zero_grad()
-        opti_MLP1.zero_grad()
+        opti_MLP2.zero_grad()
         MI_loss_1 = -MI_xz_1
         MI_loss_2 = -MI_xz_2
         MI_loss_1.backward()
@@ -269,7 +267,7 @@ def train_2_stage_infoVAE_epoch(num_epochs, VAE_1, VAE_2, optim_VAE1, optim_VAE2
 
         # record the loss
         loss_overall_iter.append(loss_overall.item())
-        global_VAE_iter_1, global_VAE_iter_2 =  global_VAE_iter_1 + [loss_VAE_1.item()], global_VAE_iter_2 + [loss_VAE_2.item()]
+        global_VAE_iter_1, global_VAE_iter_2 = global_VAE_iter_1 + [loss_VAE_1.item()], global_VAE_iter_2 + [loss_VAE_2.item()]
         recon_loss_iter_1, recon_loss_iter_2 = recon_loss_iter_1 + [loss_recon_1.item()], global_VAE_iter_2 + [loss_recon_2.item()]
         kl_loss_iter_1, kl_loss_iter_2 = kl_loss_iter_1 + [loss_kl_1.item()], kl_loss_iter_2 + [loss_kl_2.item()]
 
