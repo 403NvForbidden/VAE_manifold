@@ -33,11 +33,13 @@ from torch import nn
 from torch import cuda
 from torchvision.utils import save_image, make_grid
 
+
 ##############################################
 ######## Match Latent Code and Ground Truth
 ##############################################
 
-def metadata_latent_space(model, infer_dataloader, train_on_gpu, GT_csv_path, save_csv=False, with_rawdata=False, csv_path='no_name_specified.csv'):
+def metadata_latent_space(model, infer_dataloader, train_on_gpu, GT_csv_path, save_csv=False, with_rawdata=False,
+                          csv_path='no_name_specified.csv'):
     '''
     Once a VAE model is trained, take its predictions (3D latent code) and store it in a csv
     file alongside the ground truth information. Useful for plots and downstream analyses.
@@ -60,9 +62,9 @@ def metadata_latent_space(model, infer_dataloader, train_on_gpu, GT_csv_path, sa
     labels_list = []
     z_list = []
     id_list = []
-    list_of_tensors = [] #Store raw_data for performance metrics
+    list_of_tensors = []  # Store raw_data for performance metrics
 
-    if model.zdim > 3 :
+    if model.zdim > 3:
         print(f'Latent space is >3D ({model.zdim} dimensional), no visualization is provided')
         return None
 
@@ -70,7 +72,7 @@ def metadata_latent_space(model, infer_dataloader, train_on_gpu, GT_csv_path, sa
     #################################################
 
     for i, (data, labels, file_names) in enumerate(infer_dataloader):
-        #Extract unique cell id from file_names
+        # Extract unique cell id from file_names
         id_list.append([file_name for file_name in file_names])
         if train_on_gpu:
             # make sure this lives on the GPU
@@ -78,16 +80,16 @@ def metadata_latent_space(model, infer_dataloader, train_on_gpu, GT_csv_path, sa
         with torch.no_grad():
             model.eval()
             if with_rawdata:
-                raw_data = data.view(data.size(0),-1) #B x HxWxC
+                raw_data = data.view(data.size(0), -1)  # B x HxWxC
                 list_of_tensors.append(raw_data.data.cpu().numpy())
 
             data = Variable(data, requires_grad=False)
             z, _ = model.encode(data)
-            z = z.view(-1,model.zdim)
+            z = z.view(-1, model.zdim)
             z_list.append((z.data).cpu().numpy())
             labels_list.append(labels.numpy())
 
-        print(f'In progress...{i*len(data)}/{len(infer_dataloader.dataset)}',end='\r')
+        print(f'In progress...{i * len(data)}/{len(infer_dataloader.dataset)}', end='\r')
 
     ###### Matching samples to metadata info #####
     #################################################
@@ -96,45 +98,46 @@ def metadata_latent_space(model, infer_dataloader, train_on_gpu, GT_csv_path, sa
 
     ###### Store raw data in a separate data frame #####
     if with_rawdata:
-        raw_data = np.concatenate(list_of_tensors,axis=0)
-        rawdata_frame = pd.DataFrame(data=raw_data[0:,0:],
-                                index=[i for i in range(raw_data.shape[0])],
-                               columns=['feature'+str(i) for i in range(raw_data.shape[1])])
-        rawdata_frame['Unique_ID']=np.nan
-        rawdata_frame.Unique_ID=unique_ids
+        raw_data = np.concatenate(list_of_tensors, axis=0)
+        rawdata_frame = pd.DataFrame(data=raw_data[0:, 0:],
+                                     index=[i for i in range(raw_data.shape[0])],
+                                     columns=['feature' + str(i) for i in range(raw_data.shape[1])])
+        rawdata_frame['Unique_ID'] = np.nan
+        rawdata_frame.Unique_ID = unique_ids
         rawdata_frame = rawdata_frame.sort_values(by=['Unique_ID'])
 
     ##### Store latent code in a temporary dataframe #####
-    z_points = np.concatenate(z_list,axis=0) # datasize x 3
-    true_label = np.concatenate(labels_list,axis=0)
+    z_points = np.concatenate(z_list, axis=0)  # datasize x 3
+    true_label = np.concatenate(labels_list, axis=0)
 
-    temp_matching_df = pd.DataFrame(columns=['VAE_x_coord','VAE_y_coord','VAE_z_coord','Unique_ID'])
-    temp_matching_df.VAE_x_coord = z_points[:,0]
-    temp_matching_df.VAE_y_coord = z_points[:,1]
-    if model.zdim == 3 :
-        temp_matching_df.VAE_z_coord = z_points[:,2]
+    temp_matching_df = pd.DataFrame(columns=['VAE_x_coord', 'VAE_y_coord', 'VAE_z_coord', 'Unique_ID'])
+    temp_matching_df.VAE_x_coord = z_points[:, 0]
+    temp_matching_df.VAE_y_coord = z_points[:, 1]
+    if model.zdim == 3:
+        temp_matching_df.VAE_z_coord = z_points[:, 2]
     else:
         temp_matching_df.VAE_z_coord = 0
     temp_matching_df.Unique_ID = unique_ids
     temp_matching_df = temp_matching_df.sort_values(by=['Unique_ID'])
-
 
     ##### Load Ground Truth information about the dataset #####
     MetaData_csv = pd.read_csv(GT_csv_path)
     MetaData_csv = MetaData_csv.sort_values(by=['Unique_ID'])
 
     ##### Match latent code information with ground truth info #####
-    assert np.all(temp_matching_df.Unique_ID.values == MetaData_csv.Unique_ID.values), "Inference dataset doesn't match with csv metadata"
+    assert np.all(
+        temp_matching_df.Unique_ID.values == MetaData_csv.Unique_ID.values), "Inference dataset doesn't match with csv metadata"
     MetaData_csv = MetaData_csv.join(temp_matching_df.set_index('Unique_ID'), on='Unique_ID')
 
     ##### Match raw data information with ground truth info #####
     if with_rawdata:
-        assert np.all(rawdata_frame.Unique_ID.values == MetaData_csv.Unique_ID.values), "Inference dataset doesn't match with csv metadata"
+        assert np.all(
+            rawdata_frame.Unique_ID.values == MetaData_csv.Unique_ID.values), "Inference dataset doesn't match with csv metadata"
         MetaData_csv = MetaData_csv.join(rawdata_frame.set_index('Unique_ID'), on='Unique_ID')
 
     #### Save Final CSV file #####
     if save_csv:
-        MetaData_csv.to_csv(csv_path,index=False)
+        MetaData_csv.to_csv(csv_path, index=False)
         print(f'Final CSV saved to : {csv_path}')
 
     return MetaData_csv
@@ -144,22 +147,24 @@ def metadata_latent_space(model, infer_dataloader, train_on_gpu, GT_csv_path, sa
 ######## Visualization
 ##############################################
 
-def save_reconstruction(loader, VAE, save_path, device):
+def save_reconstruction(loader, VAE, save_path, device, generation=True):
     ''' Show (and save) reconstruction produced by a trained VAE model of 4 random
     samples, alongside 8 newly generated samples, sampled from the prior dataset3_class_distribution
 
     Params :
         - loader (DataLoader) : Dataloader that iterates the dataset by batch
         - VAE (nn.Module) :  trained Pytorch VAE model that will produce latent codes of dataset
-        - save_path (string) : path where to save figures
-        - train_on_gpu (boolean) : Wheter infer latent codes on GPU or not.
+        - save_path (str) : path where to save figures
+        - device (str) : 'cpu' or 'cuda'
+        - generation: generation process
     '''
 
     data, _, _ = next(iter(loader))
-    data = Variable(data,requires_grad=False).to(device)
+    data = Variable(data, requires_grad=False).to(device)
 
     x_recon, _, _, _ = VAE(data)
-    img_grid = make_grid(torch.cat((data[:4, :3, :, :], nn.Sigmoid()(x_recon[:4, :3, :, :]))), nrow=4, padding=12, pad_value=1)
+    img_grid = make_grid(torch.cat((data[:4, :3, :, :], nn.Sigmoid()(x_recon[:4, :3, :, :]))), nrow=4, padding=12,
+                         pad_value=1)
 
     pre, ext = os.path.splitext(save_path)
 
@@ -167,22 +172,23 @@ def save_reconstruction(loader, VAE, save_path, device):
     plt.imshow(img_grid.detach().cpu().permute(1, 2, 0))
     plt.axis('off')
     plt.title(f'Example data and its reconstruction')
-    plt.savefig(pre+'reconstructions.png')
+    plt.savefig(pre + 'reconstructions.png')
 
-    samples = torch.randn(8, VAE.zdim, 1, 1)
-    samples = Variable(samples, requires_grad=False).to(device)
-    recon = VAE.decode(samples)
-    img_grid = make_grid(nn.Sigmoid()(recon[:, :3, :, :]), nrow=4, padding=12, pad_value=1)
+    if generation:
+        samples = torch.randn(8, VAE.zdim, 1, 1)
+        samples = Variable(samples, requires_grad=False).to(device)
+        recon = VAE.decode(samples)
+        img_grid = make_grid(nn.Sigmoid()(recon[:, :3, :, :]), nrow=4, padding=12, pad_value=1)
 
-    plt.figure(figsize=(10, 5))
-    plt.imshow(img_grid.detach().cpu().permute(1, 2, 0))
-    plt.axis('off')
-    plt.title(f'Random generated samples')
-    plt.savefig(pre+'generatedSamples.png')
+        plt.figure(figsize=(10, 5))
+        plt.imshow(img_grid.detach().cpu().permute(1, 2, 0))
+        plt.axis('off')
+        plt.title(f'Random generated samples')
+        plt.savefig(pre + 'generatedSamples.png')
 
 
-
-def plot_from_csv(path_to_csv,low_dim_names=['VAE_x_coord','VAE_y_coord','VAE_z_coord'],dim=3,num_class=7,column=None,as_str=False):
+def plot_from_csv(path_to_csv, low_dim_names=['VAE_x_coord', 'VAE_y_coord', 'VAE_z_coord'], dim=3, num_class=7,
+                  column=None, as_str=False):
     '''
     Plot on a plotly figure the latent space produced by any methods, already stored in a csv file.
 
@@ -202,31 +208,34 @@ def plot_from_csv(path_to_csv,low_dim_names=['VAE_x_coord','VAE_y_coord','VAE_z_
     plot_from_csv(path_to_csv=...,low_dim_names=...,num_class=7) : Latent Codes color-coded based on int values (1-7) stored in 'GT_Label' column
     plot_from_csv(path_to_csv=...,low_dim_names=...,column='Shape_Factor',as_str=False) : Latent Codes color-coded based on a color bar that cover the range of ground truth 'Shape_Factor'
     '''
-    if isinstance(path_to_csv,str):
+    if isinstance(path_to_csv, str):
         MetaData_csv = pd.read_csv(path_to_csv)
     else:
         MetaData_csv = path_to_csv
 
     if dim == 3:
-        if column==None:
-        ##### Fig 1 : Plot each single cell in latent space with GT cluster labels
+        if column == None:
+            ##### Fig 1 : Plot each single cell in latent space with GT cluster labels
             traces = []
             for i in range(num_class):
-                scatter = go.Scatter3d(x=MetaData_csv[MetaData_csv['GT_label']==i+1][low_dim_names[0]].values,y=MetaData_csv[MetaData_csv['GT_label']==i+1][low_dim_names[1]].values,
-                    z=MetaData_csv[MetaData_csv['GT_label']==i+1][low_dim_names[2]].values, mode='markers',
-                    marker=dict(size=3, opacity=1),
-                    name=f'Cluster {i+1}')
+                scatter = go.Scatter3d(x=MetaData_csv[MetaData_csv['GT_label'] == i + 1][low_dim_names[0]].values,
+                                       y=MetaData_csv[MetaData_csv['GT_label'] == i + 1][low_dim_names[1]].values,
+                                       z=MetaData_csv[MetaData_csv['GT_label'] == i + 1][low_dim_names[2]].values,
+                                       mode='markers',
+                                       marker=dict(size=3, opacity=1),
+                                       name=f'Cluster {i + 1}')
                 traces.append(scatter)
-            layout= dict(title='Latent Representation, colored by GT clustered')
+            layout = dict(title='Latent Representation, colored by GT clustered')
             fig_3d_1 = go.Figure(data=traces, layout=layout)
-            fig_3d_1.update_layout(margin=dict(l=0,r=0,b=0,t=0),showlegend=True,legend=dict(y=-.1))
+            fig_3d_1.update_layout(margin=dict(l=0, r=0, b=0, t=0), showlegend=True, legend=dict(y=-.1))
 
             return fig_3d_1
-        else :
-            #Color from the info store in 'column' pass in argument
+        else:
+            # Color from the info store in 'column' pass in argument
             if as_str:
-                MetaData_csv[column]=MetaData_csv[column].astype(str)
-            fig = px.scatter_3d(MetaData_csv,x=low_dim_names[0],y=low_dim_names[1],z=low_dim_names[2],color=column,color_discrete_sequence=px.colors.qualitative.T10+px.colors.qualitative.Alphabet)
+                MetaData_csv[column] = MetaData_csv[column].astype(str)
+            fig = px.scatter_3d(MetaData_csv, x=low_dim_names[0], y=low_dim_names[1], z=low_dim_names[2], color=column,
+                                color_discrete_sequence=px.colors.qualitative.T10 + px.colors.qualitative.Alphabet)
             fig.update_traces(marker=dict(size=3))
             return fig
 
@@ -235,25 +244,27 @@ def plot_from_csv(path_to_csv,low_dim_names=['VAE_x_coord','VAE_y_coord','VAE_z_
         traces = []
         MS = MetaData_csv
         for i in range(num_class):
-            scatter = go.Scatter(x=MS[MetaData_csv['GT_label']==i+1][low_dim_names[0]].values,y=MS[MetaData_csv['GT_label']==i+1][low_dim_names[1]].values,
-                mode='markers',
-                marker=dict(size=3, opacity=0.8),
-                name=f'Cluster {i+1}')
+            scatter = go.Scatter(x=MS[MetaData_csv['GT_label'] == i + 1][low_dim_names[0]].values,
+                                 y=MS[MetaData_csv['GT_label'] == i + 1][low_dim_names[1]].values,
+                                 mode='markers',
+                                 marker=dict(size=3, opacity=0.8),
+                                 name=f'Cluster {i + 1}')
             traces.append(scatter)
-        layout= dict(title='Latent Representation, colored by GT clustered')
+        layout = dict(title='Latent Representation, colored by GT clustered')
         fig_2d_1 = go.Figure(data=traces, layout=layout)
-        fig_2d_1.update_layout(margin=dict(l=0,r=0,b=0,t=0),showlegend=True)
+        fig_2d_1.update_layout(margin=dict(l=0, r=0, b=0, t=0), showlegend=True)
 
         return fig_2d_1
+
 
 def plot_train_result_info(history, best_epoch=None, save_path=None):
     print(">>>>>>>>>PLOTING INFOz")
     # columns=['global_VAE_loss', 'kl_loss_1', 'kl_loss_2', 'recon_loss_1', 'recon_loss_2'])
     fig = plt.figure(figsize=(15, 15))
     gs = GridSpec(3, 2, figure=fig)
-    ax1 = fig.add_subplot(gs[0, :]) #Frist full row
-    ax2 = fig.add_subplot(gs[1, 0]) # bottom left on 4x4 grid
-    ax3 = fig.add_subplot(gs[1, 1]) # bottom right on a 4x4 grid
+    ax1 = fig.add_subplot(gs[0, :])  # Frist full row
+    ax2 = fig.add_subplot(gs[1, 0])  # bottom left on 4x4 grid
+    ax3 = fig.add_subplot(gs[1, 1])  # bottom right on a 4x4 grid
     ax4 = fig.add_subplot(gs[2, 0])  # bottom right on a 4x4 grid
     ax5 = fig.add_subplot(gs[2, 1])  # bottom right on a 4x4 grid
     #  plot the overall loss
@@ -287,9 +298,10 @@ def plot_train_result_info(history, best_epoch=None, save_path=None):
     ax5.legend()
 
     if save_path != None:
-        plt.savefig(save_path+'los_evolution.png')
+        plt.savefig(save_path + 'los_evolution.png')
 
     return fig
+
 
 def plot_train_result(history, best_epoch=None, save_path=None):
     """Display training and validation loss evolution over epochs
@@ -310,12 +322,12 @@ def plot_train_result(history, best_epoch=None, save_path=None):
     """
     print(">>>>>>>>>PLOTING")
     # columns=['global_VAE_loss', 'kl_loss_1', 'kl_loss_2', 'recon_loss_1', 'recon_loss_2'])
-    fig = plt.figure(figsize=(15,15))
-    ax1 = fig.add_subplot(2,1,1) #Frist full row
-    ax2 = fig.add_subplot(2,2,3) # bottom left on 4x4 grid
-    ax3 = fig.add_subplot(2,2,4) # bottom right on a 4x4 grid
+    fig = plt.figure(figsize=(15, 15))
+    ax1 = fig.add_subplot(2, 1, 1)  # Frist full row
+    ax2 = fig.add_subplot(2, 2, 3)  # bottom left on 4x4 grid
+    ax3 = fig.add_subplot(2, 2, 4)  # bottom right on a 4x4 grid
     #  plot the overall loss
-    ax1.plot(history['global_VAE_loss'][0:], color='dodgerblue',label='train')
+    ax1.plot(history['global_VAE_loss'][0:], color='dodgerblue', label='train')
     # ax1.plot(history['global_VAE_loss_val'][0:],color='lightsalmon',label='test')
     ax1.set_title('Global VAE Loss')
     '''
@@ -323,22 +335,21 @@ def plot_train_result(history, best_epoch=None, save_path=None):
         ax1.axvline(best_epoch, linestyle='--', color='r',label='Early stopping')
     '''
     ax2.set_title('Reconstruction Loss')
-    ax2.plot(history['recon_loss_1'][0:], color='dodgerblue',label='VAE_1')
-    ax2.plot(history['recon_loss_2'][0:], color='lightsalmon',label='VAE_2')
+    ax2.plot(history['recon_loss_1'][0:], color='dodgerblue', label='VAE_1')
+    ax2.plot(history['recon_loss_2'][0:], color='lightsalmon', label='VAE_2')
 
     ax3.set_title('Fit to Prior')
-    ax3.plot(history['kl_loss_1'][0:], color='dodgerblue',label='train')
-    ax3.plot(history['kl_loss_2'][0:], color='lightsalmon',label='test')
+    ax3.plot(history['kl_loss_1'][0:], color='dodgerblue', label='train')
+    ax3.plot(history['kl_loss_2'][0:], color='lightsalmon', label='test')
 
     ax1.legend()
     ax2.legend()
     ax3.legend()
 
     if save_path != None:
-        plt.savefig(save_path+'los_evolution.png')
+        plt.savefig(save_path + 'los_evolution.png')
 
     return fig
-
 
 
 ############################
@@ -348,6 +359,7 @@ def plot_train_result(history, best_epoch=None, save_path=None):
 class EarlyStopping:
     """Early stops the training if validation loss doesn't improve after a given patience.
     This class is obtained from Bjarten Implementation (GitHub open source), thanks to him"""
+
     def __init__(self, patience=7, verbose=False, delta=0, path='checkpoint.pt'):
         """
         Args:
@@ -374,7 +386,7 @@ class EarlyStopping:
 
         score = -val_loss
 
-        if self.best_score is None or score > self.best_score + self.delta: # loss decreased
+        if self.best_score is None or score > self.best_score + self.delta:  # loss decreased
             self.best_score = score
             # update the min loss so far
             self.val_loss_min = val_loss
@@ -383,7 +395,7 @@ class EarlyStopping:
             self.stop_epoch = model_epoch
             if self.verbose:
                 print(f'Validation loss decreased ({self.val_loss_min:.6f} --> {val_loss:.6f})')
-        else: # loss not decreasing
+        else:  # loss not decreasing
             self.counter += 1
             print(f'EarlyStopping counter: {self.counter} out of {self.patience}')
             if self.counter >= self.patience:
@@ -391,7 +403,7 @@ class EarlyStopping:
                 self.early_stop = True
 
     def save_model(self, VAE, MLP):
-        if self.path == '': # dont save
+        if self.path == '':  # dont save
             print("====>NOT saving")
             return
         else:
@@ -418,15 +430,15 @@ def save_checkpoint(model, path):
     # Basic details, as mapping id to classe and number of epochs already trained
     checkpoint = {
         'epochs': model.epochs,
-        'zdim' : model.zdim,
-        'channels' : model.channels,
-        'layer_count' : model.layer_count,
-        'base' : model.base,
-        'loss' : model.loss,
-        'input_size' : model.input_size,
-        'model_type' : model.model_type
+        'zdim': model.zdim,
+        'channels': model.channels,
+        'layer_count': model.layer_count,
+        'base': model.base,
+        'loss': model.loss,
+        'input_size': model.input_size,
+        'model_type': model.model_type
     }
-    checkpoint['state_dict'] = model.state_dict() #Weights
+    checkpoint['state_dict'] = model.state_dict()  # Weights
 
     # Add the optimizer
     checkpoint['optimizer'] = model.optimizer
@@ -435,17 +447,20 @@ def save_checkpoint(model, path):
     # Save the data to the path
     torch.save(checkpoint, path)
 
+
 def save_brute(model, path):
     '''Save the entire model
     For fast development purpose only'''
 
     torch.save(model, path)
 
+
 def load_brute(path):
     '''To reload entire model
     For fast development purpose only'''
 
     return torch.load(path)
+
 
 def load_checkpoint(path):
     """Load a VAE network, pre-trained on single cell images
@@ -463,11 +478,12 @@ def load_checkpoint(path):
     train_on_gpu = cuda.is_available()
     if train_on_gpu:
         checkpoint = torch.load(path)
-    else :
-        checkpoint = torch.load(path,map_location='cpu')  #If saved from GPU, need to be reload on GPU as well !
+    else:
+        checkpoint = torch.load(path, map_location='cpu')  # If saved from GPU, need to be reload on GPU as well !
 
-    if checkpoint['model_type'] == 'VAE_CNN_vanilla' :
-        model = VAE(zdim=checkpoint['zdim'],channels=checkpoint['channels'],base=checkpoint['base'],loss=checkpoint['loss'],layer_count=checkpoint['layer_count'],input_size=checkpoint['input_size'])
+    if checkpoint['model_type'] == 'VAE_CNN_vanilla':
+        model = VAE(zdim=checkpoint['zdim'], channels=checkpoint['channels'], base=checkpoint['base'],
+                    loss=checkpoint['loss'], layer_count=checkpoint['layer_count'], input_size=checkpoint['input_size'])
 
     # Load in the state dict
     model.load_state_dict(checkpoint['state_dict'])
@@ -502,7 +518,7 @@ def plot_latent_space(model, dataloader, train_on_gpu):
     labels_list = []
     z_list = []
 
-    if model.zdim > 3 :
+    if model.zdim > 3:
         print(f'Latent space is >3D ({model.zdim} dimensional), no visualization is provided')
         return None, None, None, None
 
@@ -516,60 +532,62 @@ def plot_latent_space(model, dataloader, train_on_gpu):
 
             data = Variable(data, requires_grad=False)
 
-            #The mean can be taken as the most likely z
+            # The mean can be taken as the most likely z
             z, _ = model.encode(data)
-            z = z.view(-1,model.zdim)
+            z = z.view(-1, model.zdim)
             z_list.append((z.data).cpu().numpy())
             labels_list.append(labels.numpy())
 
-        print(f'In progress...{i*len(data)}/{len(dataloader.dataset)}',end='\r')
+        print(f'In progress...{i * len(data)}/{len(dataloader.dataset)}', end='\r')
 
-    z_points = np.concatenate(z_list,axis=0) # datasize x 3
-    true_label = np.concatenate(labels_list,axis=0)
+    z_points = np.concatenate(z_list, axis=0)  # datasize x 3
+    true_label = np.concatenate(labels_list, axis=0)
 
     if model.zdim == 3:
-        fig = plt.figure(figsize=(10,10))
-        #ax = Axes3D(fig)
-        ax=plt.axes(projection='3d')
+        fig = plt.figure(figsize=(10, 10))
+        # ax = Axes3D(fig)
+        ax = plt.axes(projection='3d')
 
         cmap1 = plt.get_cmap('tab20')
-        colors1 = cmap1(np.linspace(0,1.0,20))
+        colors1 = cmap1(np.linspace(0, 1.0, 20))
         cmap2 = plt.get_cmap('Set3')
-        colors2 = cmap2(np.linspace(0,1.0,10))
-        colors = np.concatenate((colors1,colors2),0)
+        colors2 = cmap2(np.linspace(0, 1.0, 10))
+        colors = np.concatenate((colors1, colors2), 0)
         zorder = 100
         for i in np.unique(true_label):
             zorder -= 10
-            if i+1 == 7: #Do not plot process 7 for more readability
+            if i + 1 == 7:  # Do not plot process 7 for more readability
                 continue
-            ax.scatter3D(z_points[true_label==i,0],z_points[true_label==i,1],z_points[true_label==i,2],s=5,color=colors[i],zorder=zorder, label=f'Process_{i+1}')
+            ax.scatter3D(z_points[true_label == i, 0], z_points[true_label == i, 1], z_points[true_label == i, 2], s=5,
+                         color=colors[i], zorder=zorder, label=f'Process_{i + 1}')
         ax.legend()
         return fig, ax, fig, ax
 
     if model.zdim == 2:
-        fig = plt.figure(figsize=(12,12))
+        fig = plt.figure(figsize=(12, 12))
         ax = plt.subplot(111)
 
-        #if 2D plot a separated plot with confidence ellipse
-        fig2, ax_ellipse = plt.subplots(figsize=(12,12))
+        # if 2D plot a separated plot with confidence ellipse
+        fig2, ax_ellipse = plt.subplots(figsize=(12, 12))
 
         cmap1 = plt.get_cmap('tab20')
-        colors1 = cmap1(np.linspace(0,1.0,20))
+        colors1 = cmap1(np.linspace(0, 1.0, 20))
         cmap2 = plt.get_cmap('Set3')
-        colors2 = cmap2(np.linspace(0,1.0,10))
-        colors = np.concatenate((colors1,colors2),0)
+        colors2 = cmap2(np.linspace(0, 1.0, 10))
+        colors = np.concatenate((colors1, colors2), 0)
 
         zorder = 100
         for i in np.unique(true_label):
             zorder -= 10
-            ax.scatter(z_points[true_label==i,0],z_points[true_label==i,1],s=5,color=colors[i],zorder=zorder, label=f'Process_{i+1}')
+            ax.scatter(z_points[true_label == i, 0], z_points[true_label == i, 1], s=5, color=colors[i], zorder=zorder,
+                       label=f'Process_{i + 1}')
 
-            mu_1 = np.mean(z_points[true_label==i,0])
-            mu_2 = np.mean(z_points[true_label==i,1])
+            mu_1 = np.mean(z_points[true_label == i, 0])
+            mu_2 = np.mean(z_points[true_label == i, 1])
 
-            confidence_ellipse(z_points[true_label==i,0], z_points[true_label==i,1], ax_ellipse,n_std=0.7,
-                alpha=0.5,facecolor=colors[i], edgecolor=colors[i] , zorder=0)
-            ax_ellipse.scatter(mu_1, mu_2,marker='X', s=50, color=colors[i],zorder=zorder,label=f'Process_{i+1}')
+            confidence_ellipse(z_points[true_label == i, 0], z_points[true_label == i, 1], ax_ellipse, n_std=0.7,
+                               alpha=0.5, facecolor=colors[i], edgecolor=colors[i], zorder=0)
+            ax_ellipse.scatter(mu_1, mu_2, marker='X', s=50, color=colors[i], zorder=zorder, label=f'Process_{i + 1}')
 
         ax.legend()
         ax_ellipse.legend()
@@ -603,16 +621,16 @@ def confidence_ellipse(x, y, ax, n_std=3.0, facecolor='none', **kwargs):
         raise ValueError("x and y must be the same size")
 
     cov = np.cov(x, y)
-    pearson = cov[0, 1]/np.sqrt(cov[0, 0] * cov[1, 1])
+    pearson = cov[0, 1] / np.sqrt(cov[0, 0] * cov[1, 1])
     # Using a special case to obtain the eigenvalues of this
     # two-dimensionl dataset.
     ell_radius_x = np.sqrt(1 + pearson)
     ell_radius_y = np.sqrt(1 - pearson)
     ellipse = Ellipse((0, 0),
-        width=ell_radius_x * 2,
-        height=ell_radius_y * 2,
-        facecolor=facecolor,
-        **kwargs)
+                      width=ell_radius_x * 2,
+                      height=ell_radius_y * 2,
+                      facecolor=facecolor,
+                      **kwargs)
 
     # Calculating the stdandard deviation of x from
     # the squareroot of the variance and multiplying
@@ -638,5 +656,5 @@ def show(img, train_on_gpu):
         npimg = img.cpu().numpy()
     else:
         npimg = img.numpy()
-    plt.figure(figsize=(10,10))
-    plt.imshow(np.transpose(npimg, (1,2,0)), interpolation='nearest')
+    plt.figure(figsize=(10, 10))
+    plt.imshow(np.transpose(npimg, (1, 2, 0)), interpolation='nearest')

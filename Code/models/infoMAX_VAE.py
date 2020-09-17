@@ -30,6 +30,7 @@ class MLP_MI_estimator(nn.Module):
     representation of a f-divergence. Finding t() that maximize this f-divergence,
     lead to a variation representation that is a tight bound estimator of mutual information.
     '''
+
     def __init__(self, input_dim, zdim=3):
         super(MLP_MI_estimator, self).__init__()
 
@@ -54,20 +55,22 @@ class MLP_MI_estimator(nn.Module):
     def forward(self, x, z):
         x = x.view(-1, self.input_dim)
         z = z.view(-1, self.zdim)
-        x_g = self.MLP_g(x) # Batchsize x 32
-        y_h = self.MLP_h(z) # Batchsize x 32
-        scores = torch.matmul(y_h, torch.transpose(x_g,0,1))
+        x_g = self.MLP_g(x)  # Batchsize x 32
+        y_h = self.MLP_h(z)  # Batchsize x 32
+        scores = torch.matmul(y_h, torch.transpose(x_g, 0, 1))
 
-        return scores #Each element i,j is a scalar in R. f(xi,proj_j)
+        return scores  # Each element i,j is a scalar in R. f(xi,proj_j)
 
-#Compute the Noise Constrastive Estimation (NCE) loss
+
+# Compute the Noise Constrastive Estimation (NCE) loss
 def infoNCE_bound(scores):
     '''Bound from Van Den Oord and al. (2018)'''
-    nll = torch.mean( torch.diag(scores) - torch.logsumexp(scores, dim=1))
-    k =scores.size()[0]
+    nll = torch.mean(torch.diag(scores) - torch.logsumexp(scores, dim=1))
+    k = scores.size()[0]
     mi = np.log(k) + nll
 
     return mi
+
 
 ################################################
 ### CNN-VAE architecture
@@ -86,57 +89,57 @@ class CNN_VAE(nn.Module):
         self.base_dec = base_dec
 
         self.conv_enc = nn.Sequential(
-            Conv(self.input_channels,base_enc,4,stride=2,padding=1), #stride 2, resolution is splitted by half
-            Conv(base_enc,base_enc*2,4,stride=2,padding=1),#16x16
-            Conv(base_enc*2,base_enc*4,4,stride=2,padding=1),# 8x8
-            Conv(base_enc*4,base_enc*8,4,stride=2,padding=1), #4x4
-            Conv(base_enc*8,base_enc*16,4,stride=2,padding=1), #2x2
+            Conv(self.input_channels, base_enc, 4, stride=2, padding=1),  # stride 2, resolution is splitted by half
+            Conv(base_enc, base_enc * 2, 4, stride=2, padding=1),  # 16x16
+            Conv(base_enc * 2, base_enc * 4, 4, stride=2, padding=1),  # 8x8
+            Conv(base_enc * 4, base_enc * 8, 4, stride=2, padding=1),  # 4x4
+            Conv(base_enc * 8, base_enc * 16, 4, stride=2, padding=1),  # 2x2
         )
         self.linear_enc = nn.Sequential(
-            nn.Linear(2*2*base_enc*16,1024),
+            nn.Linear(2 * 2 * base_enc * 16, 1024),
             nn.BatchNorm1d(1024),
             nn.ReLU(),
-            nn.Linear(1024,256),
+            nn.Linear(1024, 256),
             nn.BatchNorm1d(256),
             nn.ReLU()
         )
-        self.mu_logvar_gen = nn.Linear(256,self.zdim*2)
+        self.mu_logvar_gen = nn.Linear(256, self.zdim * 2)
 
         self.linear_dec = nn.Sequential(
-            nn.Linear(self.zdim,1024),
+            nn.Linear(self.zdim, 1024),
             nn.BatchNorm1d(1024),
             nn.ReLU(),
-            nn.Linear(1024,2*2*base_dec*16),
-            nn.BatchNorm1d(2*2*base_dec*16),
+            nn.Linear(1024, 2 * 2 * base_dec * 16),
+            nn.BatchNorm1d(2 * 2 * base_dec * 16),
             nn.ReLU()
         )
 
         self.conv_dec = nn.Sequential(
-            ConvUpsampling(base_dec*16,base_dec*8,4,stride=2,padding=1), #4
-            ConvUpsampling(base_dec*8,base_dec*4,4,stride=2,padding=1), #8
-            ConvUpsampling(base_dec*4,base_dec*2,4,stride=2,padding=1), #16
-            ConvUpsampling(base_dec*2,base_dec,4,stride=2,padding=1), #32
-            nn.Upsample(scale_factor=4,mode='bilinear'),
-            nn.Conv2d(base_dec, self.input_channels, 4, 2, 1), #192
-            #nn.Sigmoid(), #Sigmoid compute directly in the loss (more stable)
+            ConvUpsampling(base_dec * 16, base_dec * 8, 4, stride=2, padding=1),  # 4
+            ConvUpsampling(base_dec * 8, base_dec * 4, 4, stride=2, padding=1),  # 8
+            ConvUpsampling(base_dec * 4, base_dec * 2, 4, stride=2, padding=1),  # 16
+            ConvUpsampling(base_dec * 2, base_dec, 4, stride=2, padding=1),  # 32
+            nn.Upsample(scale_factor=4, mode='bilinear'),
+            nn.Conv2d(base_dec, self.input_channels, 4, 2, 1),  # 192
+            # nn.Sigmoid(), #Sigmoid compute directly in the loss (more stable)
         )
 
-        self.stabilize_exp = nn.Hardtanh(min_val=-6.,max_val=2.) #linear between min and max
-
+        self.stabilize_exp = nn.Hardtanh(min_val=-6., max_val=2.)  # linear between min and max
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d) or isinstance(m, nn.ConvTranspose2d):
-                xavier_normal_(m.weight,gain=math.sqrt(2./(1+0.01))) #Gain adapted for LeakyReLU activation function
+                xavier_normal_(m.weight,
+                               gain=math.sqrt(2. / (1 + 0.01)))  # Gain adapted for LeakyReLU activation function
                 m.bias.data.fill_(0.01)
             elif isinstance(m, nn.BatchNorm2d):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
 
     def reparameterize(self, mu, logvar):
-        if self.training: # if prediction, give the mean as a sample, which is the most likely
+        if self.training:  # if prediction, give the mean as a sample, which is the most likely
             std = torch.exp(0.5 * logvar)
-            eps = torch.randn_like(std) #random numbers from a normal distribution with mean 0 and variance 1
-            return mu + eps*std
+            eps = torch.randn_like(std)  # random numbers from a normal distribution with mean 0 and variance 1
+            return mu + eps * std
         else:
             return mu
 
@@ -146,7 +149,7 @@ class CNN_VAE(nn.Module):
         x = x.view((batch_size, -1))
         x = self.linear_enc(x)
         mu_logvar = self.mu_logvar_gen(x)
-        mu_z, logvar_z = mu_logvar.view(-1,self.zdim,2).unbind(-1)
+        mu_z, logvar_z = mu_logvar.view(-1, self.zdim, 2).unbind(-1)
         logvar_z = self.stabilize_exp(logvar_z)
 
         return mu_z, logvar_z
@@ -155,7 +158,7 @@ class CNN_VAE(nn.Module):
         batch_size = z.size(0)
         z = z.view((batch_size, -1))
         x = self.linear_dec(z)
-        x = x.view((batch_size,self.base_dec*16,2,2))
+        x = x.view((batch_size, self.base_dec * 16, 2, 2))
         x_recon = self.conv_dec(x)
 
         return x_recon
@@ -175,7 +178,7 @@ class CNN_VAE(nn.Module):
         '''Permutation in only a trick to be able to get sample from the marginal
         q(z) in a simple manner, to evaluate the variational representation of f-divergence
         '''
-        assert z.dim() == 2 #In the form of  batch x latentVariables
+        assert z.dim() == 2  # In the form of  batch x latentVariables
         B, _ = z.size()
         perm = torch.randperm(B).cuda()
         perm_z = z[perm]
@@ -200,60 +203,60 @@ class CNN_128_VAE(nn.Module):
         self.base_dec = base_dec
 
         self.conv_enc = nn.Sequential(
-            Conv(self.input_channels,base_enc,4,stride=2,padding=1), #stride 2, resolution is splitted by half
-            Conv(base_enc,base_enc*2,4,stride=2,padding=1),#32
-            Conv(base_enc*2,base_enc*4,4,stride=2,padding=1),# 16
-            Conv(base_enc*4,base_enc*8,4,stride=2,padding=1), #8
-            Conv(base_enc*8,base_enc*16,4,stride=2,padding=1), #4
-            Conv(base_enc*16,base_enc*16,4,stride=2,padding=1), #2
+            Conv(self.input_channels, base_enc, 4, stride=2, padding=1),  # stride 2, resolution is splitted by half
+            Conv(base_enc, base_enc * 2, 4, stride=2, padding=1),  # 32
+            Conv(base_enc * 2, base_enc * 4, 4, stride=2, padding=1),  # 16
+            Conv(base_enc * 4, base_enc * 8, 4, stride=2, padding=1),  # 8
+            Conv(base_enc * 8, base_enc * 16, 4, stride=2, padding=1),  # 4
+            Conv(base_enc * 16, base_enc * 16, 4, stride=2, padding=1),  # 2
         )
         self.linear_enc = nn.Sequential(
-            nn.Linear(2*2*base_enc*16,1024),
+            nn.Linear(2 * 2 * base_enc * 16, 1024),
             nn.BatchNorm1d(1024),
             nn.ReLU(),
-            nn.Linear(1024,256),
+            nn.Linear(1024, 256),
             nn.BatchNorm1d(256),
             nn.ReLU()
         )
-        self.mu_logvar_gen = nn.Linear(256,self.zdim*2)
+        self.mu_logvar_gen = nn.Linear(256, self.zdim * 2)
 
         self.linear_dec = nn.Sequential(
-            nn.Linear(self.zdim,1024),
+            nn.Linear(self.zdim, 1024),
             nn.BatchNorm1d(1024),
             nn.ReLU(),
-            nn.Linear(1024,2*2*base_dec*16),
-            nn.BatchNorm1d(2*2*base_dec*16),
+            nn.Linear(1024, 2 * 2 * base_dec * 16),
+            nn.BatchNorm1d(2 * 2 * base_dec * 16),
             nn.ReLU()
         )
 
         self.conv_dec = nn.Sequential(
-            ConvUpsampling(base_dec*16,base_dec*8,4,stride=2,padding=1), #24
-            ConvUpsampling(base_dec*8,base_dec*4,4,stride=2,padding=1), #24
-            ConvUpsampling(base_dec*4,base_dec*2,4,stride=2,padding=1), #48
-            ConvUpsampling(base_dec*2,base_dec,4,stride=2,padding=1), #96
-            ConvUpsampling(base_dec,base_dec,4,stride=2,padding=1), #96
-            nn.Upsample(scale_factor=4,mode='bilinear'),
-            nn.Conv2d(base_dec, self.input_channels, 4, 2, 1), #192
-            #nn.Sigmoid(), #Sigmoid compute directly in the loss (more stable)
+            ConvUpsampling(base_dec * 16, base_dec * 8, 4, stride=2, padding=1),  # 24
+            ConvUpsampling(base_dec * 8, base_dec * 4, 4, stride=2, padding=1),  # 24
+            ConvUpsampling(base_dec * 4, base_dec * 2, 4, stride=2, padding=1),  # 48
+            ConvUpsampling(base_dec * 2, base_dec, 4, stride=2, padding=1),  # 96
+            ConvUpsampling(base_dec, base_dec, 4, stride=2, padding=1),  # 96
+            nn.Upsample(scale_factor=4, mode='bilinear'),
+            nn.Conv2d(base_dec, self.input_channels, 4, 2, 1),  # 192
+            # nn.Sigmoid(), #Sigmoid compute directly in the loss (more stable)
         )
 
-        self.stabilize_exp = nn.Hardtanh(min_val=-6.,max_val=2.) #linear between min and max
-        #to constrain logvar in a reasonable range
+        self.stabilize_exp = nn.Hardtanh(min_val=-6., max_val=2.)  # linear between min and max
+        # to constrain logvar in a reasonable range
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d) or isinstance(m, nn.ConvTranspose2d):
-                xavier_normal_(m.weight,gain=math.sqrt(2./(1+0.01))) #Gain adapted for LeakyReLU activation function
+                xavier_normal_(m.weight,
+                               gain=math.sqrt(2. / (1 + 0.01)))  # Gain adapted for LeakyReLU activation function
                 m.bias.data.fill_(0.01)
             elif isinstance(m, nn.BatchNorm2d):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
 
-
     def reparameterize(self, mu, logvar):
-        if self.training: # if prediction, give the mean as a sample, which is the most likely
+        if self.training:  # if prediction, give the mean as a sample, which is the most likely
             std = torch.exp(0.5 * logvar)
-            eps = torch.randn_like(std) #random numbers from a normal distribution with mean 0 and variance 1
-            return mu + eps*std
+            eps = torch.randn_like(std)  # random numbers from a normal distribution with mean 0 and variance 1
+            return mu + eps * std
         else:
             return mu
 
@@ -263,7 +266,7 @@ class CNN_128_VAE(nn.Module):
         x = x.view((batch_size, -1))
         x = self.linear_enc(x)
         mu_logvar = self.mu_logvar_gen(x)
-        mu_z, logvar_z = mu_logvar.view(-1,self.zdim,2).unbind(-1)
+        mu_z, logvar_z = mu_logvar.view(-1, self.zdim, 2).unbind(-1)
         logvar_z = self.stabilize_exp(logvar_z)
 
         return mu_z, logvar_z
@@ -272,7 +275,7 @@ class CNN_128_VAE(nn.Module):
         batch_size = z.size(0)
         z = z.view((batch_size, -1))
         x = self.linear_dec(z)
-        x = x.view((batch_size,self.base_dec*16,2,2))
+        x = x.view((batch_size, self.base_dec * 16, 2, 2))
         x_recon = self.conv_dec(x)
 
         return x_recon
@@ -292,11 +295,12 @@ class CNN_128_VAE(nn.Module):
         '''Permutation in only a trick to be able to get sample from the marginal
         q(z) in a simple manner, to evaluate the variational representation of f-divergence
         '''
-        assert z.dim() == 2 #In the form of  batch x latentVariables
+        assert z.dim() == 2  # In the form of  batch x latentVariables
         B, _ = z.size()
         perm = torch.randperm(B).cuda()
         perm_z = z[perm]
         return perm_z
+
 
 class MLP_MI_128_estimator(nn.Module):
     '''MLP, that take in input both input data and latent codes and output
@@ -305,7 +309,8 @@ class MLP_MI_128_estimator(nn.Module):
     representation of a f-divergence. Finding t() that maximize this f-divergence,
     lead to a variation representation that is an exact estimator of mutual information.
     '''
-    def __init__(self,input_dim,zdim=3):
+
+    def __init__(self, input_dim, zdim=3):
         super(MLP_MI_128_estimator, self).__init__()
 
         self.input_dim = input_dim
@@ -327,10 +332,10 @@ class MLP_MI_128_estimator(nn.Module):
         )
 
     def forward(self, x, z):
-        x = x.view(-1,self.input_dim)
-        z = z.view(-1,self.zdim)
-        x_g = self.MLP_g(x) #Batchsize x 32
-        y_h = self.MLP_h(z) #Batchsize x 32
-        scores = torch.matmul(y_h,torch.transpose(x_g,0,1))
+        x = x.view(-1, self.input_dim)
+        z = z.view(-1, self.zdim)
+        x_g = self.MLP_g(x)  # Batchsize x 32
+        y_h = self.MLP_h(z)  # Batchsize x 32
+        scores = torch.matmul(y_h, torch.transpose(x_g, 0, 1))
 
         return scores
