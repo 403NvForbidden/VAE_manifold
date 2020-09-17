@@ -34,7 +34,6 @@ from util.data_processing import get_train_val_dataloader, imshow_tensor, get_in
 from models.train_net import train_VAE_model, train_2_stage_VAE_model
 from util.helpers import plot_train_result, save_checkpoint, load_checkpoint, save_brute, load_brute, plot_from_csv, metadata_latent_space, save_reconstruction
 
-
 ##########################################################
 # %% META
 ##########################################################
@@ -90,8 +89,6 @@ VAE_1, VAE_2, history, best_epoch = train_2_stage_VAE_model(EPOCHS, VAE_1, VAE_2
 ##########################################################
  # %% Plot results
 ##########################################################
-
-
 fig = plot_train_result(history, best_epoch, save_path=save_model_path)
 fig.show()
 plt.show()

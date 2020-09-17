@@ -70,7 +70,7 @@ input_size = 64 # the input size of the image
 batch_size = 32 # Change to fit hardware
 input_channel = 3
 
-EPOCHS = 5
+EPOCHS = 40
 train_loader, valid_loader = get_train_val_dataloader(dataset_path, input_size, batch_size, test_split=0.1)
 model_name = f'2stage_infoVAE_{datetime.datetime.now().strftime("%Y-%m-%d-%H:%M")}'
 save_model_path = outdir + f'{model_name}_{EPOCHS}/' if save else ''

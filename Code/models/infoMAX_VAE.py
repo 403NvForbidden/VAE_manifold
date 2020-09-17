@@ -52,15 +52,13 @@ class MLP_MI_estimator(nn.Module):
         )
 
     def forward(self, x, z):
-        print()
         x = x.view(-1, self.input_dim)
         z = z.view(-1, self.zdim)
-        x_g = self.MLP_g(x) #Batchsize x 32
-        y_h = self.MLP_h(z) #Batchsize x 32
+        x_g = self.MLP_g(x) # Batchsize x 32
+        y_h = self.MLP_h(z) # Batchsize x 32
         scores = torch.matmul(y_h,torch.transpose(x_g,0,1))
 
         return scores #Each element i,j is a scalar in R. f(xi,proj_j)
-
 
 #Compute the Noise Constrastive Estimation (NCE) loss
 def infoNCE_bound(scores):
@@ -71,12 +69,9 @@ def infoNCE_bound(scores):
 
     return mi
 
-
 ################################################
 ### CNN-VAE architecture
 ################################################
-
-
 class CNN_VAE(nn.Module):
 
     def __init__(self, zdim=3, input_channels=3, alpha=1, beta=1, base_enc=32, base_dec=32, depth_factor_dec=2):
