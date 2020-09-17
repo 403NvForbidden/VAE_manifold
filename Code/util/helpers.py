@@ -159,12 +159,12 @@ def save_reconstruction(loader, VAE, save_path, device):
     data = Variable(data,requires_grad=False).to(device)
 
     x_recon, _, _, _ = VAE(data)
-    img_grid = make_grid(torch.cat((data[:4,:3,:,:],nn.Sigmoid()(x_recon[:4,:3,:,:]))), nrow=4, padding=12, pad_value=1)
+    img_grid = make_grid(torch.cat((data[:4, :3, :, :], nn.Sigmoid()(x_recon[:4, :3, :, :]))), nrow=4, padding=12, pad_value=1)
 
-    pre,ext = os.path.splitext(save_path)
+    pre, ext = os.path.splitext(save_path)
 
     plt.figure(figsize=(10, 5))
-    plt.imshow(img_grid.detach().cpu().permute(1,2,0))
+    plt.imshow(img_grid.detach().cpu().permute(1, 2, 0))
     plt.axis('off')
     plt.title(f'Example data and its reconstruction')
     plt.savefig(pre+'reconstructions.png')
@@ -172,10 +172,10 @@ def save_reconstruction(loader, VAE, save_path, device):
     samples = torch.randn(8, VAE.zdim, 1, 1)
     samples = Variable(samples, requires_grad=False).to(device)
     recon = VAE.decode(samples)
-    img_grid = make_grid(nn.Sigmoid()(recon[:,:3,:,:]), nrow=4, padding=12, pad_value=1)
+    img_grid = make_grid(nn.Sigmoid()(recon[:, :3, :, :]), nrow=4, padding=12, pad_value=1)
 
-    plt.figure(figsize=(10,5))
-    plt.imshow(img_grid.detach().cpu().permute(1,2,0))
+    plt.figure(figsize=(10, 5))
+    plt.imshow(img_grid.detach().cpu().permute(1, 2, 0))
     plt.axis('off')
     plt.title(f'Random generated samples')
     plt.savefig(pre+'generatedSamples.png')

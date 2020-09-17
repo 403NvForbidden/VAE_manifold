@@ -34,16 +34,6 @@ from models.infoMAX_VAE import CNN_128_VAE, MLP_MI_estimator
 from util.data_processing import get_train_val_dataloader, imshow_tensor, get_inference_dataset
 from models.train_net import train_VAE_model, train_2_stage_VAE_model, train_2_stage_infoVAE_model
 from util.helpers import plot_train_result, plot_train_result_info, save_checkpoint, load_checkpoint, save_brute, load_brute, plot_from_csv, metadata_latent_space, save_reconstruction
-'''
-##########################################################
-# %% DataLoader and Co
-##########################################################
-import pandas as pd
-history = pd.read_csv('../outputs/2stage_infoVAE_2020-09-10-12:21_10/epochs.csv')
-fig = plot_train_result_info(history, 0, save_path=None)
-fig.show()
-plt.show()
-'''
 ##########################################################
 # %% DataLoader and Co
 ##########################################################
@@ -89,7 +79,7 @@ VAE_1 = VAE(zdim=100, beta=1, base_enc=32, input_channels=input_channel, base_de
 VAE_2 = VAE2(VAE_1.conv_enc, VAE_1.linear_enc, input_channels=input_channel, zdim=3).to(device)
 
 MLP_1 = MLP_MI_estimator(input_size*input_size*input_channel, zdim=100).to(device)
-MLP_2 = MLP_MI_estimator(input_size*input_size*input_channel, zdim=3).to(device)
+MLP_2 = MLP_MI_estimator(100, zdim=3).to(device)
 
 #### Architecture to use if input size is 128x128 ####
 #VAE = CNN_128_VAE(zdim=3,input_channels=input_channel, alpha=20, beta=1, base_enc=64, base_dec=64)
@@ -140,5 +130,5 @@ html_save = f'{model_name}_Representation.html'
 plotly.offline.plot(figplotly, filename=html_save, auto_open=True)
 '''
 #save image of reconstruction and generated samples
-image_save = save_model_path + 'lofi_'
+image_save = save_model_path + 'lofi_MIz1z2_'
 save_reconstruction(infer_dataloader, VAE_2, image_save, device)

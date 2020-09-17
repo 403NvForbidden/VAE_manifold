@@ -231,7 +231,7 @@ def train_2_stage_infoVAE_epoch(num_epochs, VAE_1, VAE_2, optim_VAE1, optim_VAE2
         x_recon_1, mu_z_1, logvar_z_1, z_1 = VAE_1(data)
         scores_1 = MLP_1(data, z_1)
         x_recon_2, mu_z_2, logvar_z_2, z_2 = VAE_2(data)
-        scores_2 = MLP_2(data, z_2)
+        scores_2 = MLP_2(z_1, z_2)
 
         # Estimation of the Mutual Info between X and Z
         MI_xz_1 = infoNCE_bound(scores_1)
@@ -260,7 +260,7 @@ def train_2_stage_infoVAE_epoch(num_epochs, VAE_1, VAE_2, optim_VAE1, optim_VAE2
         opti_MLP2.zero_grad()
         MI_loss_1 = -MI_xz_1
         MI_loss_2 = -MI_xz_2
-        MI_loss_1.backward()
+        MI_loss_1.backward(retain_graph=True) # Important argument
         MI_loss_2.backward()
         opti_MLP1.step()
         opti_MLP2.step()
@@ -276,11 +276,12 @@ def train_2_stage_infoVAE_epoch(num_epochs, VAE_1, VAE_2, optim_VAE1, optim_VAE2
         MI_loss_iter_1.append(MI_loss_1.item())
         MI_loss_iter_2.append(MI_loss_2.item())
 
-        if batch_idx % 2 == 0:
-            print('Train Epoch: {} [{}/{} ({:.0f}%)]\tVAE1 Loss: {:.6f}\tVAE2 Loss: {:.6f}'.format(
-                num_epochs, batch_idx * len(data), len(train_loader.dataset),
-                       100. * batch_idx / len(train_loader),
-                loss_VAE_1.item(), loss_VAE_2.item()), end='\r')
+        ### comment out for fast training
+        # if batch_idx % 2 == 0:
+        #     print('Train Epoch: {} [{}/{} ({:.0f}%)]\tVAE1 Loss: {:.6f}\tVAE2 Loss: {:.6f}'.format(
+        #         num_epochs, batch_idx * len(data), len(train_loader.dataset),
+        #                100. * batch_idx / len(train_loader),
+        #         loss_VAE_1.item(), loss_VAE_2.item()), end='\r')
 
     if (num_epochs % 5 == 0) or (num_epochs == 1):
         print('==========> Epoch: {} ==========> Average loss: {:.4f}'.format(num_epochs, np.mean(loss_overall_iter)))

@@ -56,7 +56,7 @@ class MLP_MI_estimator(nn.Module):
         z = z.view(-1, self.zdim)
         x_g = self.MLP_g(x) # Batchsize x 32
         y_h = self.MLP_h(z) # Batchsize x 32
-        scores = torch.matmul(y_h,torch.transpose(x_g,0,1))
+        scores = torch.matmul(y_h, torch.transpose(x_g,0,1))
 
         return scores #Each element i,j is a scalar in R. f(xi,proj_j)
 
