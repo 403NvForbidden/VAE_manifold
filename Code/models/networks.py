@@ -159,6 +159,7 @@ class VAE(nn.Module):
         '''
         param :
             zdim (int) : dimension of the latent space
+            beta (float) : weight coefficient for DL divergence, when beta=1 is Valina VAE
 
             Modulate the complexity of the model with parameter 'base_enc' and 'base_dec'
         '''

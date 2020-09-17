@@ -60,12 +60,12 @@ print(f'\tTrain on: {device}\t')
 input_size = 64  # the input size of the image
 batch_size = 32  # Change to fit hardware
 input_channel = 3
-double_embed = True # the variable that allows MI(z1, z2)
+double_embed = False # the variable that allows MI(z1, z2)
 input_compress = 100 if double_embed else 3
-EPOCHS = 40
+EPOCHS = 100
 
 train_loader, valid_loader = get_train_val_dataloader(dataset_path, input_size, batch_size, test_split=0.1)
-model_name = f'2stage_double_embed_infoVAE_{datetime.datetime.now().strftime("%Y-%m-%d-%H:%M")}'
+model_name = f'2stage_infoVAE_{datetime.datetime.now().strftime("%Y-%m-%d-%H:%M")}'
 save_model_path = outdir + f'{model_name}_{EPOCHS}/' if save else ''
 # if the dir dsnt exist
 if save and not os.path.isdir(save_model_path):
