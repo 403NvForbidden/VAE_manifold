@@ -30,6 +30,7 @@ import plotly.offline
 import torch
 from torch.autograd import Variable
 from torch import nn
+import torch.nn.functional as F
 from torch import cuda
 from torchvision.utils import save_image, make_grid
 
@@ -147,7 +148,7 @@ def metadata_latent_space(model, infer_dataloader, train_on_gpu, GT_csv_path, sa
 ######## Visualization
 ##############################################
 
-def save_reconstruction(loader, VAE, save_path, device, generation=True):
+def save_reconstruction(loader, VAE_1, VAE_2, save_path, device, double_embed=False):
     ''' Show (and save) reconstruction produced by a trained VAE model of 4 random
     samples, alongside 8 newly generated samples, sampled from the prior dataset3_class_distribution
 
@@ -162,9 +163,17 @@ def save_reconstruction(loader, VAE, save_path, device, generation=True):
     data, _, _ = next(iter(loader))
     data = Variable(data, requires_grad=False).to(device)
 
-    x_recon, _, _, _ = VAE(data)
-    img_grid = make_grid(torch.cat((data[:4, :3, :, :], nn.Sigmoid()(x_recon[:4, :3, :, :]))), nrow=4, padding=12,
-                         pad_value=1)
+    ### reconstruction
+    x_recon_1, _, _, z_1 = VAE_1(data)
+    if double_embed:
+        x_recon_2, _, _, _ = VAE_2(z_1)
+    else:
+        x_recon_2, _, _, _ = VAE_2(data)
+
+    img_grid = make_grid(
+        torch.cat((data[:8, :3, :, :], F.sigmoid(x_recon_1[:8, :3, :, :]), torch.sigmoid(x_recon_2[:8, :3, :, :]))),
+        nrow=8, padding=12,
+        pad_value=1)
 
     pre, ext = os.path.splitext(save_path)
 
@@ -174,17 +183,20 @@ def save_reconstruction(loader, VAE, save_path, device, generation=True):
     plt.title(f'Example data and its reconstruction')
     plt.savefig(pre + 'reconstructions.png')
 
-    if generation:
-        samples = torch.randn(8, VAE.zdim, 1, 1)
-        samples = Variable(samples, requires_grad=False).to(device)
-        recon = VAE.decode(samples)
-        img_grid = make_grid(nn.Sigmoid()(recon[:, :3, :, :]), nrow=4, padding=12, pad_value=1)
+    ### generation
+    samples_1 = Variable(torch.randn(8, VAE_1.zdim, 1, 1), requires_grad=False).to(device)
+    samples_2 = Variable(torch.randn(8, VAE_2.zdim, 1, 1), requires_grad=False).to(device)
 
-        plt.figure(figsize=(10, 5))
-        plt.imshow(img_grid.detach().cpu().permute(1, 2, 0))
-        plt.axis('off')
-        plt.title(f'Random generated samples')
-        plt.savefig(pre + 'generatedSamples.png')
+    recon_1 = VAE_1.decode(samples_1)
+    recon_2 = VAE_2.decode(samples_2)
+    img_grid = make_grid(torch.cat((torch.sigmoid(recon_1[:, :3, :, :]), torch.sigmoid(recon_2[:, :3, :, :]))),
+                         nrow=8, padding=12, pad_value=1)
+
+    plt.figure(figsize=(10, 5))
+    plt.imshow(img_grid.detach().cpu().permute(1, 2, 0))
+    plt.axis('off')
+    plt.title(f'Random generated samples')
+    plt.savefig(pre + 'generatedSamples.png')
 
 
 def plot_from_csv(path_to_csv, low_dim_names=['VAE_x_coord', 'VAE_y_coord', 'VAE_z_coord'], dim=3, num_class=7,

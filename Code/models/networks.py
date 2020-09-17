@@ -19,13 +19,12 @@ from torch.nn import functional as F
 from torch.nn.init import xavier_normal_
 from models.nn_modules import Conv, ConvTranspose, ConvUpsampling, Skip_Conv_down, Skip_DeConv_up
 
-
 class VAE2(nn.Module):
-    def __init__(self, VAE1_conv_encoder, VAE1_linear_encoder, input_channels=3, zdim=3, alpha=1, beta=1,
-                 base_dec_size=32, loss='BCE'):
+    def __init__(self, VAE1_conv_encoder, VAE1_linear_encoder, zdim=3, alpha=1, beta=1, input_channels=3,
+                 base_dec_size=32, loss='BCE', double_embed=False):
         super(VAE2, self).__init__()
         '''
-        param :
+        param:
             VAE2_encoder (nn.Sequential): the encoder part of VAE_1
             zdim (int): the final target dimension default 3
             beta (float): the weight coefficient of KL loss
@@ -39,19 +38,28 @@ class VAE2(nn.Module):
         self.beta = beta
         self.loss = loss
         self.base_dec = base_dec_size
+        self.double_embed = double_embed
 
         ###########################
         ##### Encoding layers #####
         ###########################
-
         # conv_enc and linear_encoder is passed from the
-        self.conv_enc = VAE1_conv_encoder
-        self.linear_enc = nn.Sequential(
-            VAE1_linear_encoder,  # 2*2*base_enc*16 -> 256
-            nn.Linear(256, 64),  # 256 -> 64
-            nn.BatchNorm1d(64),
-            nn.ReLU()
-        )
+        if not double_embed:
+            self.conv_enc = VAE1_conv_encoder
+            self.linear_enc = nn.Sequential(
+                VAE1_linear_encoder,  # 2*2*base_enc*16 -> 256
+                nn.Linear(256, 64),  # 256 -> 64
+                nn.BatchNorm1d(64),
+                nn.ReLU()
+            )
+        else:
+            # double embed
+            assert input_channels == 100
+            self.linear_enc = nn.Sequential(
+                nn.Linear(100, 64),  # 256 -> 64
+                nn.BatchNorm1d(64),
+                nn.ReLU()
+            )
 
         ###########################
         #####   Inference
@@ -77,14 +85,14 @@ class VAE2(nn.Module):
             nn.ReLU()
         )
 
-        # decoder 2.5
+        ### Decoder 2.5
         self.conv_dec = nn.Sequential(
             ConvUpsampling(base_dec_size * 16, base_dec_size * 8, 4, stride=2, padding=1),  # 4
             ConvUpsampling(base_dec_size * 8, base_dec_size * 4, 4, stride=2, padding=1),  # 8
             ConvUpsampling(base_dec_size * 4, base_dec_size * 2, 4, stride=2, padding=1),  # 16
             ConvUpsampling(base_dec_size * 2, base_dec_size, 4, stride=2, padding=1),  # 32
             nn.Upsample(scale_factor=4, mode='bilinear'),
-            nn.Conv2d(base_dec_size, self.input_channels, 4, 2, 1),  # 192
+            nn.Conv2d(base_dec_size, self.zdim, 4, 2, 1),  # 192
             # nn.Sigmoid(), #Sigmoid compute directly in the loss (more stable)
         )
 
@@ -116,11 +124,14 @@ class VAE2(nn.Module):
 
     def encode(self, x):
         batch_size = x.size(0)
-        x = self.conv_enc(x)
-        x = x.view((batch_size, -1))
+        # x is image if not double embedding
+        if not self.double_embed:
+            x = self.conv_enc(x)
+            x = x.view((batch_size, -1))
         x = self.linear_enc(x)
         mu_logvar = self.mu_logvar_gen(x)
         mu_z, logvar_z = mu_logvar.view(-1, self.zdim, 2).unbind(-1)
+
         logvar_z = self.stabilize_exp(logvar_z)
 
         return mu_z, logvar_z
@@ -135,15 +146,11 @@ class VAE2(nn.Module):
         return x_recon
 
     def forward(self, x):
+        # (32, 3, 64, 64) or (3, 100)
         mu_z, logvar_z = self.encode(x)
         z = self.reparameterize(mu_z, logvar_z)
         x_recon = self.decode(z)
         return x_recon, mu_z, logvar_z, z.squeeze()
-
-    def kl_divergence(self, mu, logvar):
-        kld = -0.5 * (1 + logvar - mu ** 2 - logvar.exp()).sum(1).mean()
-        return kld
-
 
 class VAE(nn.Module):
     def __init__(self, zdim=3, input_channels=3, alpha=1, beta=1, base_enc=32, base_dec=32, depth_factor_dec=2,

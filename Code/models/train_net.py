@@ -91,8 +91,7 @@ def train_2_stage_VAE_epoch(num_epochs, VAE_1, VAE_2, optimizer_1, optimizer_2, 
         loss_recon_2 = criterion_recon(x_recon_2, data)
         loss_VAE_2, loss_kl_2 = scalar_loss(data, loss_recon_2, mu_z_2, logvar_z_2, VAE_2.beta)
         # total loss
-        # loss_overall = loss_VAE_1 + 0.8 * loss_VAE_2
-        loss_overall = loss_VAE_2 + 0.8 * loss_VAE_1
+        loss_overall = loss_VAE_2 + 0.8 * loss_VAE_1 # as auxiliary loss
 
         optimizer_1.zero_grad()
         optimizer_2.zero_grad()
@@ -198,7 +197,7 @@ def train_2_stage_VAE_model(num_epochs, VAE_1, VAE_2, optimizer1, optimizer2, tr
 ###################################################
 ##### 2 stage VAE_withInfoMax ##############
 ###################################################
-def train_2_stage_infoVAE_epoch(num_epochs, VAE_1, VAE_2, optim_VAE1, optim_VAE2, MLP_1, MLP_2, opti_MLP1, opti_MLP2, train_loader, device='cuda'):
+def train_2_stage_infoVAE_epoch(num_epochs, VAE_1, VAE_2, optim_VAE1, optim_VAE2, MLP_1, MLP_2, opti_MLP1, opti_MLP2, train_loader, double_embed=False, device='cuda'):
     '''
         Train a VAE model with standard ELBO objective function for one single epoch
 
@@ -230,8 +229,13 @@ def train_2_stage_infoVAE_epoch(num_epochs, VAE_1, VAE_2, optim_VAE1, optim_VAE2
         # push whole batch of data through VAE.forward() to get recon_loss
         x_recon_1, mu_z_1, logvar_z_1, z_1 = VAE_1(data)
         scores_1 = MLP_1(data, z_1)
-        x_recon_2, mu_z_2, logvar_z_2, z_2 = VAE_2(data)
-        scores_2 = MLP_2(z_1, z_2)
+
+        if not double_embed:
+            x_recon_2, mu_z_2, logvar_z_2, z_2 = VAE_2(data)
+            scores_2 = MLP_2(data, z_2)
+        else:
+            x_recon_2, mu_z_2, logvar_z_2, z_2 = VAE_2(z_1)
+            scores_2 = MLP_2(z_1, z_2)
 
         # Estimation of the Mutual Info between X and Z
         MI_xz_1 = infoNCE_bound(scores_1)
@@ -277,11 +281,11 @@ def train_2_stage_infoVAE_epoch(num_epochs, VAE_1, VAE_2, optim_VAE1, optim_VAE2
         MI_loss_iter_2.append(MI_loss_2.item())
 
         ### comment out for fast training
-        # if batch_idx % 2 == 0:
-        #     print('Train Epoch: {} [{}/{} ({:.0f}%)]\tVAE1 Loss: {:.6f}\tVAE2 Loss: {:.6f}'.format(
-        #         num_epochs, batch_idx * len(data), len(train_loader.dataset),
-        #                100. * batch_idx / len(train_loader),
-        #         loss_VAE_1.item(), loss_VAE_2.item()), end='\r')
+        if batch_idx % 2 == 0:
+            print('Train Epoch: {} [{}/{} ({:.0f}%)]\tVAE1 Loss: {:.6f}\tVAE2 Loss: {:.6f}'.format(
+                num_epochs, batch_idx * len(data), len(train_loader.dataset),
+                       100. * batch_idx / len(train_loader),
+                loss_VAE_1.item(), loss_VAE_2.item()), end='\r')
 
     if (num_epochs % 5 == 0) or (num_epochs == 1):
         print('==========> Epoch: {} ==========> Average loss: {:.4f}'.format(num_epochs, np.mean(loss_overall_iter)))
@@ -293,7 +297,7 @@ def train_2_stage_infoVAE_epoch(num_epochs, VAE_1, VAE_2, optim_VAE1, optim_VAE2
     return np.mean(loss_overall_iter), np.mean(kl_loss_iter_1), np.mean(kl_loss_iter_2), np.mean(recon_loss_iter_1), np.mean(recon_loss_iter_2), np.mean(MI_iter_1), np.mean(MI_iter_2), np.mean(MI_loss_iter_1), np.mean(MI_loss_iter_2)
 
 def train_2_stage_infoVAE_model(num_epochs, VAE_1, VAE_2, opti_VAE1, opti_VAE2, MLP_1, MLP_2, opti_MLP1, opti_MLP2, train_loader, valid_loader,
-                                save_path='', device='cuda'):
+                                save_path='', double_embed=False, device='cuda'):
 
     # Number of epochs already trained (if pre trained)
     try:
@@ -318,7 +322,7 @@ def train_2_stage_infoVAE_model(num_epochs, VAE_1, VAE_2, opti_VAE1, opti_VAE2, 
         global_VAE_loss, kl_loss_1, kl_loss_2, recon_loss_1, recon_loss_2, MI_iter_1, MI_iter_2, MI_loss_1, MI_loss_2 = train_2_stage_infoVAE_epoch(epoch, VAE_1, VAE_2,
                                                                                                                                                     opti_VAE1,
                                                                                                                                                     opti_VAE2, MLP_1, MLP_2, opti_MLP1, opti_MLP2,
-                                                                                                                                                    train_loader,
+                                                                                                                                                    train_loader, double_embed,
                                                                                                                                                     device)
         # global_VAE_loss_val, kl_loss_val, recon_loss_val = test_2_stage_VAE_epoch(num_epochs, VAE1, VAE2, optimizer, valid_loader, train_on_gpu)
 
@@ -345,7 +349,8 @@ def train_2_stage_infoVAE_model(num_epochs, VAE_1, VAE_2, opti_VAE1, opti_VAE2, 
     history = pd.DataFrame(
         history,
         columns=['global_VAE_loss', 'kl_loss_1', 'kl_loss_2', 'recon_loss_1', 'recon_loss_2', \
-                 'MI_iter_1', 'MI_iter_2', 'MI_loss_1', 'MI_loss_2'])
+                 'MI_iter_1', 'MI_iter_2', 'MI_loss_1', 'MI_loss_2']
+    )
 
     # time
     total_time = timer() - overall_start
