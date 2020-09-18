@@ -147,7 +147,7 @@ def metadata_latent_space(model, infer_dataloader, train_on_gpu, GT_csv_path, sa
 ##############################################
 ######## Visualization
 ##############################################
-def save_reconstruction(loader, VAE_1, VAE_2, save_path, device, double_embed=False):
+def save_reconstruction(loader, VAE_1, VAE_2, save_path, device, double_embed=False, gen=False):
     ''' Show (and save) reconstruction produced by a trained VAE model of 4 random
     samples, alongside 8 newly generated samples, sampled from the prior dataset3_class_distribution
 
@@ -183,19 +183,20 @@ def save_reconstruction(loader, VAE_1, VAE_2, save_path, device, double_embed=Fa
     plt.savefig(pre + 'reconstructions.png')
 
     ### generation
-    samples_1 = Variable(torch.randn(8, VAE_1.zdim, 1, 1), requires_grad=False).to(device)
-    samples_2 = Variable(torch.randn(8, VAE_2.zdim, 1, 1), requires_grad=False).to(device)
+    if gen:
+        samples_1 = Variable(torch.randn(8, VAE_1.zdim, 1, 1), requires_grad=False).to(device)
+        samples_2 = Variable(torch.randn(8, VAE_2.zdim, 1, 1), requires_grad=False).to(device)
 
-    recon_1 = VAE_1.decode(samples_1)
-    recon_2 = VAE_2.decode(samples_2)
-    img_grid = make_grid(torch.cat((torch.sigmoid(recon_1[:, :3, :, :]), torch.sigmoid(recon_2[:, :3, :, :]))),
-                         nrow=8, padding=12, pad_value=1)
+        recon_1 = VAE_1.decode(samples_1)
+        recon_2 = VAE_2.decode(samples_2)
+        img_grid = make_grid(torch.cat((torch.sigmoid(recon_1[:, :3, :, :]), torch.sigmoid(recon_2[:, :3, :, :]))),
+                             nrow=8, padding=12, pad_value=1)
 
-    plt.figure(figsize=(10, 5))
-    plt.imshow(img_grid.detach().cpu().permute(1, 2, 0))
-    plt.axis('off')
-    plt.title(f'Random generated samples')
-    plt.savefig(pre + 'generatedSamples.png')
+        plt.figure(figsize=(10, 5))
+        plt.imshow(img_grid.detach().cpu().permute(1, 2, 0))
+        plt.axis('off')
+        plt.title(f'Random generated samples')
+        plt.savefig(pre + 'generatedSamples.png')
 
 
 def plot_from_csv(path_to_csv, low_dim_names=['VAE_x_coord', 'VAE_y_coord', 'VAE_z_coord'], dim=3, num_class=7,
