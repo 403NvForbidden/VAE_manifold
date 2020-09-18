@@ -18,6 +18,8 @@ from torch import cuda, optim
 from torchsummary import summary
 from torch.autograd import Variable
 
+from scipy.stats import norm
+
 from models.networks import VAE, Skip_VAE, VAE2
 from models.infoMAX_VAE import CNN_128_VAE, MLP_MI_estimator
 from util.data_processing import get_train_val_dataloader, imshow_tensor, get_inference_dataset
@@ -55,22 +57,34 @@ print(f'\tTrain on: {device}\t')
 # %% Visualize latent space and save it
 ##########################################################
 # display manifold of the images
-figure = np.zeros((digit_size * n, digit_size * n))
+figure = np.zeros((digit_size * n, digit_size * n, 3))
+generator.eval()
 # linearly spaced coordinates on the unit square were transformed through the inverse CDF (ppf) of the Gaussian
 # to produce values of the latent variables z, since the prior of the latent space is Gaussian
-generator.eval()
-for i in range(n):
-    for j in range(n):
-        z_sample = torch.FloatTensor(1, generator.zdim, 1, 1).uniform_(-3, 3)
-        # z_sample = np.array([np.random.uniform(-1.5, 1.5, size=generator.zdim)])
-        z_sample = Variable(z_sample, requires_grad=False).to(device)
-        x_decoded = generator.decode(z_sample)
-        x_decoded = torch.sigmoid(torch.squeeze(x_decoded)).detach().cpu()
-        x_decoded = x_decoded[1].reshape(digit_size, digit_size)
+grid_x = 1.5*norm.ppf(np.linspace(0.025, 0.8, n))
+grid_y = 1.5*norm.ppf(np.linspace(0.025, 0.8, n))
+grid_z = 1.5*norm.ppf(np.linspace(0.025, 0.8, n))
+#grid_x = norm.ppf(np.linspace(-10.0, 10.0, n))
+#grid_y = norm.ppf(np.linspace(-10.0, 10.0, n))
+template = torch.randn(generator.zdim)
 
-        figure[i * digit_size: (i + 1) * digit_size, j * digit_size: (j + 1) * digit_size] = x_decoded
+for i, xi in enumerate(grid_x):
+    for j, yi in enumerate(grid_y):
+        for k, zi in enumerate(grid_z):
+            # zi = grid_z[n-1]
+            z_sample = torch.FloatTensor([xi, yi, zi])
+            z_sample.resize_((1, generator.zdim, 1, 1)) #= torch.FloatTensor(1, generator.zdim, 1, 1)
+            # z_sample = np.array([np.random.uniform(-1.5, 1.5, size=generator.zdim)])
+            z_sample = Variable(z_sample, requires_grad=False).to(device)
+            x_decoded = generator.decode(z_sample)
+            x_decoded = torch.sigmoid(torch.squeeze(x_decoded)).detach().cpu()
+            ### RGB channel
+            x_decoded = x_decoded.permute(1, 2, 0)
+            ### channel-wise : x_decoded = x_decoded[2].reshape(digit_size, digit_size)
+            # x_decoded = x_decoded[1]
+            figure[i * digit_size: (i + 1) * digit_size, j * digit_size: (j + 1) * digit_size, :] = x_decoded
 
 plt.figure(figsize=(25, 25))
-plt.imshow(figure, cmap='Greys_r')
+plt.imshow(figure)
+# plt.savefig(model_path + '/rgb.png')
 plt.show()
-plt.savefig(model_path + '/c=1.png')
