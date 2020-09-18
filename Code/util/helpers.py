@@ -147,7 +147,6 @@ def metadata_latent_space(model, infer_dataloader, train_on_gpu, GT_csv_path, sa
 ##############################################
 ######## Visualization
 ##############################################
-
 def save_reconstruction(loader, VAE_1, VAE_2, save_path, device, double_embed=False):
     ''' Show (and save) reconstruction produced by a trained VAE model of 4 random
     samples, alongside 8 newly generated samples, sampled from the prior dataset3_class_distribution

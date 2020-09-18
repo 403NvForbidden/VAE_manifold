@@ -113,7 +113,7 @@ if save:
 # %% Visualize latent space and save it
 ##########################################################
 # Visualize on the WHOLE dataset (train & validation)
-infer_data, infer_dataloader = get_inference_dataset(dataset_path, batch_size, input_size, shuffle=True, droplast=False)
+infer_data, infer_dataloader = get_inference_dataset(dataset_path, batch_size, input_size, shuffle=False, droplast=False)
 '''
 #Possibility of reloading a model trained in the past, or use the variable defined above
 #model_VAE = load_brute(save_model_path)
