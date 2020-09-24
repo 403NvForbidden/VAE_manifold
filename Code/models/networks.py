@@ -93,7 +93,8 @@ class VAE2(nn.Module):
             ConvUpsampling(base_dec_size * 4, base_dec_size * 2, 4, stride=2, padding=1),  # 16
             ConvUpsampling(base_dec_size * 2, base_dec_size, 4, stride=2, padding=1),  # 32
             nn.Upsample(scale_factor=4, mode='bilinear'),
-            nn.Conv2d(base_dec_size, self.zdim, 4, 2, 1),  # 192
+            # shouldn't be zdim but input_channel can be 100, so use zdim for now
+            nn.Conv2d(base_dec_size, self.zdim, 4, 2, 1),
             # nn.Sigmoid(), #Sigmoid compute directly in the loss (more stable)
         )
 
