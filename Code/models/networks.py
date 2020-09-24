@@ -145,6 +145,12 @@ class VAE2(nn.Module):
 
         return x_recon
 
+    def get_latent(self, x):
+        # (32, 3, 64, 64) or (3, 100)
+        mu_z, logvar_z = self.encode(x)
+        z = self.reparameterize(mu_z, logvar_z)
+        return z
+
     def forward(self, x):
         # (32, 3, 64, 64) or (3, 100)
         mu_z, logvar_z = self.encode(x)

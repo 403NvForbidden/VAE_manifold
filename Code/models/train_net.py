@@ -101,7 +101,7 @@ def train_2_stage_VAE_epoch(num_epochs, VAE_1, VAE_2, optimizer_1, optimizer_2, 
 
         # record the loss
         loss_overall_iter.append(loss_overall.item())
-        global_VAE_iter_1, global_VAE_iter_2 =  global_VAE_iter_1 + [loss_VAE_1.item()], global_VAE_iter_2 + [loss_VAE_2.item()]
+        global_VAE_iter_1, global_VAE_iter_2 = global_VAE_iter_1 + [loss_VAE_1.item()], global_VAE_iter_2 + [loss_VAE_2.item()]
         recon_loss_iter_1, recon_loss_iter_2 = recon_loss_iter_1 + [loss_recon_1.item()], global_VAE_iter_2 + [loss_recon_2.item()]
         kl_loss_iter_1, kl_loss_iter_2 = kl_loss_iter_1 + [loss_kl_1.item()], kl_loss_iter_2 + [loss_kl_2.item()]
 
@@ -234,6 +234,7 @@ def train_2_stage_infoVAE_epoch(num_epochs, VAE_1, VAE_2, optim_VAE1, optim_VAE2
             x_recon_2, mu_z_2, logvar_z_2, z_2 = VAE_2(data)
             scores_2 = MLP_2(data, z_2)
         else:
+            # double embedding pass Z_1 to VAE_2
             x_recon_2, mu_z_2, logvar_z_2, z_2 = VAE_2(z_1)
             scores_2 = MLP_2(z_1, z_2)
 

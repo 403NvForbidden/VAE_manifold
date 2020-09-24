@@ -84,13 +84,17 @@ def get_train_val_dataloader(root_dir,input_size,batchsize,test_split=0.2):
 
 #Inference dataloader (no data augmentation and no train/test split)
 def get_inference_dataset(dataset_dir, batchsize, input_size, shuffle=False, droplast=False):
-    '''DataLoader for inference. No data augmentation and no train/test split
+    '''
+    DataLoader for inference. No data augmentation and no train/test split
     From a unique folder that contains the whole dataset, divided in different subfolders
     related to class identity
 
     Params :
         - root_dir : path to the folder containing the dataset
         - input_size : imgs will all be input_size x input_size (rescale or pad)
+    Returns :
+        - (DatasetFolder) :
+        - (DatasetLoader) :
     '''
     inference_trfm = transforms.Compose([
         #Data arrive as HxWxC float64 0 - 1.0 ndarray

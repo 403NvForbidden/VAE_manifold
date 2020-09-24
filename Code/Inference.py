@@ -1,5 +1,6 @@
 '''
     Profile description
+    Source: https://github.com/chaitanya100100/VAE-for-Image-Generation
 '''
 
 ##########################################################
