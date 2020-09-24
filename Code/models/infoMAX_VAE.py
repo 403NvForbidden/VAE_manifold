@@ -6,9 +6,9 @@
 # @Last modified time: 2020-08-31T10:19:46+10:00
 
 
-'''File containing the architecture of InfoMax VAE, a VAE framework that
+"""File containing the architecture of InfoMax VAE, a VAE framework that
 explicitly optimizes mutual information between observations and the latent
-representations'''
+representations"""
 
 import torch
 import math
@@ -24,18 +24,19 @@ import numpy as np
 ################################################
 
 class MLP_MI_estimator(nn.Module):
-    '''MLP, that take in input both input data and latent codes and output
+    """MLP, that take in input both input data and latent codes and output
     an unique value in R.
     This network defines the function t(x,z) that appears in the variational
     representation of a f-divergence. Finding t() that maximize this f-divergence,
     lead to a variation representation that is a tight bound estimator of mutual information.
-    '''
+    """
 
     def __init__(self, input_dim, zdim=3):
         super(MLP_MI_estimator, self).__init__()
 
         self.input_dim = input_dim
         self.zdim = zdim
+        self.epochs = 0
 
         self.MLP_g = nn.Sequential(
             nn.Linear(input_dim, 1024),
@@ -64,7 +65,7 @@ class MLP_MI_estimator(nn.Module):
 
 # Compute the Noise Constrastive Estimation (NCE) loss
 def infoNCE_bound(scores):
-    '''Bound from Van Den Oord and al. (2018)'''
+    """Bound from Van Den Oord and al. (2018)"""
     nll = torch.mean(torch.diag(scores) - torch.logsumexp(scores, dim=1))
     k = scores.size()[0]
     mi = np.log(k) + nll
@@ -78,9 +79,9 @@ def infoNCE_bound(scores):
 class CNN_VAE(nn.Module):
 
     def __init__(self, zdim=3, input_channels=3, alpha=1, beta=1, base_enc=32, base_dec=32, depth_factor_dec=2):
-        '''
+        """
         Modulate the complexity of the modulate with parameter 'base_enc' and 'base_dec'
-        '''
+        """
         super(CNN_VAE, self).__init__()
         self.zdim = zdim
         self.beta = beta
@@ -175,9 +176,9 @@ class CNN_VAE(nn.Module):
         return kld
 
     def permute_dims(self, z):
-        '''Permutation in only a trick to be able to get sample from the marginal
+        """Permutation in only a trick to be able to get sample from the marginal
         q(z) in a simple manner, to evaluate the variational representation of f-divergence
-        '''
+        """
         assert z.dim() == 2  # In the form of  batch x latentVariables
         B, _ = z.size()
         perm = torch.randperm(B).cuda()
@@ -192,9 +193,9 @@ class CNN_VAE(nn.Module):
 class CNN_128_VAE(nn.Module):
 
     def __init__(self, zdim=3, input_channels=4, alpha=1, beta=1, base_enc=32, base_dec=32, depth_factor_dec=2):
-        '''
+        """
         Modulate the complexity of the decoder with parameter 'base_dec' and 'depth_factor_dec'
-        '''
+        """
         super(CNN_128_VAE, self).__init__()
         self.zdim = zdim
         self.beta = beta
@@ -292,9 +293,9 @@ class CNN_128_VAE(nn.Module):
         return kld
 
     def permute_dims(self, z):
-        '''Permutation in only a trick to be able to get sample from the marginal
+        """Permutation in only a trick to be able to get sample from the marginal
         q(z) in a simple manner, to evaluate the variational representation of f-divergence
-        '''
+        """
         assert z.dim() == 2  # In the form of  batch x latentVariables
         B, _ = z.size()
         perm = torch.randperm(B).cuda()
@@ -303,12 +304,12 @@ class CNN_128_VAE(nn.Module):
 
 
 class MLP_MI_128_estimator(nn.Module):
-    '''MLP, that take in input both input data and latent codes and output
+    """MLP, that take in input both input data and latent codes and output
     an unique value in R.
     This network defines the function t(x,z) that appears in the variational
     representation of a f-divergence. Finding t() that maximize this f-divergence,
     lead to a variation representation that is an exact estimator of mutual information.
-    '''
+    """
 
     def __init__(self, input_dim, zdim=3):
         super(MLP_MI_128_estimator, self).__init__()

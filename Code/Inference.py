@@ -1,7 +1,7 @@
-'''
+"""
     Profile description
     Source: https://github.com/chaitanya100100/VAE-for-Image-Generation
-'''
+"""
 
 ##########################################################
 # %% imports
@@ -24,8 +24,8 @@ from scipy.stats import norm
 from models.networks import VAE, Skip_VAE, VAE2
 from models.infoMAX_VAE import CNN_128_VAE, MLP_MI_estimator
 from util.data_processing import get_train_val_dataloader, imshow_tensor, get_inference_dataset
-from models.train_net import train_VAE_model, train_2_stage_VAE_model, train_2_stage_infoVAE_model
-from util.helpers import plot_train_result, plot_train_result_info, save_checkpoint, load_checkpoint, save_brute, \
+from models.train_net import train_VAE_model, train_2stage_VAE_model, train_2stage_infoMaxVAE_model
+from util.helpers import plot_train_result, plot_train_result_infoMax, save_checkpoint, load_checkpoint, save_brute, \
     load_brute, plot_from_csv, metadata_latent_space, save_reconstruction
 
 ##########################################################
@@ -71,17 +71,18 @@ figure = np.zeros((digit_size * n, digit_size * n, 3))
 VAE_2.eval()
 # linearly spaced coordinates on the unit square were transformed through the inverse CDF (ppf) of the Gaussian
 # to produce values of the latent variables z, since the prior of the latent space is Gaussian
-grid_x = 1.5*norm.ppf(np.linspace(0.025, 0.925, n))
+grid_x = 1.5*norm.ppf(np.linspace(0.025, 0.925, n)) # percentile
 grid_y = 1.5*norm.ppf(np.linspace(0.025, 0.925, n))
 grid_z = 1.5*norm.ppf(np.linspace(0.025, 0.925, n))
 #grid_x = norm.ppf(np.linspace(-10.0, 10.0, n))
 #grid_y = norm.ppf(np.linspace(-10.0, 10.0, n))
-template = torch.randn(VAE_2.zdim)
+# template = torch.randn(VAE_2.zdim)
 
 for i, xi in enumerate(grid_x):
     for j, yi in enumerate(grid_y):
         # for k, zi in enumerate(grid_z):
         zi = grid_z[n//4]
+        ### define the latent space
         z_sample = torch.FloatTensor([xi, yi, zi])
         z_sample.resize_((1, VAE_2.zdim, 1, 1)) #= torch.FloatTensor(1, generator.zdim, 1, 1)
         # z_sample = np.array([np.random.uniform(-1.5, 1.5, size=generator.zdim)])
@@ -92,7 +93,7 @@ for i, xi in enumerate(grid_x):
         x_decoded = x_decoded.permute(1, 2, 0)
         ### channel-wise : x_decoded = x_decoded[2].reshape(digit_size, digit_size)
         # x_decoded = x_decoded[1]
-        figure[i * digit_size: (i + 1) * digit_size, j * digit_size: (j + 1) * digit_size, :] = x_decoded
+        figure[i * digit_size : (i + 1) * digit_size, j * digit_size : (j + 1) * digit_size, :] = x_decoded
 
 plt.figure(figsize=(25, 25))
 plt.imshow(figure)

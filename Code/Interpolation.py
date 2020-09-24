@@ -1,32 +1,18 @@
-'''
+"""
     Profile description
-'''
-
+"""
 ##########################################################
 # %% imports
 ##########################################################
-import datetime, os
-import gc
-import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
-import plotly.offline
-import pickle as pkl
 import cv2
 
 import torch
-from torch import cuda, optim
-from torchsummary import summary
+from torch import cuda
 from torch.autograd import Variable
-from torchvision.utils import make_grid
-from scipy.stats import norm
 
-from models.networks import VAE, Skip_VAE, VAE2
-from models.infoMAX_VAE import CNN_128_VAE, MLP_MI_estimator
-from util.data_processing import get_train_val_dataloader, imshow_tensor, get_inference_dataset
-from models.train_net import train_VAE_model, train_2_stage_VAE_model, train_2_stage_infoVAE_model
-from util.helpers import plot_train_result, plot_train_result_info, save_checkpoint, load_checkpoint, save_brute, \
-    load_brute, plot_from_csv, metadata_latent_space, save_reconstruction
+from util.data_processing import get_inference_dataset
+from util.helpers import load_brute
 
 ##########################################################
 # %% DataLoader and Co
@@ -48,7 +34,7 @@ n = 10  # figure with 15x15 digits
 digit_size = 64
 
 ### reload model
-VAE_2 = load_brute(model_path + '/VAE_2.pth')
+VAE_2 = load_brute(model_path + '/VAE_1.pth')
 VAE_2.eval()
 
 ### META of training deivice
@@ -80,7 +66,7 @@ for alpha in alphaValues:
     vec = latentStart * (1 - alpha) + latentEnd * alpha
     list_Z.append(vec)
     # Image space interpolation
-    blendImage = cv2.addWeighted(np.float32(startImage), 1-alpha, np.float32(endImage), alpha, 0)
+    blendImage = cv2.addWeighted(np.float32(startImage), 1 - alpha, np.float32(endImage), alpha, 0)
     raw_images.append(blendImage)
 
 list_Z = Variable(torch.stack([x for x in list_Z], dim=0), requires_grad=False).to(device)

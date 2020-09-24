@@ -5,14 +5,14 @@
 # @Last modified by:   sachahai
 # @Last modified time: 2020-08-21T11:28:19+10:00
 
-'''
+"""
 This file contains classes and function that are usefull to load the raw data,
 organize it throughout batch, and preprocess it to be fed to a VAE network
 
 DatasetFolder are used. Dataset should be arranged in subfolders that represent
 the (expected) class/cluster idendity. VAEs are unsupervised methods, the latter
 will only be used as visual colored labels once the model is trained.
-'''
+"""
 ###############################
 ####### Imports ###############
 ###############################
@@ -84,7 +84,7 @@ def get_train_val_dataloader(root_dir,input_size,batchsize,test_split=0.2):
 
 #Inference dataloader (no data augmentation and no train/test split)
 def get_inference_dataset(dataset_dir, batchsize, input_size, shuffle=False, droplast=False):
-    '''
+    """
     DataLoader for inference. No data augmentation and no train/test split
     From a unique folder that contains the whole dataset, divided in different subfolders
     related to class identity
@@ -95,7 +95,7 @@ def get_inference_dataset(dataset_dir, batchsize, input_size, shuffle=False, dro
     Returns :
         - (DatasetFolder) :
         - (DatasetLoader) :
-    '''
+    """
     inference_trfm = transforms.Compose([
         #Data arrive as HxWxC float64 0 - 1.0 ndarray
         zPad_or_Rescale_inference(input_size), # Rescale and Pad to fixed size
@@ -303,20 +303,20 @@ class RandomRot90(object):
         return np.ascontiguousarray(sample)
 
 class Double_to_Float(object):
-    '''Final inputs need to be Float'''
+    """Final inputs need to be Float"""
     def __call__(self, sample):
 
         return sample.float()
 
 class Double_to_Float_inference(object):
-    '''Final inputs need to be Float'''
+    """Final inputs need to be Float"""
     def __call__(self, sample):
 
         image, file_name = sample[0], sample[1]
         return (image.float(), file_name)
 
 class ToTensor_inference(object):
-    '''From ndarray to Tensor'''
+    """From ndarray to Tensor"""
     def __call__(self,sample):
         image, file_name = sample[0], sample[1]
 

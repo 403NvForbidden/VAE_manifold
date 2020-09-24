@@ -5,12 +5,12 @@
 # @Last modified by:   sachahai
 # @Last modified time: 2020-08-31T10:40:55+10:00
 
-'''
+"""
 Vanilla VAE and SC-VAE
 
 File containing different VAE architectures, to reconstruct CxHxW single cell images,
 while learning a 3D latent space, for visualization purpose and downstream data interrogation.
-'''
+"""
 
 import torch
 import math
@@ -19,18 +19,19 @@ from torch.nn import functional as F
 from torch.nn.init import xavier_normal_
 from models.nn_modules import Conv, ConvTranspose, ConvUpsampling, Skip_Conv_down, Skip_DeConv_up
 
+
 class VAE2(nn.Module):
     def __init__(self, VAE1_conv_encoder, VAE1_linear_encoder, zdim=3, alpha=1, beta=1, input_channels=3,
                  base_dec_size=32, loss='BCE', double_embed=False):
         super(VAE2, self).__init__()
-        '''
+        """
         param:
             VAE2_encoder (nn.Sequential): the encoder part of VAE_1
             zdim (int): the final target dimension default 3
             beta (float): the weight coefficient of KL loss
 
             Modulate the complexity of the model with parameter 'base_enc' and 'base_dec'
-        '''
+        """
 
         self.zdim = zdim
         self.input_channels = input_channels
@@ -158,17 +159,18 @@ class VAE2(nn.Module):
         x_recon = self.decode(z)
         return x_recon, mu_z, logvar_z, z.squeeze()
 
+
 class VAE(nn.Module):
     def __init__(self, zdim=3, input_channels=3, alpha=1, beta=1, base_enc=32, base_dec=32, depth_factor_dec=2,
                  loss='BCE'):
         super(VAE, self).__init__()
-        '''
+        """
         param :
             zdim (int) : dimension of the latent space
             beta (float) : weight coefficient for DL divergence, when beta=1 is Valina VAE
 
             Modulate the complexity of the model with parameter 'base_enc' and 'base_dec'
-        '''
+        """
 
         self.zdim = zdim
         self.alpha = alpha
@@ -259,6 +261,12 @@ class VAE(nn.Module):
 
         return x_recon
 
+    def get_latent(self, x):
+        # (32, 3, 64, 64) or (3, 100)
+        mu_z, logvar_z = self.encode(x)
+        z = self.reparameterize(mu_z, logvar_z)
+        return z
+
     def forward(self, x):
 
         mu_z, logvar_z = self.encode(x)
@@ -270,9 +278,9 @@ class VAE(nn.Module):
 class Skip_VAE(nn.Module):
 
     def __init__(self, zdim, input_channels=3, beta=1, base_enc=32, base_dec=32, depth_factor_dec=2):
-        '''
+        """
         Modulate the complexity of the model with parameter 'base_enc' and 'base_dec'
-        '''
+        """
         super(Skip_VAE, self).__init__()
         self.zdim = zdim
         self.beta = beta
@@ -348,13 +356,13 @@ class Skip_VAE(nn.Module):
 class Simple_VAE(nn.Module):
     def __init__(self, zdim=3, input_channels=1, beta=1, base_enc=32, base_dec=32, depth_factor_dec=2, loss='BCE'):
         super(Simple_VAE, self).__init__()
-        '''
+        """
         Simple Shallow VAE, only used for exploring User Feedbacks possibilities on a simple dataset
         param :
             zdim (int) : dimension of the latent space
 
             Modulate the complexity of the model with parameter 'base_enc' and 'base_dec'
-        '''
+        """
 
         self.zdim = zdim
         self.beta = beta

@@ -5,8 +5,8 @@
 # @Last modified by:   sachahai
 # @Last modified time: 2020-08-26T16:58:12+10:00
 
-'''File containing various functions to visualize latent representations learnt
-from a model and to save / load model. '''
+"""File containing various functions to visualize latent representations learnt
+from a model and to save / load model. """
 
 ###############################
 ####### Imports ###############
@@ -41,7 +41,7 @@ from torchvision.utils import save_image, make_grid
 
 def metadata_latent_space(model, infer_dataloader, train_on_gpu, GT_csv_path, save_csv=False, with_rawdata=False,
                           csv_path='no_name_specified.csv'):
-    '''
+    """
     Once a VAE model is trained, take its predictions (3D latent code) and store it in a csv
     file alongside the ground truth information. Useful for plots and downstream analyses.
 
@@ -59,7 +59,7 @@ def metadata_latent_space(model, infer_dataloader, train_on_gpu, GT_csv_path, sa
 
     Return :
         - MetaData_csv (Pandas DataFrame) : DataFrame that contains both latent codes and ground truth, matched
-    '''
+    """
     labels_list = []
     z_list = []
     id_list = []
@@ -147,8 +147,8 @@ def metadata_latent_space(model, infer_dataloader, train_on_gpu, GT_csv_path, sa
 ##############################################
 ######## Visualization
 ##############################################
-def save_reconstruction(loader, VAE_1, VAE_2, save_path, device, double_embed=False, gen=False):
-    ''' Show (and save) reconstruction produced by a trained VAE model of 4 random
+def save_reconstruction(loader, VAE_1, VAE_2, save_path, device, num_img=8, double_embed=False, gen=False):
+    """ Show (and save) reconstruction produced by a trained VAE model of 4 random
     samples, alongside 8 newly generated samples, sampled from the prior dataset3_class_distribution
 
     Params :
@@ -157,10 +157,11 @@ def save_reconstruction(loader, VAE_1, VAE_2, save_path, device, double_embed=Fa
         - save_path (str) : path where to save figures
         - device (str) : 'cpu' or 'cuda'
         - generation: generation process
-    '''
+        :param num_img:
+    """
 
     data, _, _ = next(iter(loader))
-    data = Variable(data, requires_grad=False).to(device)
+    data = Variable(data[:num_img], requires_grad=False).to(device)
 
     ### reconstruction
     x_recon_1, _, _, z_1 = VAE_1(data)
@@ -170,8 +171,8 @@ def save_reconstruction(loader, VAE_1, VAE_2, save_path, device, double_embed=Fa
         x_recon_2, _, _, _ = VAE_2(data)
 
     img_grid = make_grid(
-        torch.cat((data[:8, :3, :, :], F.sigmoid(x_recon_1[:8, :3, :, :]), torch.sigmoid(x_recon_2[:8, :3, :, :]))),
-        nrow=8, padding=12,
+        torch.cat((data[:, :3, :, :], torch.sigmoid(x_recon_1[:, :3, :, :]), torch.sigmoid(x_recon_2[:num_img, :3, :, :]))),
+        nrow=num_img, padding=12,
         pad_value=1)
 
     pre, ext = os.path.splitext(save_path)
@@ -190,7 +191,7 @@ def save_reconstruction(loader, VAE_1, VAE_2, save_path, device, double_embed=Fa
         recon_1 = VAE_1.decode(samples_1)
         recon_2 = VAE_2.decode(samples_2)
         img_grid = make_grid(torch.cat((torch.sigmoid(recon_1[:, :3, :, :]), torch.sigmoid(recon_2[:, :3, :, :]))),
-                             nrow=8, padding=12, pad_value=1)
+                             nrow=num_img, padding=12, pad_value=1)
 
         plt.figure(figsize=(10, 5))
         plt.imshow(img_grid.detach().cpu().permute(1, 2, 0))
@@ -201,7 +202,7 @@ def save_reconstruction(loader, VAE_1, VAE_2, save_path, device, double_embed=Fa
 
 def plot_from_csv(path_to_csv, low_dim_names=['VAE_x_coord', 'VAE_y_coord', 'VAE_z_coord'], dim=3, num_class=7,
                   column=None, as_str=False):
-    '''
+    """
     Plot on a plotly figure the latent space produced by any methods, already stored in a csv file.
 
     Params :
@@ -219,7 +220,7 @@ def plot_from_csv(path_to_csv, low_dim_names=['VAE_x_coord', 'VAE_y_coord', 'VAE
     Example :
     plot_from_csv(path_to_csv=...,low_dim_names=...,num_class=7) : Latent Codes color-coded based on int values (1-7) stored in 'GT_Label' column
     plot_from_csv(path_to_csv=...,low_dim_names=...,column='Shape_Factor',as_str=False) : Latent Codes color-coded based on a color bar that cover the range of ground truth 'Shape_Factor'
-    '''
+    """
     if isinstance(path_to_csv, str):
         MetaData_csv = pd.read_csv(path_to_csv)
     else:
@@ -268,52 +269,52 @@ def plot_from_csv(path_to_csv, low_dim_names=['VAE_x_coord', 'VAE_y_coord', 'VAE
 
         return fig_2d_1
 
-
-def plot_train_result_info(history, best_epoch=None, save_path=None):
+def plot_train_result_infoMax(history, best_epoch=None, save_path=None):
     print(">>>>>>>>>PLOTING INFOz")
-    # columns=['global_VAE_loss', 'kl_loss_1', 'kl_loss_2', 'recon_loss_1', 'recon_loss_2'])
+    # columns=['VAE_loss', 'kl_1', 'kl_2', 'recon_1', 'recon_2', 'MI_1', 'MI_2', 'VAE_loss_val', 'kl_val_1', 'kl_val_2',
+    #                  'recon_val_1', 'recon_val_2', 'MI_val_1', 'MI_val_2']
     fig = plt.figure(figsize=(15, 15))
     gs = GridSpec(3, 2, figure=fig)
-    ax1 = fig.add_subplot(gs[0, :])  # Frist full row
-    ax2 = fig.add_subplot(gs[1, 0])  # bottom left on 4x4 grid
-    ax3 = fig.add_subplot(gs[1, 1])  # bottom right on a 4x4 grid
-    ax4 = fig.add_subplot(gs[2, 0])  # bottom right on a 4x4 grid
-    ax5 = fig.add_subplot(gs[2, 1])  # bottom right on a 4x4 grid
+    ax1 = fig.add_subplot(gs[0, :])  # full top row: global VAE loss
+    ax2 = fig.add_subplot(gs[1, :])  # top row on 4x4 grid: reconstruction
+    ax3 = fig.add_subplot(gs[2, 0])  # top left on a 4x4 grid: KL divergence
+    ax4 = fig.add_subplot(gs[2, 1])  # bottom right on a 4x4 grid: MI
+
     #  plot the overall loss
-    ax1.plot(history['global_VAE_loss'][0:], color='dodgerblue', label='train')
-    # ax1.plot(history['global_VAE_loss_val'][0:],color='lightsalmon',label='test')
+    ax1.plot(history['VAE_loss'], color='dodgerblue', label='train')
+    ax1.plot(history['VAE_loss_val'], linestyle='--', color='dodgerblue', label='test')
     ax1.set_title('Global VAE Loss')
-    '''
+
     if best_epoch != None:
-        ax1.axvline(best_epoch, linestyle='--', color='r',label='Early stopping')
-    '''
+        ax1.axvline(best_epoch, linestyle='--', color='r', label='Early stopping')
+
     ax2.set_title('Reconstruction Loss')
-    ax2.plot(history['recon_loss_1'][0:], color='dodgerblue', label='VAE_1')
-    ax2.plot(history['recon_loss_2'][0:], color='lightsalmon', label='VAE_2')
+    ax2.plot(history['recon_1'], color='dodgerblue', label='VAE_1')
+    ax2.plot(history['recon_2'], color='lightsalmon', label='VAE_2')
+    ax2.plot(history['recon_val_1'], linestyle='--', color='dodgerblue', label='VAE_1_val')
+    ax2.plot(history['recon_val_2'], linestyle='--', color='lightsalmon', label='VAE_2_val')
 
     ax3.set_title('Fit to Prior')
-    ax3.plot(history['kl_loss_1'][0:], color='dodgerblue', label='VAE_1')
-    ax3.plot(history['kl_loss_2'][0:], color='lightsalmon', label='VAE_2')
+    ax3.plot(history['kl_1'], color='dodgerblue', label='train')
+    ax3.plot(history['kl_2'], color='lightsalmon', label='train')
+    ax3.plot(history['kl_val_1'], linestyle='--', color='dodgerblue', label='test')
+    ax3.plot(history['kl_val_2'], linestyle='--', color='lightsalmon', label='test')
 
     ax4.set_title('MI')  # 'MI_iter_1', 'MI_iter_2', 'MI_loss_1', 'MI_loss_2'
-    ax4.plot(history['MI_iter_1'][0:], color='dodgerblue', label='MI1')
-    ax4.plot(history['MI_iter_2'][0:], color='lightsalmon', label='MI2')
-
-    ax5.set_title('MI loss')
-    ax5.plot(history['MI_loss_1'][0:], color='dodgerblue', dashes=[6, 2], label='loss_1')
-    ax5.plot(history['MI_loss_2'][0:], color='lightsalmon', dashes=[6, 2], label='loss_2')
+    ax4.plot(history['MI_1'], color='dodgerblue', label='MI1')
+    ax4.plot(history['MI_2'], color='lightsalmon', label='MI2')
+    ax4.plot(history['MI_val_1'], linestyle='--', color='dodgerblue', label='MI1_val')
+    ax4.plot(history['MI_val_2'], linestyle='--', color='lightsalmon', label='MI2_val')
 
     ax1.legend()
     ax2.legend()
     ax3.legend()
     ax4.legend()
-    ax5.legend()
 
     if save_path != None:
         plt.savefig(save_path + 'los_evolution.png')
 
     return fig
-
 
 def plot_train_result(history, best_epoch=None, save_path=None):
     """Display training and validation loss evolution over epochs
@@ -332,27 +333,31 @@ def plot_train_result(history, best_epoch=None, save_path=None):
     Return a matplotlib Figure
     --------
     """
-    print(">>>>>>>>>PLOTING")
-    # columns=['global_VAE_loss', 'kl_loss_1', 'kl_loss_2', 'recon_loss_1', 'recon_loss_2'])
+    print("===========>>>>>>>>> PLOTING")
+    # columns=['VAE_loss', 'kl_1', 'kl_2', 'recon_1', 'recon_2', 'VAE_loss_val', 'kl_val_1', 'kl_val_2', 'recon_val_1', 'recon_val_2']
     fig = plt.figure(figsize=(15, 15))
     ax1 = fig.add_subplot(2, 1, 1)  # Frist full row
     ax2 = fig.add_subplot(2, 2, 3)  # bottom left on 4x4 grid
     ax3 = fig.add_subplot(2, 2, 4)  # bottom right on a 4x4 grid
     #  plot the overall loss
-    ax1.plot(history['global_VAE_loss'][0:], color='dodgerblue', label='train')
-    # ax1.plot(history['global_VAE_loss_val'][0:],color='lightsalmon',label='test')
+    ax1.plot(history['VAE_loss'], color='dodgerblue', label='train')
+    ax1.plot(history['VAE_loss_val'], linestyle='--', color='dodgerblue', label='test')
     ax1.set_title('Global VAE Loss')
-    '''
+
     if best_epoch != None:
-        ax1.axvline(best_epoch, linestyle='--', color='r',label='Early stopping')
-    '''
+        ax1.axvline(best_epoch, linestyle='--', color='r', label='Early stopping')
+
     ax2.set_title('Reconstruction Loss')
-    ax2.plot(history['recon_loss_1'][0:], color='dodgerblue', label='VAE_1')
-    ax2.plot(history['recon_loss_2'][0:], color='lightsalmon', label='VAE_2')
+    ax2.plot(history['recon_1'], color='dodgerblue', label='VAE_1')
+    ax2.plot(history['recon_2'], color='lightsalmon', label='VAE_2')
+    ax2.plot(history['recon_val_1'], linestyle='--', color='dodgerblue', label='VAE_1_val')
+    ax2.plot(history['recon_val_2'], linestyle='--', color='lightsalmon', label='VAE_2_val')
 
     ax3.set_title('Fit to Prior')
-    ax3.plot(history['kl_loss_1'][0:], color='dodgerblue', label='train')
-    ax3.plot(history['kl_loss_2'][0:], color='lightsalmon', label='test')
+    ax3.plot(history['kl_1'], color='dodgerblue', label='train')
+    ax3.plot(history['kl_2'], color='lightsalmon', label='train')
+    ax3.plot(history['kl_val_1'], linestyle='--', color='dodgerblue', label='test')
+    ax3.plot(history['kl_val_2'], linestyle='--', color='lightsalmon', label='test')
 
     ax1.legend()
     ax2.legend()
@@ -362,7 +367,6 @@ def plot_train_result(history, best_epoch=None, save_path=None):
         plt.savefig(save_path + 'los_evolution.png')
 
     return fig
-
 
 ############################
 ######## SAVING & STOPPING
@@ -414,16 +418,26 @@ class EarlyStopping:
                 # end training
                 self.early_stop = True
 
-    def save_model(self, VAE, MLP):
+    def save_model(self, models):
+        # input: tuple
         if self.path == '':  # dont save
             print("====>NOT saving")
             return
-        else:
-            print(f'========Saving model========')
+
+        if len(models) == 2:
+            print(f'========Saving 2 stsage VAE model========')
+            VAE1, VAE2 = models
             # Save both models
-            save_brute(VAE, self.path + 'VAE_1.pth')
-            if MLP != None:
-                save_brute(MLP, self.path + 'VAE_2.pth')
+            save_brute(VAE1, self.path + 'VAE_1.pth')
+            save_brute(VAE2, self.path + 'VAE_2.pth')
+        elif len(models) == 4:
+            print(f'========Saving 2 stsage infoMAxVAE model========')
+            VAE1, MLP1, VAE2, MLP2 = models
+            # Save both models
+            save_brute(VAE1, self.path + 'VAE_1.pth')
+            save_brute(VAE2, self.path + 'VAE_2.pth')
+            save_brute(MLP1, self.path + 'MLP_1.pth')
+            save_brute(MLP2, self.path + 'MLP_2.pth')
 
 
 def save_checkpoint(model, path):
@@ -461,15 +475,15 @@ def save_checkpoint(model, path):
 
 
 def save_brute(model, path):
-    '''Save the entire model
-    For fast development purpose only'''
+    """Save the entire model
+    For fast development purpose only"""
 
     torch.save(model, path)
 
 
 def load_brute(path):
-    '''To reload entire model
-    For fast development purpose only'''
+    """To reload entire model
+    For fast development purpose only"""
 
     return torch.load(path)
 
@@ -523,9 +537,9 @@ def load_checkpoint(path):
 #######################################
 
 def plot_latent_space(model, dataloader, train_on_gpu):
-    '''
+    """
     Simple plot of the latent representation. To plot every XXX epochs during training for instance
-    '''
+    """
 
     labels_list = []
     z_list = []
