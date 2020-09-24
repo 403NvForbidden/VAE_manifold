@@ -354,7 +354,7 @@ def train_2stage_infoMaxVAE_epoch(num_epochs, VAE_1, VAE_2, optim_VAE1, optim_VA
         #                     100. * batch_idx / len(train_loader),
         #         loss_VAE_1.item(), loss_VAE_2.item()), end='\r')
 
-    if (num_epochs % 5 == 0) or (num_epochs == 1):
+    if (num_epochs % 10 == 0) or (num_epochs == 1):
         print('==========> Epoch: {} ==========> Average loss: {:.4f}'.format(num_epochs, np.mean(loss_overall_iter)))
         print(f'{timer() - start:.2f} seconds elapsed in epoch.')
         print(f'VAE_1 VAE loss: {np.mean(global_VAE_iter_1):.2f}, KL loss : {np.mean(global_VAE_iter_2):.2f}')
