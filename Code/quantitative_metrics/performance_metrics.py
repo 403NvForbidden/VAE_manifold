@@ -6,7 +6,7 @@
 # @Last modified time: 2020-08-31T11:19:20+10:00
 
 '''
-Man function to compute ALL the performance metrics to assess the quality a learnt representation
+Main function to compute ALL the performance metrics to assess the quality a learnt representation
 
 From a csv or a pandas DataFrame containing the projection (latent code) of
 the dataset, compute and save different performance metrics, that can be used
@@ -76,7 +76,7 @@ from quantitative_metrics.classifier_metric import classifier_performance
 from quantitative_metrics.backbone_metric import dist_preservation_err
 
 
-def compute_perf_metrics(data_source,params_preferences):
+def compute_perf_metrics(data_source, params_preferences):
     '''
     From a csv or a pandas DataFrame containing the projection (latent code) of
     the dataset, compute and save different performance metrics, that can be used

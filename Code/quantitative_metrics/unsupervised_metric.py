@@ -5,14 +5,15 @@
 # @Last modified by:   sachahai
 # @Last modified time: 2020-08-31T11:18:21+10:00
 
-'''Main file that contains all the function necessary to compute the unsupervised performance metrics
+"""
+Main file that contains all the function necessary to compute the unsupervised performance metrics
 used to assess the quality of a learnt representation
 
-Co-ranking matrix between high dimentional data and its projection is computed.
+Co-ranking matrix between high dimensional data and its projection is computed.
 From it Trustworthiness, Continuity and LCMC metrics are extracted.
 
 The contribution of each single point can also be computed to obtain a local quality score.
-'''
+"""
 
 import coranking
 from coranking.metrics import trustworthiness, continuity, LCMC
@@ -34,7 +35,7 @@ import plotly.offline
 
 
 def unsup_metric_and_local_Q(metadata_csv,low_dim_names=['x_coord','y_coord','z_coord'],raw_data_included=False, feature_size=64*64*3, path_to_raw_data='DataSets/Synthetic_Data_1', saving_path=None, kt=300, ks=500, only_local_Q=False):
-    '''From a csv file containg 3D projection of single cell data, compute unsupervised metric
+    """From a csv file containg 3D projection of single cell data, compute unsupervised metric
     (continuity, trustworthiness and LCMC), as well as return a local quality score per sample.
 
     Params :
@@ -46,7 +47,7 @@ def unsup_metric_and_local_Q(metadata_csv,low_dim_names=['x_coord','y_coord','z_
         saving_path (string) : Path to the folder where to store the results
         kt, ks (int) : Neighborhood size parameter for the local quality score (please refer to local_quality.py)
         only_local_Q (bolean) : If True, only the local quality score is computed (save computational time)
-    '''
+    """
 
     ################################
     #### Process high and low dim data
@@ -206,10 +207,10 @@ def unsup_metric_and_local_Q(metadata_csv,low_dim_names=['x_coord','y_coord','z_
 #need to be certain that the order match the embedded data !
 
 def compute_coranking(metadata_csv, feature_size, save_matrix=True, saving_path='DataSets/'):
-    '''
+    """
     Compute coranking matrix between input data and projected data, from the raw
     data and latent code saved in csv file
-    '''
+    """
     if isinstance(path_to_csv,str):
         MetaData_csv = pd.read_csv(metadata_csv)
     else:
@@ -232,10 +233,10 @@ def compute_coranking(metadata_csv, feature_size, save_matrix=True, saving_path=
 
 
 def unsupervised_score(coranking_matrix):
-    '''Compute different unsupervised performance metrics
+    """Compute different unsupervised performance metrics
     (trustworthiness, continuity and LCMC) for different neiborhood size,
     provided in list_of_k
-    '''
+    """
     N = coranking_matrix.shape[0]
     #20 equally spaces neiborhood size between 1% and 20% of data size
     neighborhood_sizes = np.linspace(0.01*N,0.2*N,20).astype(np.int16)
@@ -281,7 +282,7 @@ def lcmc_curves_plot(trust,trust_AUC,cont,cont_AUC,lcmc,lcmc_AUC,saving_path=Non
 
 
 def save_representation_plot(model_dataframe,saving_path,low_dim_names=['x_coord','y_coord','z_coord']):
-    '''
+    """
     From a panda dataFrame that contains both latent code and local quality score
     of each data point (e.g, such a csv is saved after running 'unsup_metric_and_local_Q')
     save plotly 3D plot of learnt representation colored by :
@@ -291,7 +292,7 @@ def save_representation_plot(model_dataframe,saving_path,low_dim_names=['x_coord
     TO DO : if lmodel_dataframe is a LIST, a Local Quality Plot (Plot 2) is plotted for each
     model with the same colorbar scale, to be able to compare different model qualitatively,
     but no Plot 1.
-    '''
+    """
 
     # GT cluster colored plot
     model_dataframe['GT_label'] = model_dataframe['GT_label'].astype(str)

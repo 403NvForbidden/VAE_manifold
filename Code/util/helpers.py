@@ -439,7 +439,6 @@ class EarlyStopping:
             save_brute(MLP1, self.path + 'MLP_1.pth')
             save_brute(MLP2, self.path + 'MLP_2.pth')
 
-
 def save_checkpoint(model, path):
     """Save a NN model to path.
 
@@ -473,20 +472,17 @@ def save_checkpoint(model, path):
     # Save the data to the path
     torch.save(checkpoint, path)
 
-
 def save_brute(model, path):
     """Save the entire model
     For fast development purpose only"""
 
     torch.save(model, path)
 
-
 def load_brute(path):
     """To reload entire model
     For fast development purpose only"""
 
     return torch.load(path)
-
 
 def load_checkpoint(path):
     """Load a VAE network, pre-trained on single cell images
@@ -530,7 +526,6 @@ def load_checkpoint(path):
     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
 
     return model, optimizer
-
 
 #######################################
 ######## Old visualization Function

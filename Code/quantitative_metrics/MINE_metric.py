@@ -183,8 +183,6 @@ def reduce_logmeanexp_nodiag(x, axis=None):
 #####################################
 ##### Train Critic and Baseline #####
 #####################################
-
-
 def train_MINE(MINE,path_to_csv,low_dim_names,epochs,infer_dataloader,bound_type='infoNCE',baseline=None,alpha_logit=0.,train_GPU=True):
     '''
     Need a CSV that link every input (single cell images) to its latent code

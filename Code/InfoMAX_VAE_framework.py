@@ -73,8 +73,8 @@ if save and not os.path.isdir(save_model_path):
 ##########################################################
 
 ### Architecture to use if input size is 64x64
-VAE_1 = VAE(zdim=100, alpha=1, beta=20, input_channels=input_channel).to(device)
-VAE_2 = VAE2(VAE_1.conv_enc, VAE_1.linear_enc, zdim=3, alpha=1, beta=20, input_channels=input_compress,
+VAE_1 = VAE(zdim=100, alpha=500, beta=100, input_channels=input_channel).to(device)
+VAE_2 = VAE2(VAE_1.conv_enc, VAE_1.linear_enc, zdim=3, alpha=500, beta=100, input_channels=input_compress,
              double_embed=double_embed).to(device)
 
 MLP_1 = MLP_MI_estimator(input_dim=input_size * input_size * input_channel, zdim=100).to(device)
@@ -94,7 +94,7 @@ opti_MLP2 = optim.Adam(MLP_2.parameters(), lr=0.0005, betas=(0.9, 0.999))
 VAE_1, VAE_2, MLP_1, MLP_2, history, best_epoch = train_2stage_infoMaxVAE_model(EPOCHS, VAE_1, VAE_2, optimizer1,
                                                                                 optimizer2, MLP_1, MLP_2, opti_MLP1,
                                                                                 opti_MLP2, train_loader, valid_loader,
-                                                                                gamma=1,
+                                                                                gamma=0.8,
                                                                                 save_path=save_model_path,
                                                                                 double_embed=double_embed,
                                                                                 device=device)
