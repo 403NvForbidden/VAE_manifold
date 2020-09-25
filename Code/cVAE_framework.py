@@ -59,11 +59,11 @@ print(f'\tTrain on: {device}\t')
 
 ### META of training
 input_size = 64  # the input size of the image
-batch_size = 32  # Change to fit hardware
+batch_size = 64  # Change to fit hardware
 
-EPOCHS = 40
+EPOCHS = 50
 train_loader, valid_loader = get_train_val_dataloader(dataset_path, input_size, batch_size, test_split=0.15)
-model_name = f'2stage_VAE_{datetime.datetime.now().strftime("%Y-%m-%d-%H:%M")}'
+model_name = f'2stage_cVAE_{datetime.datetime.now().strftime("%Y-%m-%d-%H:%M")}'
 save_model_path = None
 if save:
     save_model_path = outdir + f'{model_name}_{EPOCHS}/' if save else ''
