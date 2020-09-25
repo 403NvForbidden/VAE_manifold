@@ -161,23 +161,28 @@ def save_reconstruction(loader, VAE_1, VAE_2, save_path, device, num_img=8, doub
     """
 
     data, label, _ = next(iter(loader))
-    data = Variable(data[:num_img], requires_grad=False).to(device)
+    data = Variable(data[:num_img], requires_grad=False)# .to(device)
+    label = label[:num_img]
 
     n_channel = VAE_1.input_channels
     if n_channel == 4:
-        label = torch.reshape(label, [len(data), 1, 1, 1])
-        ones = torch.ones((len(data), 1, data.shape[2], data.shape[2]))
+        label_channel = torch.reshape(label, [num_img, 1, 1, 1])
+        ones = torch.ones((num_img, 1, data.shape[2], data.shape[2]))
         # (m*1*1*1) * (m*1*64*64)
-        label_channel = Variable(label * ones).to(device)
+        label_channel = Variable(label_channel * ones)# .to(device)
         # concatenate to additional channel
-        data = torch.cat([data, label_channel], axis=1)
+        data = torch.cat([data, label_channel], axis=1).to(device)
 
     ### reconstruction
-    x_recon_1, _, _, z_1 = VAE_1(data)
+    label = Variable(label.float()).to(device)
+    x_recon_1, _, _, z_1 = VAE_1((data, label))
     if double_embed:
         x_recon_2, _, _, _ = VAE_2(z_1)
     else:
-        x_recon_2, _, _, _ = VAE_2(data)
+        if n_channel == 4:
+            x_recon_2, _, _, _ = VAE_2((data, label))
+        else:
+            x_recon_2, _, _, _ = VAE_2(data)
 
     img_grid = make_grid(
         torch.cat((data[:, :3, :, :], torch.sigmoid(x_recon_1[:, :3, :, :]), torch.sigmoid(x_recon_2[:num_img, :3, :, :]))),
@@ -194,8 +199,8 @@ def save_reconstruction(loader, VAE_1, VAE_2, save_path, device, num_img=8, doub
 
     ### generation
     if gen:
-        samples_1 = Variable(torch.randn(8, VAE_1.zdim, 1, 1), requires_grad=False).to(device)
-        samples_2 = Variable(torch.randn(8, VAE_2.zdim, 1, 1), requires_grad=False).to(device)
+        samples_1 = Variable(torch.randn(8, VAE_1.zdim+1, 1, 1), requires_grad=False).to(device)
+        samples_2 = Variable(torch.randn(8, VAE_2.zdim+1, 1, 1), requires_grad=False).to(device)
 
         recon_1 = VAE_1.decode(samples_1)
         recon_2 = VAE_2.decode(samples_2)

@@ -116,7 +116,7 @@ if save:
 infer_data, infer_dataloader = get_inference_dataset(dataset_path, batch_size, input_size, shuffle=False,
                                                      droplast=False)
 """
-#Possibility of reloading a model trained in the past, or use the variable defined above
+#Possibility of rel oading a model trained in the past, or use the variable defined above
 #model_VAE = load_brute(save_model_path)
 #model_VAE = load_brute('path_to_model.pth')
 #model_name='Model_name_string'
