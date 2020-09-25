@@ -5,7 +5,7 @@
 # %% imports
 ##########################################################
 import numpy as np
-import cv2
+import cv2, os
 
 import torch
 from torch import cuda
@@ -19,7 +19,7 @@ from util.helpers import load_brute
 ##########################################################
 datadir = '../DataSets/'
 outdir = '../outputs/'
-
+print(os.listdir())
 ### META of dataset
 datadir_BBBC = datadir + 'Synthetic_Data_1'
 datadir_Horvarth = datadir + 'Peter_Horvath_Subsample'
@@ -28,7 +28,7 @@ dataset_path = datadir_BBBC
 
 model_name = 'Model_name_string'
 path_to_GT = datadir + 'MetaData1_GT_link_CP.csv'
-model_path = outdir + '2stage_infoVAE_2020-09-17-23:21_100'
+model_path = outdir + '2stage_infoMaxVAE_2020-09-17-23:21_100'
 
 n = 10  # figure with 15x15 digits
 digit_size = 64

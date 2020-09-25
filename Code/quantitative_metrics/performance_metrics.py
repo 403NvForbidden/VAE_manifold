@@ -270,3 +270,36 @@ def compute_perf_metrics(data_source, params_preferences):
 
     plt.close('all')
     print('Metrics Computation Terminated')
+
+if __name__ == '__main__':
+    params_preferences = {
+        'feature_size': 64 * 64 * 3,
+        'path_to_raw_data': '../../DataSets/Synthetic_Data_1',
+        # 'path_to_raw_data':'../DataSets/Peter_Horvath_Subsample',
+        # 'path_to_raw_data':'../DataSets/Chaffer_Data',
+        'dataset_tag': 1,  # 1:BBBC 2:Horvath 3:Chaffer
+        # 'low_dim_names':['UMAP_61_X','UMAP_61_Y','UMAP_61_Z'],
+        'low_dim_names': ['VAE_x_coord', 'VAE_y_coord', 'VAE_z_coord'],
+
+        'global_saving_path': '',  # Different for each model, this one is update during optimization
+
+        ### Unsupervised metrics
+        'save_unsupervised_metric': True,
+        'only_local_Q': False,
+        'kt': 300,
+        'ks': 500,
+
+        ### Mutual Information
+        'save_mine_metric': False,
+        'batch_size': 256,
+        'bound_type': 'interpolated',
+        'alpha_logit': -4.6,  # result in alpha = 0.01
+        'epochs': 3,
+
+        ### Classifier accuracy
+        'save_classifier_metric': True,
+        'num_iteration': 8,
+
+        ### BackBone Metric
+        'save_backbone_metric': True
+    }
