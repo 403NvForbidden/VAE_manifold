@@ -160,8 +160,17 @@ def save_reconstruction(loader, VAE_1, VAE_2, save_path, device, num_img=8, doub
         :param num_img:
     """
 
-    data, _, _ = next(iter(loader))
+    data, label, _ = next(iter(loader))
     data = Variable(data[:num_img], requires_grad=False).to(device)
+
+    n_channel = VAE_1.input_channels
+    if n_channel == 4:
+        label = torch.reshape(label, [len(data), 1, 1, 1])
+        ones = torch.ones((len(data), 1, data.shape[2], data.shape[2]))
+        # (m*1*1*1) * (m*1*64*64)
+        label_channel = Variable(label * ones).to(device)
+        # concatenate to additional channel
+        data = torch.cat([data, label_channel], axis=1)
 
     ### reconstruction
     x_recon_1, _, _, z_1 = VAE_1(data)

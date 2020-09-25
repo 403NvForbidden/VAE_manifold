@@ -72,7 +72,7 @@ class VAE2(nn.Module):
         ###########################
         # 3 -> 64 -> 256 -> 1024 -> 2048 -> 1024*2*2 -> 512*4*4 -> 256*8*8 -> 128*16*16 -> 64*32*32 -> 4*64*64
         self.linear_dec = nn.Sequential(
-            nn.Linear(self.zdim, 64),
+            nn.Linear(self.zdim + 1, 64),
             nn.BatchNorm1d(64),
             nn.ReLU(),
             nn.Linear(64, 256),
@@ -94,7 +94,7 @@ class VAE2(nn.Module):
             ConvUpsampling(base_dec_size * 2, base_dec_size, 4, stride=2, padding=1),  # 32
             nn.Upsample(scale_factor=4, mode='bilinear'),
             # shouldn't be zdim but input_channel can be 100, so use zdim for now
-            nn.Conv2d(base_dec_size, self.zdim, 4, 2, 1),
+            nn.Conv2d(base_dec_size, 3, 4, 2, 1),
             # nn.Sigmoid(), #Sigmoid compute directly in the loss (more stable)
         )
 
@@ -153,10 +153,16 @@ class VAE2(nn.Module):
         z = self.reparameterize(mu_z, logvar_z)
         return z
 
-    def forward(self, x):
+    def forward(self, input):
+        if len(input) == 2:
+            x, y = input
+        else:
+            x = input
         # (32, 3, 64, 64) or (3, 100)
         mu_z, logvar_z = self.encode(x)
         z = self.reparameterize(mu_z, logvar_z)
+        if len(input) == 2:
+            z = torch.cat((z, torch.unsqueeze(y, -1)), axis=1)
         x_recon = self.decode(z)
         return x_recon, mu_z, logvar_z, z.squeeze()
 
@@ -204,7 +210,7 @@ class VAE(nn.Module):
         ##### Decoding layers #####
         ###########################
         self.linear_dec = nn.Sequential(
-            nn.Linear(self.zdim, 1024),
+            nn.Linear(self.zdim + 1, 1024),
             nn.BatchNorm1d(1024),
             nn.ReLU(),
             nn.Linear(1024, 2 * 2 * base_dec * 16),
@@ -218,7 +224,7 @@ class VAE(nn.Module):
             ConvUpsampling(base_dec * 4, base_dec * 2, 4, stride=2, padding=1),  # 16
             ConvUpsampling(base_dec * 2, base_dec, 4, stride=2, padding=1),  # 32
             nn.Upsample(scale_factor=4, mode='bilinear'),
-            nn.Conv2d(base_dec, self.input_channels, 4, 2, 1),  # 192
+            nn.Conv2d(base_dec, 3, 4, 2, 1),  # 192
             # nn.Sigmoid(), #Sigmoid compute directly in the loss (more stable)
         )
 
@@ -268,10 +274,15 @@ class VAE(nn.Module):
         z = self.reparameterize(mu_z, logvar_z)
         return z
 
-    def forward(self, x):
-
+    def forward(self, input):
+        if len(input) == 2:
+            x, y = input
+        else:
+            x = input
         mu_z, logvar_z = self.encode(x)
         z = self.reparameterize(mu_z, logvar_z)
+        if len(input) == 2:
+            z = torch.cat((z, torch.unsqueeze(y, -1)), axis=1)
         x_recon = self.decode(z)
         return x_recon, mu_z, logvar_z, z.squeeze()
 

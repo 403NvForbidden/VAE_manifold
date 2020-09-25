@@ -79,12 +79,26 @@ def train_2stage_VAE_epoch(num_epochs, VAE_1, VAE_2, optimizer_1, optimizer_2, t
     criterion_recon = nn.BCEWithLogitsLoss().to(device)  # more stable than handmade sigmoid as last layer and BCELoss
 
     # each `data` is of BATCH_SIZE samples and has shape [batch_size, 4, 128, 128]
-    for batch_idx, (data, _) in enumerate(train_loader):
-        data = Variable(data).to(device)
+    for batch_idx, (data, label) in enumerate(train_loader):
+        data = Variable(data).to(device) # tensor m*c*n*n
+        # label tensor m*1
 
-        # push whole batch of data through VAE.forward() to get recon_loss
-        x_recon_1, mu_z_1, logvar_z_1, _ = VAE_1(data)
-        x_recon_2, mu_z_2, logvar_z_2, _ = VAE_2(data)
+        ### encode conditions
+        if VAE_1.input_channels == 4:
+            label_channel = torch.reshape(label, [len(data), 1, 1, 1])
+            ones = torch.ones((len(data), 1, data.shape[2], data.shape[2]))
+            # (m*1*1*1) * (m*1*64*64)
+            label_channel = Variable(label_channel * ones).to(device)
+            # concatenate to additional channel
+            data_condition = torch.cat([data, label_channel], axis=1)
+
+            # push whole batch of data through VAE.forward() to get recon_loss
+            label = Variable(label.float()).to(device)
+            x_recon_1, mu_z_1, logvar_z_1, _ = VAE_1((data_condition, label))
+            x_recon_2, mu_z_2, logvar_z_2, _ = VAE_2((data_condition, label))
+        else:
+            x_recon_1, mu_z_1, logvar_z_1, _ = VAE_1(data)
+            x_recon_2, mu_z_2, logvar_z_2, _ = VAE_2(data)
 
         # calculate scalar loss of VAE1
         loss_recon_1 = criterion_recon(x_recon_1, data)
@@ -150,12 +164,25 @@ def test_2stage_VAE_epoch(num_epochs, VAE_1, VAE_2, optimizer_1, optimizer_2, te
             device)  # more stable than handmade sigmoid as last layer and BCELoss
 
         # each `data` is of BATCH_SIZE samples and has shape [batch_size, 4, 128, 128]
-        for batch_idx, (data, _) in enumerate(test_loader):
+        for batch_idx, (data, label) in enumerate(test_loader):
             data = Variable(data).to(device)
 
-            # push whole batch of data through VAE.forward() to get recon_loss
-            x_recon_1, mu_z_1, logvar_z_1, _ = VAE_1(data)
-            x_recon_2, mu_z_2, logvar_z_2, _ = VAE_2(data)
+            ### encode conditions
+            if VAE_1.input_channels == 4:
+                label_channel = torch.reshape(label, [len(data), 1, 1, 1])
+                ones = torch.ones((len(data), 1, data.shape[2], data.shape[2]))
+                # (m*1*1*1) * (m*1*64*64)
+                label_channel = Variable(label_channel * ones).to(device)
+                # concatenate to additional channel
+                data_condition = torch.cat([data, label_channel], axis=1)
+
+                # push whole batch of data through VAE.forward() to get recon_loss
+                label = Variable(label.float()).to(device)
+                x_recon_1, mu_z_1, logvar_z_1, _ = VAE_1((data_condition, label))
+                x_recon_2, mu_z_2, logvar_z_2, _ = VAE_2((data_condition, label))
+            else:
+                x_recon_1, mu_z_1, logvar_z_1, _ = VAE_1(data)
+                x_recon_2, mu_z_2, logvar_z_2, _ = VAE_2(data)
 
             # calculate scalar loss of VAE1
             loss_recon_1 = criterion_recon(x_recon_1, data)
