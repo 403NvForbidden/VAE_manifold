@@ -22,7 +22,7 @@ from models.nn_modules import Conv, ConvTranspose, ConvUpsampling, Skip_Conv_dow
 
 class VAE2(nn.Module):
     def __init__(self, VAE1_conv_encoder, VAE1_linear_encoder, zdim=3, alpha=1, beta=1, input_channels=3,
-                 base_dec_size=32, loss='BCE', double_embed=False):
+                 base_dec_size=32, loss='BCEWithLogitsLoss', double_embed=False, conditional=True):
         super(VAE2, self).__init__()
         """
         param:
@@ -40,6 +40,7 @@ class VAE2(nn.Module):
         self.loss = loss
         self.base_dec = base_dec_size
         self.double_embed = double_embed
+        self.conditional = conditional
 
         ###########################
         ##### Encoding layers #####
@@ -71,8 +72,9 @@ class VAE2(nn.Module):
         ##### Decoding layers #####
         ###########################
         # 3 -> 64 -> 256 -> 1024 -> 2048 -> 1024*2*2 -> 512*4*4 -> 256*8*8 -> 128*16*16 -> 64*32*32 -> 4*64*64
+        hidden_dim = self.zdim + 1 if conditional else zdim
         self.linear_dec = nn.Sequential(
-            nn.Linear(self.zdim + 1, 64),
+            nn.Linear(hidden_dim, 64),
             nn.BatchNorm1d(64),
             nn.ReLU(),
             nn.Linear(64, 256),
@@ -94,26 +96,23 @@ class VAE2(nn.Module):
             ConvUpsampling(base_dec_size * 2, base_dec_size, 4, stride=2, padding=1),  # 32
             nn.Upsample(scale_factor=4, mode='bilinear'),
             # shouldn't be zdim but input_channel can be 100, so use zdim for now
-            nn.Conv2d(base_dec_size, 3, 4, 2, 1),
-            # nn.Sigmoid(), #Sigmoid compute directly in the loss (more stable)
+            nn.Conv2d(base_dec_size, input_channels, 4, 2, 1)
         )
 
-        # constrain logvar in a reasonable range
+        ### to constrain logvar in a reasonable range
         self.stabilize_exp = nn.Hardtanh(min_val=-6., max_val=2.)  # linear between min and max
-        # to constrain logvar in a reasonable range
 
-        # xavier initialization
+        ### weight initialization
         for m in self.modules():
             if isinstance(m, nn.Conv2d) or isinstance(m, nn.ConvTranspose2d):
-                xavier_normal_(m.weight,
-                               gain=math.sqrt(2. / (1 + 0.01)))  # Gain adapted for LeakyReLU activation function
+                # Gain adapted for LeakyReLU activation function
+                xavier_normal_(m.weight, gain=math.sqrt(2. / (1 + 0.01)))
                 m.bias.data.fill_(0.01)
             elif isinstance(m, nn.BatchNorm2d):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
             elif isinstance(m, nn.Linear):
-                xavier_normal_(m.weight,
-                               gain=math.sqrt(2. / (1 + 0.01)))  # Gain adapted for LeakyReLU activation function
+                xavier_normal_(m.weight, gain=math.sqrt(2. / (1 + 0.01)))
                 m.bias.data.fill_(0.01)
 
     def reparameterize(self, mu, logvar):
@@ -150,26 +149,28 @@ class VAE2(nn.Module):
     def get_latent(self, x):
         # (32, 3, 64, 64) or (3, 100)
         mu_z, logvar_z = self.encode(x)
-        z = self.reparameterize(mu_z, logvar_z)
-        return z
+        return self.reparameterize(mu_z, logvar_z)
 
     def forward(self, input):
-        if len(input) == 2:
+        if self.conditional:
+            assert len(input) == 2
             x, y = input
         else:
-            x = input
+            assert len(input) == 1
+
         # (32, 3, 64, 64) or (3, 100)
         mu_z, logvar_z = self.encode(x)
         z = self.reparameterize(mu_z, logvar_z)
-        if len(input) == 2:
+        if self.conditional:
             z = torch.cat((z, torch.unsqueeze(y, -1)), axis=1)
+
         x_recon = self.decode(z)
         return x_recon, mu_z, logvar_z, z.squeeze()
 
 
 class VAE(nn.Module):
-    def __init__(self, zdim=3, input_channels=3, alpha=1, beta=1, base_enc=32, base_dec=32, depth_factor_dec=2,
-                 loss='BCE'):
+    def __init__(self, zdim=3, input_channels=3, alpha=1, beta=1, base_enc=32, base_dec=32,
+                 loss='BCEWithLogitsLoss', conditional=False):
         super(VAE, self).__init__()
         """
         param :
@@ -185,6 +186,7 @@ class VAE(nn.Module):
         self.loss = loss
         self.input_channels = input_channels
         self.base_dec = base_dec
+        self.conditional = conditional
 
         ###########################
         ##### Encoding layers #####
@@ -209,8 +211,9 @@ class VAE(nn.Module):
         ###########################
         ##### Decoding layers #####
         ###########################
+        hidden_dim = self.zdim + 1 if conditional else zdim
         self.linear_dec = nn.Sequential(
-            nn.Linear(self.zdim + 1, 1024),
+            nn.Linear(hidden_dim, 1024),
             nn.BatchNorm1d(1024),
             nn.ReLU(),
             nn.Linear(1024, 2 * 2 * base_dec * 16),
@@ -224,8 +227,7 @@ class VAE(nn.Module):
             ConvUpsampling(base_dec * 4, base_dec * 2, 4, stride=2, padding=1),  # 16
             ConvUpsampling(base_dec * 2, base_dec, 4, stride=2, padding=1),  # 32
             nn.Upsample(scale_factor=4, mode='bilinear'),
-            nn.Conv2d(base_dec, 3, 4, 2, 1),  # 192
-            # nn.Sigmoid(), #Sigmoid compute directly in the loss (more stable)
+            nn.Conv2d(base_dec, input_channels, 4, 2, 1),  # 192
         )
 
         self.stabilize_exp = nn.Hardtanh(min_val=-6., max_val=2.)  # linear between min and max
@@ -275,14 +277,19 @@ class VAE(nn.Module):
         return z
 
     def forward(self, input):
-        if len(input) == 2:
+        if self.conditional:
+            assert len(input) == 2
             x, y = input
         else:
+            assert len(input) == 1
             x = input
+        ### encode
         mu_z, logvar_z = self.encode(x)
         z = self.reparameterize(mu_z, logvar_z)
-        if len(input) == 2:
+        if self.conditional:
+            # concat GT to hidden feature
             z = torch.cat((z, torch.unsqueeze(y, -1)), axis=1)
+        ### decode
         x_recon = self.decode(z)
         return x_recon, mu_z, logvar_z, z.squeeze()
 

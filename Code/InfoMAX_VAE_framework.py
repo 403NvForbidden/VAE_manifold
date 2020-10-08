@@ -136,6 +136,4 @@ html_save = f'{model_name}_Representation.html'
 plotly.offline.plot(figplotly, filename=html_save, auto_open=True)
 """
 # save image of reconstruction and generated samples
-image_save = save_model_path + ''
-# lofi constrcution
-save_reconstruction(infer_dataloader, VAE_1, VAE_2, image_save, device, double_embed=double_embed)
+save_reconstruction(infer_dataloader, VAE_1, VAE_2, save_model_path, device, double_embed=double_embed)

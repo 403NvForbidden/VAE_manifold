@@ -39,7 +39,7 @@ from torchvision.utils import save_image, make_grid
 ######## Match Latent Code and Ground Truth
 ##############################################
 
-def metadata_latent_space(model, infer_dataloader, train_on_gpu, GT_csv_path, save_csv=False, with_rawdata=False,
+def metadata_latent_space(model, infer_dataloader, device, GT_csv_path, save_csv=False, with_rawdata=False,
                           csv_path='no_name_specified.csv'):
     """
     Once a VAE model is trained, take its predictions (3D latent code) and store it in a csv
@@ -47,7 +47,7 @@ def metadata_latent_space(model, infer_dataloader, train_on_gpu, GT_csv_path, sa
 
     Params :
         - model (nn.Module) :  trained Pytorch VAE model that will produce latent codes of dataset
-        - inder_dataloader (DataLoader) : Dataloader that iterates the dataset by batch
+        - infer_dataloader (DataLoader) : Dataloader that iterates the dataset by batch
         - train_on_gpu (boolean) : Wheter infer latent codes on GPU or not.
         - GT_csv_path (string) : path to a csv file that contains all the ground truth information
                 to keep alongside the latent codes. A column 'Unique_ID' (the name of the tiff files)
@@ -75,19 +75,28 @@ def metadata_latent_space(model, infer_dataloader, train_on_gpu, GT_csv_path, sa
     for i, (data, labels, file_names) in enumerate(infer_dataloader):
         # Extract unique cell id from file_names
         id_list.append([file_name for file_name in file_names])
-        if train_on_gpu:
-            # make sure this lives on the GPU
-            data = data.cuda()
+
+        data = data.to(device)
         with torch.no_grad():
             model.eval()
             if with_rawdata:
                 raw_data = data.view(data.size(0), -1)  # B x HxWxC
                 list_of_tensors.append(raw_data.data.cpu().numpy())
 
-            data = Variable(data, requires_grad=False)
+            ### additional label channel
+            if model.conditional:
+                label_channel = torch.reshape(labels, [len(data), 1, 1, 1])
+                ones = torch.ones((len(data), 1, data.shape[2], data.shape[2]))
+                # (m*1*1*1) * (m*1*64*64)
+                label_channel = Variable(label_channel * ones).to(device)
+                # concatenate to additional channel
+                data = torch.cat([data, label_channel], axis=1)
+            else:
+                data = Variable(data, requires_grad=False)
+
             z, _ = model.encode(data)
             z = z.view(-1, model.zdim)
-            z_list.append((z.data).cpu().numpy())
+            z_list.append(z.data.cpu().numpy())
             labels_list.append(labels.numpy())
 
         print(f'In progress...{i * len(data)}/{len(infer_dataloader.dataset)}', end='\r')
@@ -314,16 +323,13 @@ def plot_train_result_infoMax(history, best_epoch=None, save_path=None):
     ax3.plot(history['kl_val_1'], linestyle='--', color='dodgerblue', label='test')
     ax3.plot(history['kl_val_2'], linestyle='--', color='lightsalmon', label='test')
 
-    ax4.set_title('MI')  # 'MI_iter_1', 'MI_iter_2', 'MI_loss_1', 'MI_loss_2'
+    ax4.set_title('MI')
     ax4.plot(history['MI_1'], color='dodgerblue', label='MI1')
     ax4.plot(history['MI_2'], color='lightsalmon', label='MI2')
     ax4.plot(history['MI_val_1'], linestyle='--', color='dodgerblue', label='MI1_val')
     ax4.plot(history['MI_val_2'], linestyle='--', color='lightsalmon', label='MI2_val')
 
-    ax1.legend()
-    ax2.legend()
-    ax3.legend()
-    ax4.legend()
+    ax1.legend(); ax2.legend(); ax3.legend(); ax4.legend()
 
     if save_path != None:
         plt.savefig(save_path + 'los_evolution.png')
