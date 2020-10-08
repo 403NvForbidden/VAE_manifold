@@ -116,7 +116,7 @@ if save:
 infer_data, infer_dataloader = get_inference_dataset(dataset_path, batch_size, input_size, shuffle=False,
                                                      droplast=False)
 """
-#Possibility of reloading a model trained in the past, or use the variable defined above
+#Possibility of rel oading a model trained in the past, or use the variable defined above
 #model_VAE = load_brute(save_model_path)
 #model_VAE = load_brute('path_to_model.pth')
 #model_name='Model_name_string'
@@ -136,6 +136,4 @@ html_save = f'{model_name}_Representation.html'
 plotly.offline.plot(figplotly, filename=html_save, auto_open=True)
 """
 # save image of reconstruction and generated samples
-image_save = save_model_path + ''
-# lofi constrcution
-save_reconstruction(infer_dataloader, VAE_1, VAE_2, image_save, device, double_embed=double_embed)
+save_reconstruction(infer_dataloader, VAE_1, VAE_2, save_model_path, device, double_embed=double_embed)

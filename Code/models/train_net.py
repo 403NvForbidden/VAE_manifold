@@ -79,12 +79,26 @@ def train_2stage_VAE_epoch(num_epochs, VAE_1, VAE_2, optimizer_1, optimizer_2, t
     criterion_recon = nn.BCEWithLogitsLoss().to(device)  # more stable than handmade sigmoid as last layer and BCELoss
 
     # each `data` is of BATCH_SIZE samples and has shape [batch_size, 4, 128, 128]
-    for batch_idx, (data, _) in enumerate(train_loader):
-        data = Variable(data).to(device)
+    for batch_idx, (data, label) in enumerate(train_loader):
+        data = Variable(data).to(device) # tensor m*c*n*n
+        # label tensor m*1
 
-        # push whole batch of data through VAE.forward() to get recon_loss
-        x_recon_1, mu_z_1, logvar_z_1, _ = VAE_1(data)
-        x_recon_2, mu_z_2, logvar_z_2, _ = VAE_2(data)
+        ### encode conditions
+        if VAE_1.conditional:
+            label_channel = torch.reshape(label, [len(data), 1, 1, 1])
+            ones = torch.ones((len(data), 1, data.shape[2], data.shape[2]))
+            # (m*1*1*1) * (m*1*64*64)
+            label_channel = Variable(label_channel * ones).to(device)
+            # concatenate to additional channel
+            data_condition = torch.cat([data, label_channel], axis=1)
+
+            # push whole batch of data through VAE.forward() to get recon_loss
+            label = Variable(label.float()).to(device)
+            x_recon_1, mu_z_1, logvar_z_1, _ = VAE_1((data_condition, label))
+            x_recon_2, mu_z_2, logvar_z_2, _ = VAE_2((data_condition, label))
+        else:
+            x_recon_1, mu_z_1, logvar_z_1, _ = VAE_1(data)
+            x_recon_2, mu_z_2, logvar_z_2, _ = VAE_2(data)
 
         # calculate scalar loss of VAE1
         loss_recon_1 = criterion_recon(x_recon_1, data)
@@ -95,11 +109,9 @@ def train_2stage_VAE_epoch(num_epochs, VAE_1, VAE_2, optimizer_1, optimizer_2, t
         # total loss
         loss_overall = loss_VAE_2 + gamma * loss_VAE_1  # as auxiliary loss
 
-        optimizer_1.zero_grad()
-        optimizer_2.zero_grad()
+        optimizer_1.zero_grad(); optimizer_2.zero_grad()
         loss_overall.backward()
-        optimizer_1.step()
-        optimizer_2.step()
+        optimizer_1.step(); optimizer_2.step()
 
         # record the loss
         loss_overall_iter.append(loss_overall.item())
@@ -150,12 +162,25 @@ def test_2stage_VAE_epoch(num_epochs, VAE_1, VAE_2, optimizer_1, optimizer_2, te
             device)  # more stable than handmade sigmoid as last layer and BCELoss
 
         # each `data` is of BATCH_SIZE samples and has shape [batch_size, 4, 128, 128]
-        for batch_idx, (data, _) in enumerate(test_loader):
+        for batch_idx, (data, label) in enumerate(test_loader):
             data = Variable(data).to(device)
 
-            # push whole batch of data through VAE.forward() to get recon_loss
-            x_recon_1, mu_z_1, logvar_z_1, _ = VAE_1(data)
-            x_recon_2, mu_z_2, logvar_z_2, _ = VAE_2(data)
+            ### encode conditions
+            if VAE_1.conditional:
+                label_channel = torch.reshape(label, [len(data), 1, 1, 1])
+                ones = torch.ones((len(data), 1, data.shape[2], data.shape[2]))
+                # (m*1*1*1) * (m*1*64*64)
+                label_channel = Variable(label_channel * ones).to(device)
+                # concatenate to additional channel
+                data_condition = torch.cat([data, label_channel], axis=1)
+
+                # push whole batch of data through VAE.forward() to get recon_loss
+                label = Variable(label.float()).to(device)
+                x_recon_1, mu_z_1, logvar_z_1, _ = VAE_1((data_condition, label))
+                x_recon_2, mu_z_2, logvar_z_2, _ = VAE_2((data_condition, label))
+            else:
+                x_recon_1, mu_z_1, logvar_z_1, _ = VAE_1(data)
+                x_recon_2, mu_z_2, logvar_z_2, _ = VAE_2(data)
 
             # calculate scalar loss of VAE1
             loss_recon_1 = criterion_recon(x_recon_1, data)
@@ -207,7 +232,7 @@ def train_2stage_VAE_model(num_epochs, VAE_1, VAE_2, optimizer1, optimizer2, tra
     best_epoch = 0
 
     history = []
-    early_stopping = EarlyStopping(patience=30, verbose=True, path=save_path)
+    early_stopping = EarlyStopping(patience=20, verbose=True, path=save_path)
     lr_schedul_VAE_1 = torch.optim.lr_scheduler.StepLR(optimizer=optimizer1, step_size=40, gamma=0.6)
     lr_schedul_VAE_2 = torch.optim.lr_scheduler.StepLR(optimizer=optimizer2, step_size=40, gamma=0.6)
 
@@ -231,8 +256,7 @@ def train_2stage_VAE_model(num_epochs, VAE_1, VAE_2, optimizer1, optimizer2, tra
             [VAE_loss, kl_1, kl_2, recon_1, recon_2, VAE_loss_val, kl_val_1, kl_val_2, recon_val_1, recon_val_2])
         VAE_1.epochs, VAE_2.epochs = VAE_1.epochs + 1, VAE_2.epochs + 1
 
-        lr_schedul_VAE_1.step()
-        lr_schedul_VAE_2.step()
+        lr_schedul_VAE_1.step(); lr_schedul_VAE_2.step()
 
         if early_stopping.early_stop:
             print(f'#### Early stopping occured. Best model saved is from epoch {early_stopping.stop_epoch}')
@@ -254,8 +278,7 @@ def train_2stage_VAE_model(num_epochs, VAE_1, VAE_2, optimizer1, optimizer2, tra
     print('######### TRAINING FINISHED ##########')
 
     # Attach the optimizer
-    VAE_1.optimizer = optimizer1
-    VAE_2.optimizer = optimizer2
+    VAE_1.optimizer = optimizer1; VAE_2.optimizer = optimizer2
 
     return VAE_1, VAE_2, history, best_epoch
 
@@ -320,21 +343,17 @@ def train_2stage_infoMaxVAE_epoch(num_epochs, VAE_1, VAE_2, optim_VAE1, optim_VA
         loss_overall = (loss_VAE_2 - VAE_2.alpha * MI_xz_2) + gamma * (loss_VAE_1 - VAE_1.alpha * MI_xz_1)
 
         # Step 1 : Optimization of VAE based on the current MI estimation
-        optim_VAE1.zero_grad()
-        optim_VAE2.zero_grad()
+        optim_VAE1.zero_grad(); optim_VAE2.zero_grad()
         loss_overall.backward(retain_graph=True)  # Important argument, we backpropagated two times over MI_xz)
-        optim_VAE1.step()
-        optim_VAE2.step()
+        optim_VAE1.step(); optim_VAE2.step()
 
         # Step 2 : Optimization of the MLP to improve the MI estimation
-        opti_MLP1.zero_grad()
-        opti_MLP2.zero_grad()
+        opti_MLP1.zero_grad(); opti_MLP2.zero_grad()
         MI_loss_1 = -MI_xz_1
         MI_loss_2 = -MI_xz_2
         MI_loss_1.backward(retain_graph=True)  # Important argument
         MI_loss_2.backward()
-        opti_MLP1.step()
-        opti_MLP2.step()
+        opti_MLP1.step(); opti_MLP2.step()
 
         # record the loss
         loss_overall_iter.append(loss_overall.item())
@@ -344,15 +363,7 @@ def train_2stage_infoMaxVAE_epoch(num_epochs, VAE_1, VAE_2, optim_VAE1, optim_VA
             loss_recon_2.item()]
         kl_loss_iter_1, kl_loss_iter_2 = kl_loss_iter_1 + [loss_kl_1.item()], kl_loss_iter_2 + [loss_kl_2.item()]
 
-        MI_iter_1.append(MI_xz_1.item())
-        MI_iter_2.append(MI_xz_2.item())
-
-        ### comment out for fast training
-        # if batch_idx % 5 == 0:
-        #     print('Train Epoch: {} [{}/{} ({:.0f}%)]\tVAE1 Loss: {:.6f}\tVAE2 Loss: {:.6f}'.format(
-        #         num_epochs, batch_idx * len(data), len(train_loader.dataset),
-        #                     100. * batch_idx / len(train_loader),
-        #         loss_VAE_1.item(), loss_VAE_2.item()), end='\r')
+        MI_iter_1.append(MI_xz_1.item()); MI_iter_2.append(MI_xz_2.item())
 
     if (num_epochs % 10 == 0) or (num_epochs == 1):
         print('==========> Epoch: {} ==========> Average loss: {:.4f}'.format(num_epochs, np.mean(loss_overall_iter)))
