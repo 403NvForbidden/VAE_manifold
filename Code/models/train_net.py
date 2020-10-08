@@ -80,7 +80,8 @@ def train_2stage_VAE_epoch(num_epochs, VAE_1, VAE_2, optimizer_1, optimizer_2, t
 
     # each `data` is of BATCH_SIZE samples and has shape [batch_size, 4, 128, 128]
     for batch_idx, (data, label) in enumerate(train_loader):
-        data = Variable(data).to(device)  # tensor m*c*n*n
+        data = Variable(data).to(device)
+        # tensor m*c*n*n
         # label tensor m*1
 
         ### encode conditions
@@ -168,18 +169,20 @@ def test_2stage_VAE_epoch(num_epochs, VAE_1, VAE_2, test_loader, gamma=0.8, devi
 
             ### encode conditions
             if VAE_1.conditional:
-                label_channel = torch.reshape(label, [len(data), 1, 1, 1])
-                ones = torch.ones((len(data), 1, data.shape[2], data.shape[2]))
-                # (m*1*1*1) * (m*1*64*64)
-                label_channel = Variable(label_channel * ones).to(device)
-                # concatenate to additional channel
-                data_condition = torch.cat([data, label_channel], axis=1)
-                data = data_condition
+                # label_channel = torch.reshape(label, [len(data), 1, 1, 1])
+                # ones = torch.ones((len(data), 1, data.shape[2], data.shape[2]))
+                # # (m*1*1*1) * (m*1*64*64)
+                # label_channel = Variable(label_channel * ones).to(device)
+                # # concatenate to additional channel
+                # data_condition = torch.cat([data, label_channel], axis=1)
+                # data = data_condition
+                # # push whole batch of data through VAE.forward() to get recon_loss
+                # label = Variable(label.float()).to(device)
+                # x_recon_1, mu_z_1, logvar_z_1, _ = VAE_1((data_condition, label))
+                # x_recon_2, mu_z_2, logvar_z_2, _ = VAE_2((data_condition, label))
 
-                # push whole batch of data through VAE.forward() to get recon_loss
-                label = Variable(label.float()).to(device)
-                x_recon_1, mu_z_1, logvar_z_1, _ = VAE_1((data_condition, label))
-                x_recon_2, mu_z_2, logvar_z_2, _ = VAE_2((data_condition, label))
+                x_recon_1, mu_z_1, logvar_z_1, _ = VAE_1((data, label))
+                x_recon_2, mu_z_2, logvar_z_2, _ = VAE_2((data, label))
             else:
                 x_recon_1, mu_z_1, logvar_z_1, _ = VAE_1(data)
                 x_recon_2, mu_z_2, logvar_z_2, _ = VAE_2(data)
@@ -210,7 +213,7 @@ def test_2stage_VAE_epoch(num_epochs, VAE_1, VAE_2, test_loader, gamma=0.8, devi
 
 
 def train_2stage_VAE_model(num_epochs, VAE_1, VAE_2, optimizer1, optimizer2, train_loader, valid_loader,
-                           gamma=0.8, save_path='', device='cpu'):
+                           gamma=1, save_path='', device='cpu'):
     """
         Define VAE 1:
 

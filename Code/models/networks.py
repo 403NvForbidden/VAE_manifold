@@ -154,9 +154,12 @@ class VAE2(nn.Module):
     def forward(self, input):
         if self.conditional:
             assert len(input) == 2
+
             x, y = input
         else:
             x = input
+
+
 
         # (32, 3, 64, 64) or (3, 100)
         mu_z, logvar_z = self.encode(x)

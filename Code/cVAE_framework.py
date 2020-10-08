@@ -58,7 +58,7 @@ batch_size = 64  # Change to fit hardware
 
 EPOCHS = 40
 train_loader, valid_loader = get_train_val_dataloader(dataset_path, input_size, batch_size, test_split=0.15)
-model_name = f'2stage_cVAE_{datetime.datetime.now().strftime("%Y-%m-%d-%H:%M")}'
+model_name = f'2stage_cVAE_{datetime.now().strftime("%Y-%m-%d-%H:%M")}'
 save_model_path = None
 if SAVE:
     save_model_path = outdir + f'{model_name}_{EPOCHS}/' if SAVE else ''
@@ -114,7 +114,7 @@ VAE_2.conditioanl = True
 # model_name='Model_name_string'
 
 # Where to save csv with metadata
-csv_save_output = f'{save_model_path}_etedata.csv'
+csv_save_output = f'{save_model_path}_metedata.csv'
 save_csv = True
 # Store raw image data in csv (results in heavy file
 store_raw = False
