@@ -56,7 +56,7 @@ batch_size = 32  # Change to fit hardware
 input_channel = 3
 double_embed = False  # the variable that allows MI(z1, z2)
 input_compress = 100 if double_embed else 3
-EPOCHS = 50
+EPOCHS = 1
 
 train_loader, valid_loader = get_train_val_dataloader(dataset_path, input_size, batch_size, test_split=0.1)
 model_name = f'2stage_infoMaxVAE_{datetime.datetime.now().strftime("%Y-%m-%d-%H:%M")}'
