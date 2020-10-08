@@ -17,6 +17,7 @@ Main File to sequentially :
 # %% imports
 ##########################################################
 import os
+from datetime import datetime
 
 import matplotlib.pyplot as plt
 import plotly.offline
@@ -55,9 +56,9 @@ print(f'\tTrain on: {device}\t')
 input_size = 64  # the input size of the image
 batch_size = 64  # Change to fit hardware
 
-EPOCHS = 50
+EPOCHS = 40
 train_loader, valid_loader = get_train_val_dataloader(dataset_path, input_size, batch_size, test_split=0.15)
-model_name = '2stage_cVAE_2020-09-25-13:16'  # f'2stage_cVAE_{datetime.datetime.now().strftime("%Y-%m-%d-%H:%M")}'
+model_name = f'2stage_cVAE_{datetime.datetime.now().strftime("%Y-%m-%d-%H:%M")}'
 save_model_path = None
 if SAVE:
     save_model_path = outdir + f'{model_name}_{EPOCHS}/' if SAVE else ''

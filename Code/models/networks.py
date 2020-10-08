@@ -22,7 +22,7 @@ from models.nn_modules import Conv, ConvTranspose, ConvUpsampling, Skip_Conv_dow
 
 class VAE2(nn.Module):
     def __init__(self, VAE1_conv_encoder, VAE1_linear_encoder, zdim=3, alpha=1, beta=1, input_channels=3,
-                 base_dec_size=32, loss='BCEWithLogitsLoss', double_embed=False, conditional=True):
+                 base_dec_size=32, loss='BCEWithLogitsLoss', double_embed=False, conditional=False):
         super(VAE2, self).__init__()
         """
         param:
@@ -156,7 +156,7 @@ class VAE2(nn.Module):
             assert len(input) == 2
             x, y = input
         else:
-            assert len(input) == 1
+            x = input
 
         # (32, 3, 64, 64) or (3, 100)
         mu_z, logvar_z = self.encode(x)
@@ -281,7 +281,6 @@ class VAE(nn.Module):
             assert len(input) == 2
             x, y = input
         else:
-            assert len(input) == 1
             x = input
         ### encode
         mu_z, logvar_z = self.encode(x)
