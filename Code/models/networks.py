@@ -72,7 +72,7 @@ class VAE2(nn.Module):
         ##### Decoding layers #####
         ###########################
         # 3 -> 64 -> 256 -> 1024 -> 2048 -> 1024*2*2 -> 512*4*4 -> 256*8*8 -> 128*16*16 -> 64*32*32 -> 4*64*64
-        hidden_dim = self.zdim + 1 if conditional else zdim
+        hidden_dim = self.zdim + 7 if conditional else zdim
         self.linear_dec = nn.Sequential(
             nn.Linear(hidden_dim, 64),
             nn.BatchNorm1d(64),
@@ -96,7 +96,7 @@ class VAE2(nn.Module):
             ConvUpsampling(base_dec_size * 2, base_dec_size, 4, stride=2, padding=1),  # 32
             nn.Upsample(scale_factor=4, mode='bilinear'),
             # shouldn't be zdim but input_channel can be 100, so use zdim for now
-            nn.Conv2d(base_dec_size, input_channels, 4, 2, 1)
+            nn.Conv2d(base_dec_size, 3, 4, 2, 1)
         )
 
         ### to constrain logvar in a reasonable range
@@ -114,6 +114,12 @@ class VAE2(nn.Module):
             elif isinstance(m, nn.Linear):
                 xavier_normal_(m.weight, gain=math.sqrt(2. / (1 + 0.01)))
                 m.bias.data.fill_(0.01)
+
+        ###########################
+        ##### Conditional Embedding
+        ###########################
+        self.embed_class = nn.Linear(7, 64 * 64)
+        self.embed_data = nn.Conv2d(3, 3, kernel_size=1)
 
     def reparameterize(self, mu, logvar):
         if self.training:  # if prediction, give the mean as a sample, which is the most likely
@@ -154,18 +160,20 @@ class VAE2(nn.Module):
     def forward(self, input):
         if self.conditional:
             assert len(input) == 2
-
             x, y = input
+            embedded_class = self.embed_class(y)
+            embedded_class = embedded_class.view(-1, 64, 64).unsqueeze(1)
+            embedded_input = self.embed_data(x)
+            x = torch.cat([embedded_input, embedded_class], dim=1)
         else:
             x = input
-
-
 
         # (32, 3, 64, 64) or (3, 100)
         mu_z, logvar_z = self.encode(x)
         z = self.reparameterize(mu_z, logvar_z)
         if self.conditional:
-            z = torch.cat((z, torch.unsqueeze(y, -1)), axis=1)
+            z = torch.cat((z, y), axis=1)
+            # z = torch.cat((z, torch.unsqueeze(y, -1)), axis=1)
 
         x_recon = self.decode(z)
         return x_recon, mu_z, logvar_z, z.squeeze()
@@ -214,7 +222,7 @@ class VAE(nn.Module):
         ###########################
         ##### Decoding layers #####
         ###########################
-        hidden_dim = self.zdim + 1 if conditional else zdim
+        hidden_dim = self.zdim + 7 if conditional else zdim
         self.linear_dec = nn.Sequential(
             nn.Linear(hidden_dim, 1024),
             nn.BatchNorm1d(1024),
@@ -230,12 +238,19 @@ class VAE(nn.Module):
             ConvUpsampling(base_dec * 4, base_dec * 2, 4, stride=2, padding=1),  # 16
             ConvUpsampling(base_dec * 2, base_dec, 4, stride=2, padding=1),  # 32
             nn.Upsample(scale_factor=4, mode='bilinear'),
-            nn.Conv2d(base_dec, input_channels, 4, 2, 1),  # 192
+            nn.Conv2d(base_dec, 3, 4, 2, 1),  # 192
         )
 
         self.stabilize_exp = nn.Hardtanh(min_val=-6., max_val=2.)  # linear between min and max
         # to constrain logvar in a reasonable range
 
+        ###########################
+        ##### Conditional Embedding
+        ###########################
+        self.embed_class = nn.Linear(7, 64 * 64)
+        self.embed_data = nn.Conv2d(3, 3, kernel_size=1)
+
+        ### weight initialization
         for m in self.modules():
             if isinstance(m, nn.Conv2d) or isinstance(m, nn.ConvTranspose2d):
                 xavier_normal_(m.weight,
@@ -244,6 +259,7 @@ class VAE(nn.Module):
             elif isinstance(m, nn.BatchNorm2d):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
+
 
     def reparameterize(self, mu, logvar):
         if self.training:  # if prediction, give the mean as a sample, which is the most likely
@@ -283,14 +299,21 @@ class VAE(nn.Module):
         if self.conditional:
             assert len(input) == 2
             x, y = input
+            embedded_class = self.embed_class(y)
+            embedded_class = embedded_class.view(-1, 64, 64).unsqueeze(1)
+            embedded_input = self.embed_data(x)
+            x = torch.cat([embedded_input, embedded_class], dim=1)
         else:
             x = input
+
+
         ### encode
         mu_z, logvar_z = self.encode(x)
         z = self.reparameterize(mu_z, logvar_z)
         if self.conditional:
             # concat GT to hidden feature
-            z = torch.cat((z, torch.unsqueeze(y, -1)), axis=1)
+            z = torch.cat((z, y), axis=1)
+            # z = torch.cat((z, torch.unsqueeze(y, -1)), axis=1)
         ### decode
         x_recon = self.decode(z)
         return x_recon, mu_z, logvar_z, z.squeeze()

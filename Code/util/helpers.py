@@ -170,25 +170,35 @@ def save_reconstruction(loader, VAE_1, VAE_2, save_path, device, num_img=8, doub
     """
 
     data, label, _ = next(iter(loader))
-    data = Variable(data[:num_img], requires_grad=False)# .to(device)
-    label = label[:num_img]
+    data = Variable(data[:num_img], requires_grad=False).to(device)
+    label = label[:num_img].to(device)
 
-    n_channel = VAE_1.input_channels
-    if n_channel == 4:
-        label_channel = torch.reshape(label, [num_img, 1, 1, 1])
-        ones = torch.ones((num_img, 1, data.shape[2], data.shape[2]))
-        # (m*1*1*1) * (m*1*64*64)
-        label_channel = Variable(label_channel * ones)# .to(device)
-        # concatenate to additional channel
-        data = torch.cat([data, label_channel], axis=1).to(device)
+    if VAE_2.conditional:
+        y_onehot = torch.zeros((len(label), 7))
+        y_onehot[torch.arange(len(label)), label] = 1
+        label = Variable(y_onehot.float()).to(device)
+        # label_channel = torch.reshape(label, [num_img, 1, 1, 1])
+        # ones = torch.ones((num_img, 1, data.shape[2], data.shape[2]))
+        # # (m*1*1*1) * (m*1*64*64)
+        # label_channel = Variable(label_channel * ones)# .to(device)
+        # # concatenate to additional channel
+        # data = torch.cat([data, label_channel], axis=1).to(device)
+
 
     ### reconstruction
     label = Variable(label.float()).to(device)
-    x_recon_1, _, _, z_1 = VAE_1((data, label))
-    if double_embed:
-        x_recon_2, _, _, _ = VAE_2(z_1)
+    if VAE_1.conditional:
+        x_recon_1, _, _, z_1 = VAE_1((data, label))
     else:
-        if n_channel == 4:
+        x_recon_1, _, _, z_1 = VAE_1(label)
+
+    if double_embed:
+        if VAE_2.conditional:
+            x_recon_2, _, _, _ = VAE_2((z_1, label))
+        else:
+            x_recon_2, _, _, _ = VAE_2(z_1)
+    else:
+        if VAE_2.conditional:
             x_recon_2, _, _, _ = VAE_2((data, label))
         else:
             x_recon_2, _, _, _ = VAE_2(data)
@@ -208,8 +218,8 @@ def save_reconstruction(loader, VAE_1, VAE_2, save_path, device, num_img=8, doub
 
     ### generation
     if gen:
-        samples_1 = Variable(torch.randn(8, VAE_1.zdim+1, 1, 1), requires_grad=False).to(device)
-        samples_2 = Variable(torch.randn(8, VAE_2.zdim+1, 1, 1), requires_grad=False).to(device)
+        samples_1 = Variable(torch.randn(8, VAE_1.zdim+7, 1, 1), requires_grad=False).to(device)
+        samples_2 = Variable(torch.randn(8, VAE_2.zdim+7, 1, 1), requires_grad=False).to(device)
 
         recon_1 = VAE_1.decode(samples_1)
         recon_2 = VAE_2.decode(samples_2)
