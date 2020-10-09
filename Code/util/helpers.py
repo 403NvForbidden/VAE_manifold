@@ -184,7 +184,6 @@ def save_reconstruction(loader, VAE_1, VAE_2, save_path, device, num_img=8, doub
         # # concatenate to additional channel
         # data = torch.cat([data, label_channel], axis=1).to(device)
 
-
     ### reconstruction
     label = Variable(label.float()).to(device)
     if VAE_1.conditional:
@@ -204,7 +203,8 @@ def save_reconstruction(loader, VAE_1, VAE_2, save_path, device, num_img=8, doub
             x_recon_2, _, _, _ = VAE_2(data)
 
     img_grid = make_grid(
-        torch.cat((data[:, :3, :, :], torch.sigmoid(x_recon_1[:, :3, :, :]), torch.sigmoid(x_recon_2[:num_img, :3, :, :]))),
+        torch.cat(
+            (data[:, :3, :, :], torch.sigmoid(x_recon_1[:, :3, :, :]), torch.sigmoid(x_recon_2[:num_img, :3, :, :]))),
         nrow=num_img, padding=12,
         pad_value=1)
 
@@ -218,8 +218,8 @@ def save_reconstruction(loader, VAE_1, VAE_2, save_path, device, num_img=8, doub
 
     ### generation
     if gen:
-        samples_1 = Variable(torch.randn(8, VAE_1.zdim+7, 1, 1), requires_grad=False).to(device)
-        samples_2 = Variable(torch.randn(8, VAE_2.zdim+7, 1, 1), requires_grad=False).to(device)
+        samples_1 = Variable(torch.randn(8, VAE_1.zdim + 7, 1, 1), requires_grad=False).to(device)
+        samples_2 = Variable(torch.randn(8, VAE_2.zdim + 7, 1, 1), requires_grad=False).to(device)
 
         recon_1 = VAE_1.decode(samples_1)
         recon_2 = VAE_2.decode(samples_2)
@@ -231,6 +231,54 @@ def save_reconstruction(loader, VAE_1, VAE_2, save_path, device, num_img=8, doub
         plt.axis('off')
         plt.title(f'Random generated samples')
         plt.savefig(pre + 'generatedSamples.png')
+
+
+def conditional_gen(loader, VAE_1, VAE_2, save_path, device, num_img=8):
+    torch.manual_seed(0)
+    samples_1 = Variable(torch.randn(8, VAE_1.zdim, 1, 1), requires_grad=False).to(device)
+    samples_2 = Variable(torch.randn(8, VAE_2.zdim, 1, 1), requires_grad=False).to(device)
+
+    # designated label
+    label = torch.tensor([6, 6, 6, 6, 6, 6, 6])
+
+
+    metadata_csv = pd.read_csv("../outputs/2stage_cVAE_2020-10-08-20:38_30/_metedata.csv")
+    for i in range(num_img):
+        metadata_csv = metadata_csv.append(pd.Series(), ignore_index=True)
+        if i != 7:
+            metadata_csv.loc[-1, ['GT_label']] = 6
+        else:
+            metadata_csv.loc[-1, ['GT_label']] = 8
+        metadata_csv.loc[-1, ['VAE_x_coord', 'VAE_y_coord', 'VAE_z_coord']] = samples_2[i].squeeze().cpu().numpy()
+
+    metadata_csv = metadata_csv.dropna(axis=0, how='all')
+
+    # y_onehot = torch.zeros((len(label), 7))
+    # y_onehot[torch.arange(len(label)), label] = 1
+    # y_onehot = torch.cat((y_onehot, torch.zeros((1, 7))))[..., None, None] # no label
+    # label = Variable(y_onehot.float()).to(device)
+    # samples_1 = torch.cat((samples_1, label), axis=1)
+    # samples_2 = torch.cat((samples_2, label), axis=1)
+
+
+
+    figplotly = plot_from_csv(metadata_csv, dim=3, num_class=8)
+
+    html_save = f'../outputs/2stage_cVAE_2020-10-08-20:38_30/cGen.html'
+    plotly.offline.plot(figplotly, filename=html_save, auto_open=True)
+
+    # recon_1 = VAE_1.decode(samples_1)
+    # recon_2 = VAE_2.decode(samples_2)
+    # img_grid = make_grid(torch.cat((torch.sigmoid(recon_1[:, :3, :, :]), torch.sigmoid(recon_2[:, :3, :, :]))),
+    #                      nrow=num_img, padding=12, pad_value=1)
+    #
+    # plt.figure(figsize=(10, 5))
+    # plt.imshow(img_grid.detach().cpu().permute(1, 2, 0))
+    # plt.axis('off')
+    # plt.title(f'Random generated samples')
+    # plt.show()
+
+    # plt.savefig(pre + 'generatedSamples.png')
 
 
 def plot_from_csv(path_to_csv, low_dim_names=['VAE_x_coord', 'VAE_y_coord', 'VAE_z_coord'], dim=3, num_class=7,
@@ -302,6 +350,7 @@ def plot_from_csv(path_to_csv, low_dim_names=['VAE_x_coord', 'VAE_y_coord', 'VAE
 
         return fig_2d_1
 
+
 def plot_train_result_infoMax(history, best_epoch=None, save_path=None):
     print(">>>>>>>>>PLOTING INFOz")
     # columns=['VAE_loss', 'kl_1', 'kl_2', 'recon_1', 'recon_2', 'MI_1', 'MI_2', 'VAE_loss_val', 'kl_val_1', 'kl_val_2',
@@ -339,12 +388,16 @@ def plot_train_result_infoMax(history, best_epoch=None, save_path=None):
     ax4.plot(history['MI_val_1'], linestyle='--', color='dodgerblue', label='MI1_val')
     ax4.plot(history['MI_val_2'], linestyle='--', color='lightsalmon', label='MI2_val')
 
-    ax1.legend(); ax2.legend(); ax3.legend(); ax4.legend()
+    ax1.legend();
+    ax2.legend();
+    ax3.legend();
+    ax4.legend()
 
     if save_path != None:
         plt.savefig(save_path + 'los_evolution.png')
 
     return fig
+
 
 def plot_train_result(history, best_epoch=None, save_path=None):
     """Display training and validation loss evolution over epochs
@@ -397,6 +450,7 @@ def plot_train_result(history, best_epoch=None, save_path=None):
         plt.savefig(save_path + 'los_evolution.png')
 
     return fig
+
 
 ############################
 ######## SAVING & STOPPING
@@ -469,6 +523,7 @@ class EarlyStopping:
             save_brute(MLP1, self.path + 'MLP_1.pth')
             save_brute(MLP2, self.path + 'MLP_2.pth')
 
+
 def save_checkpoint(model, path):
     """Save a NN model to path.
 
@@ -502,17 +557,20 @@ def save_checkpoint(model, path):
     # Save the data to the path
     torch.save(checkpoint, path)
 
+
 def save_brute(model, path):
     """Save the entire model
     For fast development purpose only"""
 
     torch.save(model, path)
 
+
 def load_brute(path):
     """To reload entire model
     For fast development purpose only"""
 
     return torch.load(path)
+
 
 def load_checkpoint(path):
     """Load a VAE network, pre-trained on single cell images
@@ -556,6 +614,7 @@ def load_checkpoint(path):
     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
 
     return model, optimizer
+
 
 #######################################
 ######## Old visualization Function
