@@ -26,7 +26,7 @@ from models.infoMAX_VAE import CNN_128_VAE, MLP_MI_estimator
 from util.data_processing import get_train_val_dataloader, imshow_tensor, get_inference_dataset
 from models.train_net import train_VAE_model, train_2stage_VAE_model, train_2stage_infoMaxVAE_model
 from util.helpers import plot_train_result, plot_train_result_infoMax, save_checkpoint, load_checkpoint, save_brute, \
-    load_brute, plot_from_csv, metadata_latent_space, save_reconstruction
+    load_brute, plot_from_csv, save_reconstruction
 
 ##########################################################
 # %% DataLoader and Co

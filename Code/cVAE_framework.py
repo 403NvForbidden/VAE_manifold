@@ -35,7 +35,7 @@ from util.helpers import plot_train_result, plot_from_csv, metadata_latent_space
 # datadir = '/content/drive/My Drive/Colab Notebooks/Thesis/Datasets/' # colab
 datadir = '../DataSets/'
 outdir = '../outputs/'
-SAVE = True
+SAVE = False
 CONDITIONAL = True
 
 ### META of dataset

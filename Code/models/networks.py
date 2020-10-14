@@ -282,16 +282,15 @@ class VAE(nn.Module):
             x, y = input
         else:
             x = input
+
         ### encode
         mu_z, logvar_z = self.encode(x)
         z = self.reparameterize(mu_z, logvar_z)
         if self.conditional:
-            # concat GT to hidden feature
-            z = torch.cat((z, torch.unsqueeze(y, -1)), axis=1)
+            z = torch.cat((z, torch.unsqueeze(y, -1)), axis=1) # concat GT to hidden feature
         ### decode
         x_recon = self.decode(z)
         return x_recon, mu_z, logvar_z, z.squeeze()
-
 
 class Skip_VAE(nn.Module):
 

@@ -39,7 +39,7 @@ from torchvision.utils import save_image, make_grid
 ######## Match Latent Code and Ground Truth
 ##############################################
 
-def metadata_latent_space(model, infer_dataloader, device, GT_csv_path, save_csv=False, with_rawdata=False,
+def metadata_latent_space(VAE1, VAE2, infer_dataloader, device, GT_csv_path, save_csv=False, with_rawdata=False,
                           csv_path='no_name_specified.csv'):
     """
     Once a VAE model is trained, take its predictions (3D latent code) and store it in a csv
@@ -60,13 +60,13 @@ def metadata_latent_space(model, infer_dataloader, device, GT_csv_path, save_csv
     Return :
         - MetaData_csv (Pandas DataFrame) : DataFrame that contains both latent codes and ground truth, matched
     """
-    labels_list = []
+    # labels_list = []
     z_list = []
     id_list = []
     list_of_tensors = []  # Store raw_data for performance metrics
 
-    if model.zdim > 3:
-        print(f'Latent space is >3D ({model.zdim} dimensional), no visualization is provided')
+    if VAE2.zdim > 3:
+        print(f'Latent space is >3D ({VAE2.zdim} dimensional), no visualization is provided')
         return None
 
     ###### Iterate throughout inference dataset #####
@@ -76,35 +76,33 @@ def metadata_latent_space(model, infer_dataloader, device, GT_csv_path, save_csv
         # Extract unique cell id from file_names
         id_list.append([file_name for file_name in file_names])
 
-        data = data.to(device)
+        data = Variable(data, requires_grad=False).to(device)
         with torch.no_grad():
-            model.eval()
+            VAE2.eval()
             if with_rawdata:
                 raw_data = data.view(data.size(0), -1)  # B x HxWxC
                 list_of_tensors.append(raw_data.data.cpu().numpy())
 
-            ### additional label channel
-            if model.conditional:
-                label_channel = torch.reshape(labels, [len(data), 1, 1, 1])
-                ones = torch.ones((len(data), 1, data.shape[2], data.shape[2]))
-                # (m*1*1*1) * (m*1*64*64)
-                label_channel = Variable(label_channel * ones).to(device)
-                # concatenate to additional channel
-                data = torch.cat([data, label_channel], axis=1)
-            else:
-                data = Variable(data, requires_grad=False)
+            z1, _ = VAE1.encode(data)
 
-            z, _ = model.encode(data)
-            z = z.view(-1, model.zdim)
-            z_list.append(z.data.cpu().numpy())
-            labels_list.append(labels.numpy())
+            if VAE2.double_embed:
+                z2, _ = VAE2.encode(z1)
+            else:
+                z2, _ = VAE2.encode(data)
+
+            # z1 = z1.view(-1, VAE1.zdim)
+            # z2 = z2.view(-1, VAE2.zdim)
+
+            z_list.append(np.concatenate((z2.data.cpu().numpy(), z1.data.cpu().numpy()), axis=1))
+
+            # labels_list.append(labels.numpy())
 
         print(f'In progress...{i * len(data)}/{len(infer_dataloader.dataset)}', end='\r')
 
     ###### Matching samples to metadata info #####
     #################################################
 
-    unique_ids = list(itertools.chain.from_iterable(id_list))
+    unique_ids = np.array(list(itertools.chain.from_iterable(id_list))).T
 
     ###### Store raw data in a separate data frame #####
     if with_rawdata:
@@ -117,17 +115,11 @@ def metadata_latent_space(model, infer_dataloader, device, GT_csv_path, save_csv
         rawdata_frame = rawdata_frame.sort_values(by=['Unique_ID'])
 
     ##### Store latent code in a temporary dataframe #####
-    z_points = np.concatenate(z_list, axis=0)  # datasize x 3
-    true_label = np.concatenate(labels_list, axis=0)
+    z_points = np.concatenate(z_list, axis=0)
 
-    temp_matching_df = pd.DataFrame(columns=['VAE_x_coord', 'VAE_y_coord', 'VAE_z_coord', 'Unique_ID'])
-    temp_matching_df.VAE_x_coord = z_points[:, 0]
-    temp_matching_df.VAE_y_coord = z_points[:, 1]
-    if model.zdim == 3:
-        temp_matching_df.VAE_z_coord = z_points[:, 2]
-    else:
-        temp_matching_df.VAE_z_coord = 0
-    temp_matching_df.Unique_ID = unique_ids
+    columns = ['VAE_x_coord', 'VAE_y_coord', 'VAE_z_coord'] + [f'z{n}' for n in range(VAE1.zdim)]
+    temp_matching_df = pd.DataFrame(z_points, columns=columns)
+    temp_matching_df['Unique_ID'] = unique_ids
     temp_matching_df = temp_matching_df.sort_values(by=['Unique_ID'])
 
     ##### Load Ground Truth information about the dataset #####
@@ -170,31 +162,39 @@ def save_reconstruction(loader, VAE_1, VAE_2, save_path, device, num_img=8, doub
     """
 
     data, label, _ = next(iter(loader))
-    data = Variable(data[:num_img], requires_grad=False)# .to(device)
-    label = label[:num_img]
+    data = Variable(data[:num_img], requires_grad=False).to(device)
+    label = label[:num_img].to(device)
 
     n_channel = VAE_1.input_channels
-    if n_channel == 4:
+    if VAE_2.conditional:
         label_channel = torch.reshape(label, [num_img, 1, 1, 1])
         ones = torch.ones((num_img, 1, data.shape[2], data.shape[2]))
         # (m*1*1*1) * (m*1*64*64)
-        label_channel = Variable(label_channel * ones)# .to(device)
+        label_channel = Variable(label_channel * ones)  # .to(device)
         # concatenate to additional channel
         data = torch.cat([data, label_channel], axis=1).to(device)
 
     ### reconstruction
     label = Variable(label.float()).to(device)
-    x_recon_1, _, _, z_1 = VAE_1((data, label))
-    if double_embed:
-        x_recon_2, _, _, _ = VAE_2(z_1)
+    if VAE_1.conditional:
+        x_recon_1, _, _, z_1 = VAE_1((data, label))
     else:
-        if n_channel == 4:
+        x_recon_1, _, _, z_1 = VAE_1(data)
+
+    if double_embed:
+        if VAE_2.conditional:
+            x_recon_2, _, _, _ = VAE_2((z_1, label))
+        else:
+            x_recon_2, _, _, _ = VAE_2(z_1)
+    else:
+        if VAE_2.conditional:
             x_recon_2, _, _, _ = VAE_2((data, label))
         else:
             x_recon_2, _, _, _ = VAE_2(data)
 
     img_grid = make_grid(
-        torch.cat((data[:, :3, :, :], torch.sigmoid(x_recon_1[:, :3, :, :]), torch.sigmoid(x_recon_2[:num_img, :3, :, :]))),
+        torch.cat(
+            (data[:, :3, :, :], torch.sigmoid(x_recon_1[:, :3, :, :]), torch.sigmoid(x_recon_2[:num_img, :3, :, :]))),
         nrow=num_img, padding=12,
         pad_value=1)
 
@@ -208,8 +208,8 @@ def save_reconstruction(loader, VAE_1, VAE_2, save_path, device, num_img=8, doub
 
     ### generation
     if gen:
-        samples_1 = Variable(torch.randn(8, VAE_1.zdim+1, 1, 1), requires_grad=False).to(device)
-        samples_2 = Variable(torch.randn(8, VAE_2.zdim+1, 1, 1), requires_grad=False).to(device)
+        samples_1 = Variable(torch.randn(8, VAE_1.zdim + 1, 1, 1), requires_grad=False).to(device)
+        samples_2 = Variable(torch.randn(8, VAE_2.zdim + 1, 1, 1), requires_grad=False).to(device)
 
         recon_1 = VAE_1.decode(samples_1)
         recon_2 = VAE_2.decode(samples_2)
@@ -292,6 +292,7 @@ def plot_from_csv(path_to_csv, low_dim_names=['VAE_x_coord', 'VAE_y_coord', 'VAE
 
         return fig_2d_1
 
+
 def plot_train_result_infoMax(history, best_epoch=None, save_path=None):
     print(">>>>>>>>>PLOTING INFOz")
     # columns=['VAE_loss', 'kl_1', 'kl_2', 'recon_1', 'recon_2', 'MI_1', 'MI_2', 'VAE_loss_val', 'kl_val_1', 'kl_val_2',
@@ -329,12 +330,16 @@ def plot_train_result_infoMax(history, best_epoch=None, save_path=None):
     ax4.plot(history['MI_val_1'], linestyle='--', color='dodgerblue', label='MI1_val')
     ax4.plot(history['MI_val_2'], linestyle='--', color='lightsalmon', label='MI2_val')
 
-    ax1.legend(); ax2.legend(); ax3.legend(); ax4.legend()
+    ax1.legend();
+    ax2.legend();
+    ax3.legend();
+    ax4.legend()
 
     if save_path != None:
         plt.savefig(save_path + 'los_evolution.png')
 
     return fig
+
 
 def plot_train_result(history, best_epoch=None, save_path=None):
     """Display training and validation loss evolution over epochs
@@ -387,6 +392,7 @@ def plot_train_result(history, best_epoch=None, save_path=None):
         plt.savefig(save_path + 'los_evolution.png')
 
     return fig
+
 
 ############################
 ######## SAVING & STOPPING
@@ -447,7 +453,7 @@ class EarlyStopping:
         if len(models) == 2:
             print(f'========Saving 2 stsage VAE model========')
             VAE1, VAE2 = models
-            # Save both models
+            # Save both modelsmetadata_latent_space
             save_brute(VAE1, self.path + 'VAE_1.pth')
             save_brute(VAE2, self.path + 'VAE_2.pth')
         elif len(models) == 4:
@@ -458,6 +464,7 @@ class EarlyStopping:
             save_brute(VAE2, self.path + 'VAE_2.pth')
             save_brute(MLP1, self.path + 'MLP_1.pth')
             save_brute(MLP2, self.path + 'MLP_2.pth')
+
 
 def save_checkpoint(model, path):
     """Save a NN model to path.
@@ -492,17 +499,20 @@ def save_checkpoint(model, path):
     # Save the data to the path
     torch.save(checkpoint, path)
 
+
 def save_brute(model, path):
     """Save the entire model
     For fast development purpose only"""
 
     torch.save(model, path)
 
+
 def load_brute(path):
     """To reload entire model
     For fast development purpose only"""
 
     return torch.load(path)
+
 
 def load_checkpoint(path):
     """Load a VAE network, pre-trained on single cell images
@@ -546,6 +556,7 @@ def load_checkpoint(path):
     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
 
     return model, optimizer
+
 
 #######################################
 ######## Old visualization Function
