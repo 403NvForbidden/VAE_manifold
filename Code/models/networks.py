@@ -95,9 +95,9 @@ class VAE2(nn.Module):
             ConvUpsampling(base_dec_size * 4, base_dec_size * 2, 4, stride=2, padding=1),  # 16
             ConvUpsampling(base_dec_size * 2, base_dec_size, 4, stride=2, padding=1),  # 32
             nn.Upsample(scale_factor=4, mode='bilinear'),
-            # shouldn't be zdim but input_channel can be 100, so use zdim for now
             nn.Conv2d(base_dec_size, 3, 4, 2, 1)
         )
+
 
         ### to constrain logvar in a reasonable range
         self.stabilize_exp = nn.Hardtanh(min_val=-6., max_val=2.)  # linear between min and max
@@ -223,6 +223,7 @@ class VAE(nn.Module):
         ##### Decoding layers #####
         ###########################
         hidden_dim = self.zdim + 7 if conditional else zdim
+        # TODO: linear decoder shorter than VAE2???
         self.linear_dec = nn.Sequential(
             nn.Linear(hidden_dim, 1024),
             nn.BatchNorm1d(1024),

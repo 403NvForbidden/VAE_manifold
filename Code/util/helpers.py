@@ -211,8 +211,12 @@ def save_reconstruction(loader, VAE_1, VAE_2, save_path, device, num_img=8, doub
 
     ### generation
     if gen:
-        samples_1 = Variable(torch.randn(8, VAE_1.zdim + 7, 1, 1), requires_grad=False).to(device)
-        samples_2 = Variable(torch.randn(8, VAE_2.zdim + 7, 1, 1), requires_grad=False).to(device)
+        if VAE_2.conditional:
+            samples_1 = Variable(torch.randn(num_img, VAE_1.zdim + 7, 1, 1), requires_grad=False).to(device)
+            samples_2 = Variable(torch.randn(num_img, VAE_2.zdim + 7, 1, 1), requires_grad=False).to(device)
+        else:
+            samples_1 = Variable(torch.randn(num_img, VAE_1.zdim, 1, 1), requires_grad=False).to(device)
+            samples_2 = Variable(torch.randn(num_img, VAE_2.zdim, 1, 1), requires_grad=False).to(device)
 
         recon_1 = VAE_1.decode(samples_1)
         recon_2 = VAE_2.decode(samples_2)

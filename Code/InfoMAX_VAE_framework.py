@@ -34,7 +34,7 @@ from util.helpers import plot_train_result_infoMax, save_reconstruction
 ##########################################################
 datadir = '../DataSets/'
 outdir = '../outputs/'
-save = True
+save = False
 
 ### META of dataset
 datadir_BBBC = datadir + 'Synthetic_Data_1'
@@ -82,6 +82,7 @@ if double_embed:
     MLP_2 = MLP_MI_estimator(input_dim=100, zdim=3).to(device)
 else:
     MLP_2 = MLP_MI_estimator(input_dim=input_size * input_size * input_channel, zdim=3).to(device)
+
 ### Architecture to use if input size is 128x128
 # VAE = CNN_128_VAE(zdim=3,input_channels=input_channel, alpha=20, beta=1, base_enc=64, base_dec=64)
 # MLP = MLP_MI_128_estimator(input_size*input_size*input_channel,zdim=3)
