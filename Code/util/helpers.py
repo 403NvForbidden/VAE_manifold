@@ -165,21 +165,24 @@ def save_reconstruction(loader, VAE_1, VAE_2, save_path, device, num_img=8, doub
     data = Variable(data[:num_img], requires_grad=False).to(device)
     label = label[:num_img].to(device)
 
-    n_channel = VAE_1.input_channels
+
     if VAE_2.conditional:
-        label_channel = torch.reshape(label, [num_img, 1, 1, 1])
-        ones = torch.ones((num_img, 1, data.shape[2], data.shape[2]))
-        # (m*1*1*1) * (m*1*64*64)
-        label_channel = Variable(label_channel * ones)  # .to(device)
-        # concatenate to additional channel
-        data = torch.cat([data, label_channel], axis=1).to(device)
+        y_onehot = torch.zeros((len(label), 7))
+        y_onehot[torch.arange(len(label)), label] = 1
+        label = Variable(y_onehot.float()).to(device)
+        # label_channel = torch.reshape(label, [num_img, 1, 1, 1])
+        # ones = torch.ones((num_img, 1, data.shape[2], data.shape[2]))
+        # # (m*1*1*1) * (m*1*64*64)
+        # label_channel = Variable(label_channel * ones)# .to(device)
+        # # concatenate to additional channel
+        # data = torch.cat([data, label_channel], axis=1).to(device)
 
     ### reconstruction
     label = Variable(label.float()).to(device)
     if VAE_1.conditional:
         x_recon_1, _, _, z_1 = VAE_1((data, label))
     else:
-        x_recon_1, _, _, z_1 = VAE_1(data)
+        x_recon_1, _, _, z_1 = VAE_1(label)
 
     if double_embed:
         if VAE_2.conditional:
@@ -208,8 +211,8 @@ def save_reconstruction(loader, VAE_1, VAE_2, save_path, device, num_img=8, doub
 
     ### generation
     if gen:
-        samples_1 = Variable(torch.randn(8, VAE_1.zdim + 1, 1, 1), requires_grad=False).to(device)
-        samples_2 = Variable(torch.randn(8, VAE_2.zdim + 1, 1, 1), requires_grad=False).to(device)
+        samples_1 = Variable(torch.randn(8, VAE_1.zdim + 7, 1, 1), requires_grad=False).to(device)
+        samples_2 = Variable(torch.randn(8, VAE_2.zdim + 7, 1, 1), requires_grad=False).to(device)
 
         recon_1 = VAE_1.decode(samples_1)
         recon_2 = VAE_2.decode(samples_2)
@@ -221,6 +224,54 @@ def save_reconstruction(loader, VAE_1, VAE_2, save_path, device, num_img=8, doub
         plt.axis('off')
         plt.title(f'Random generated samples')
         plt.savefig(pre + 'generatedSamples.png')
+
+
+def conditional_gen(loader, VAE_1, VAE_2, save_path, device, num_img=8):
+    torch.manual_seed(0)
+    samples_1 = Variable(torch.randn(8, VAE_1.zdim, 1, 1), requires_grad=False).to(device)
+    samples_2 = Variable(torch.randn(8, VAE_2.zdim, 1, 1), requires_grad=False).to(device)
+
+    # designated label
+    label = torch.tensor([6, 6, 6, 6, 6, 6, 6])
+
+
+    metadata_csv = pd.read_csv("../outputs/2stage_cVAE_2020-10-08-20:38_30/_metedata.csv")
+    for i in range(num_img):
+        metadata_csv = metadata_csv.append(pd.Series(), ignore_index=True)
+        if i != 7:
+            metadata_csv.loc[-1, ['GT_label']] = 6
+        else:
+            metadata_csv.loc[-1, ['GT_label']] = 8
+        metadata_csv.loc[-1, ['VAE_x_coord', 'VAE_y_coord', 'VAE_z_coord']] = samples_2[i].squeeze().cpu().numpy()
+
+    metadata_csv = metadata_csv.dropna(axis=0, how='all')
+
+    # y_onehot = torch.zeros((len(label), 7))
+    # y_onehot[torch.arange(len(label)), label] = 1
+    # y_onehot = torch.cat((y_onehot, torch.zeros((1, 7))))[..., None, None] # no label
+    # label = Variable(y_onehot.float()).to(device)
+    # samples_1 = torch.cat((samples_1, label), axis=1)
+    # samples_2 = torch.cat((samples_2, label), axis=1)
+
+
+
+    figplotly = plot_from_csv(metadata_csv, dim=3, num_class=8)
+
+    html_save = f'../outputs/2stage_cVAE_2020-10-08-20:38_30/cGen.html'
+    plotly.offline.plot(figplotly, filename=html_save, auto_open=True)
+
+    # recon_1 = VAE_1.decode(samples_1)
+    # recon_2 = VAE_2.decode(samples_2)
+    # img_grid = make_grid(torch.cat((torch.sigmoid(recon_1[:, :3, :, :]), torch.sigmoid(recon_2[:, :3, :, :]))),
+    #                      nrow=num_img, padding=12, pad_value=1)
+    #
+    # plt.figure(figsize=(10, 5))
+    # plt.imshow(img_grid.detach().cpu().permute(1, 2, 0))
+    # plt.axis('off')
+    # plt.title(f'Random generated samples')
+    # plt.show()
+
+    # plt.savefig(pre + 'generatedSamples.png')
 
 
 def plot_from_csv(path_to_csv, low_dim_names=['VAE_x_coord', 'VAE_y_coord', 'VAE_z_coord'], dim=3, num_class=7,
