@@ -58,7 +58,7 @@ batch_size = 64  # Change to fit hardware
 
 EPOCHS = 40
 train_loader, valid_loader = get_train_val_dataloader(dataset_path, input_size, batch_size, test_split=0.15)
-model_name = f'2stage_cVAE_{datetime.datetime.now().strftime("%Y-%m-%d-%H:%M")}'
+model_name = f'2stage_cVAE_{datetime.now().strftime("%Y-%m-%d-%H:%M")}'
 save_model_path = None
 if SAVE:
     save_model_path = outdir + f'{model_name}_{EPOCHS}/' if SAVE else ''

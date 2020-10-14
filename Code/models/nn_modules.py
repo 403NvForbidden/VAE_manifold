@@ -67,8 +67,6 @@ class ConvUpsampling(nn.Module):
         return self.conv(x)
 
 
-
-
 ###########################
 ###### Conv ResBlock to Keep Mutual Info high
 ###########################
