@@ -24,22 +24,46 @@ train_feedback(), train_Simple_VAE() :
 import pandas as pd
 import numpy as np
 from timeit import default_timer as timer
+from tqdm import tqdm
+import os
+import itertools
 
 import torch
 from torch.autograd import Variable
 from torch import nn
+import torch.nn.functional as F
 import torch.optim as optim
 from torch import cuda
 from torchvision.utils import save_image, make_grid
+from tensorboardX import SummaryWriter
 
-from models.networks import VAE
-from util.helpers import plot_latent_space, show, EarlyStopping
+from util.helpers import plot_latent_space, show, EarlyStopping, save_brute
 from models.infoMAX_VAE import infoNCE_bound
+
+from scipy.optimize import linear_sum_assignment as linear_assignment
+from sklearn.mixture import GaussianMixture
 
 
 def kl_divergence(mu, logvar):
     kld = -0.5 * (1 + logvar - mu ** 2 - logvar.exp()).sum(1).mean()
     return kld
+
+def reparameterize(mu, logvar):
+    """Reparameterization trick.
+    """
+    std = torch.exp(0.5 * logvar)
+    eps = torch.randn_like(std)
+    z = mu + eps * std
+    return z
+
+def cluster_acc(Y_pred, Y):
+    assert Y_pred.size == Y.size
+    D = max(Y_pred.max(), Y.max()) + 1
+    w = np.zeros((D, D), dtype=np.int64)
+    for i in range(Y_pred.size):
+        w[Y_pred[i], Y[i]] += 1
+    ind = linear_assignment(w.max() - w)
+    return sum([w[i, j] for i, j in zip(*ind)]) * 1.0 / Y_pred.size, w
 
 
 def scalar_loss(data, loss_recon, mu_z, logvar_z, beta):
@@ -50,9 +74,175 @@ def scalar_loss(data, loss_recon, mu_z, logvar_z, beta):
     return loss_recon + beta * loss_kl, loss_kl
 
 
-###################################################
+#########################################
+##### train vaDE
+#########################################
+def pretrain_vaDE_model(model, dataloader, pre_epoch=10, save_path='', device='cpu'):
+    if not os.path.exists(save_path + 'pretrain_model.pk'):
+
+        Loss = nn.MSELoss()
+        opti = optim.Adam(model.parameters(), lr=0.0005, betas=(0.9, 0.999))
+
+        print('Pretraining......')
+        epoch_bar = tqdm(range(pre_epoch))
+        for _ in epoch_bar:
+            L = 0
+            for x, y in dataloader:
+                x = x.to(device)
+
+                z, _ = model.encode(x)
+                x_recon = model.decoder(z)
+                loss = Loss(x, x_recon)
+
+                L += loss.detach().cpu().numpy()
+
+                opti.zero_grad()
+                loss.backward()
+                opti.step()
+
+            epoch_bar.write('L2={:.4f}'.format(L / len(dataloader)))
+        # reset to save weight???? TODO: check
+        # model.logvar_l.load_state_dict(model.mu_l.state_dict())
+
+        Z, Y = [], []
+        with torch.no_grad():
+            for x, y in dataloader:
+                x = x.to(device)
+
+                mu_z, logvar_z = model.encode(x)
+                # assert F.mse_loss(mu_z, logvar_z) == 0
+                Z.append(mu_z)
+                Y.append(y)
+
+        # convert to tensor
+        Z = torch.cat(Z, 0).detach().cpu().numpy()
+        Y = torch.cat(Y, 0).detach().numpy()
+
+        gmm = GaussianMixture(n_components=model.ydim, covariance_type='diag')
+        pre = gmm.fit_predict(Z)
+        print('Acc={:.4f}%'.format(cluster_acc(pre, Y)[0] * 100))
+
+        model.pi_.data = torch.from_numpy(gmm.weights_).cuda().float()
+        model.mu_c.data = torch.from_numpy(gmm.means_).cuda().float()
+        model.log_sigma2_c.data = torch.log(torch.from_numpy(gmm.covariances_).cuda().float())
+
+        torch.save(model.state_dict(), save_path + 'pretrain_model.pk')
+    else:
+        model.load_state_dict(torch.load(save_path + 'pretrain_model.pk'))
+
+def train_vaDE_epoch(model, data_loader, optimizer, epoch, device):
+    model.train()
+    start = timer()
+
+    total_loss = 0
+    loss_iter, kl_loss_iter, recon_loss_iter = [], [], []
+    for x, _ in data_loader:
+        x = x.to(device)
+        recon_x, mu, logvar, _ = model(x)
+        loss, loss_kl, loss_recon = model.lossfun(x, recon_x, mu, logvar)
+
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        loss_iter.append(loss.item())
+        kl_loss_iter.append(loss_kl.item())
+        recon_loss_iter.append(loss_recon.item())
+
+
+    if (epoch % 5 == 0) or (epoch == 1):
+        print('==========> Epoch: {} ==========> Average loss: {:.4f}'.format(epoch, np.mean(loss_iter)))
+        print(f'{timer() - start:.2f} seconds elapsed in epoch.')
+        print(f'KL loss : {np.mean(kl_loss_iter):.2f}, Recon Loss : {np.mean(recon_loss_iter)}')
+    # writer.add_scalar()
+    return np.mean(loss_iter), np.mean(kl_loss_iter), np.mean(recon_loss_iter)
+
+def test_vaDE_epoch(model, data_loader, epoch, device):
+    model.eval()
+    pre, tru = [], []
+    with torch.no_grad():
+        for x, y in data_loader:
+            x = x.to(device)
+            tru.append(y.numpy())
+            pre.append(model.classify(x).detach().cpu().numpy())
+    # convert to numpy array
+    tru = np.concatenate(tru, 0)
+    pre = np.concatenate(pre, 0)
+
+    print('Acc/test: ', cluster_acc(pre, tru)[0] * 100, epoch)
+
+
+def train_vaDE_model(num_epochs, model, optimizer, train_loader, valid_loader, save_path='', device='cpu'):
+    # Number of epochs already trained (if pre trained)
+    try:
+        print(f'VAE1, VAE2 has been trained for: {model.epochs} epochs.\n')
+    except:
+        model.epochs = 0
+        print(f'Starting Training from Scratch.\n')
+
+    overall_start = timer()
+    best_epoch = 0
+
+    ### Pretrain
+    pretrain_vaDE_model(model, train_loader, save_path=save_path, device=device)
+    print()
+    # writer = SummaryWriter(save_path + 'logs')
+
+    ### start trianning epochs
+    lr_s = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.9)
+
+    history = []
+    epoch_bar = tqdm(range(num_epochs))
+    for epoch in epoch_bar:
+        ### train
+        # train_vaDE_epoch(model, train_loader, optimizer, epoch, device)
+        # ------------------------------
+        Loss = 0
+        model.train()
+        for batch_idx, (x, _) in enumerate(train_loader):
+            x = x.to(device)
+
+            loss = model.ELBO_Loss(x)
+
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+            Loss += loss.detach().cpu().numpy()
+
+        pre = []
+        tru = []
+
+        ### test
+        # test_vaDE_epoch(model, valid_loader, epoch, device)
+        # -------------------------------
+        model.eval()
+        with torch.no_grad():
+            for x, y in train_loader:
+                x = x.to(device)
+                tru.append(y.numpy())
+                pre.append(model.predict(x))
+
+        # convert to numpy array
+        tru = np.concatenate(tru, 0)
+        pre = np.concatenate(pre, 0)
+
+        lr_s.step()
+        # if epoch % 5 == 0 or epoch == 1:
+        print('loss ', Loss / len(train_loader))
+        print('acc ', cluster_acc(pre, tru)[0] * 100)
+        history.append([Loss, cluster_acc(pre, tru)[0] * 100])
+    ### save model
+    save_brute(model, save_path + 'model.pth')
+
+    history = pd.DataFrame(
+        history,
+        columns=['VAE_loss', 'cluster_accuracy']
+    )
+    return model, history
+#########################################
 ##### 2 stage VAE training ##############
-###################################################
+#########################################
 def train_2stage_VAE_epoch(num_epochs, VAE_1, VAE_2, optimizer_1, optimizer_2, train_loader, gamma=0.8, device='cuda'):
     """
         Train a VAE model with standard ELBO objective function for one single epoch
@@ -123,9 +313,12 @@ def train_2stage_VAE_epoch(num_epochs, VAE_1, VAE_2, optimizer_1, optimizer_2, t
         # record the loss
         # record the loss
         loss_overall_iter.append(loss_overall.item())
-        global_VAE_iter_1.append(loss_VAE_1.item()); global_VAE_iter_2.append(loss_VAE_2.item())
-        recon_loss_iter_1.append(loss_recon_1.item()); recon_loss_iter_2.append(loss_recon_2.item())
-        kl_loss_iter_1.append(loss_kl_1.item()); kl_loss_iter_2.append(loss_kl_2.item())
+        global_VAE_iter_1.append(loss_VAE_1.item());
+        global_VAE_iter_2.append(loss_VAE_2.item())
+        recon_loss_iter_1.append(loss_recon_1.item());
+        recon_loss_iter_2.append(loss_recon_2.item())
+        kl_loss_iter_1.append(loss_kl_1.item());
+        kl_loss_iter_2.append(loss_kl_2.item())
 
         if batch_idx % 10 == 0:
             print('Train Epoch: {} [{}/{} ({:.0f}%)]\tVAE1 Loss: {:.6f}\tVAE2 Loss: {:.6f}'.format(
@@ -164,7 +357,8 @@ def test_2stage_VAE_epoch(num_epochs, VAE_1, VAE_2, test_loader, gamma=0.8, devi
         global_VAE_iter_1, kl_loss_iter_1, recon_loss_iter_1 = [], [], []
         global_VAE_iter_2, kl_loss_iter_2, recon_loss_iter_2 = [], [], []
 
-        criterion_recon = nn.BCEWithLogitsLoss().to(device)  # more stable than handmade sigmoid as last layer and BCELoss
+        criterion_recon = nn.BCEWithLogitsLoss().to(
+            device)  # more stable than handmade sigmoid as last layer and BCELoss
 
         # each `data` is of BATCH_SIZE samples and has shape [batch_size, 4, 128, 128]
         for batch_idx, (data, label) in enumerate(test_loader):

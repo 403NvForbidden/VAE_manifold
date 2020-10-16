@@ -17,7 +17,11 @@ import math
 from torch import nn
 from torch.nn import functional as F
 from torch.nn.init import xavier_normal_
-from models.nn_modules import Conv, ConvTranspose, ConvUpsampling, Skip_Conv_down, Skip_DeConv_up
+from models.nn_modules import Conv, ConvTranspose, ConvUpsampling, Skip_Conv_down, Skip_DeConv_up, Linear_block, Decoder
+import numpy as np
+
+from models.train_net import reparameterize
+from sklearn.mixture import GaussianMixture
 
 
 class VAE2(nn.Module):
@@ -64,7 +68,7 @@ class VAE2(nn.Module):
             )
 
         ###########################
-        #####   Inference
+        #####   Inference     #####
         ###########################
         self.mu_logvar_gen = nn.Linear(64, self.zdim * 2)  # 64 -> 6
 
@@ -94,10 +98,9 @@ class VAE2(nn.Module):
             ConvUpsampling(base_dec_size * 8, base_dec_size * 4, 4, stride=2, padding=1),  # 8
             ConvUpsampling(base_dec_size * 4, base_dec_size * 2, 4, stride=2, padding=1),  # 16
             ConvUpsampling(base_dec_size * 2, base_dec_size, 4, stride=2, padding=1),  # 32
-            nn.Upsample(scale_factor=4, mode='bilinear'),
+            nn.Upsample(scale_factor=4, mode='bilinear', align_corners=True),
             nn.Conv2d(base_dec_size, 3, 4, 2, 1)
         )
-
 
         ### to constrain logvar in a reasonable range
         self.stabilize_exp = nn.Hardtanh(min_val=-6., max_val=2.)  # linear between min and max
@@ -238,7 +241,7 @@ class VAE(nn.Module):
             ConvUpsampling(base_dec * 8, base_dec * 4, 4, stride=2, padding=1),  # 8
             ConvUpsampling(base_dec * 4, base_dec * 2, 4, stride=2, padding=1),  # 16
             ConvUpsampling(base_dec * 2, base_dec, 4, stride=2, padding=1),  # 32
-            nn.Upsample(scale_factor=4, mode='bilinear'),
+            nn.Upsample(scale_factor=4, mode='bilinear', align_corners=True),
             nn.Conv2d(base_dec, 3, 4, 2, 1),  # 192
         )
 
@@ -260,7 +263,6 @@ class VAE(nn.Module):
             elif isinstance(m, nn.BatchNorm2d):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
-
 
     def reparameterize(self, mu, logvar):
         if self.training:  # if prediction, give the mean as a sample, which is the most likely
@@ -317,6 +319,199 @@ class VAE(nn.Module):
         ### decode
         x_recon = self.decode(z)
         return x_recon, mu_z, logvar_z, z.squeeze()
+
+
+class VaDE(nn.Module):
+    def __init__(self, zdim=3, ydim=7, input_channels=3, base_enc=32, base_dec=32,
+                 loss='BCEWithLogitsLoss'):
+        super(VaDE, self).__init__()
+        """
+        param :
+            zdim (int) : dimension of the latent space
+            beta (float) : weight coefficient for DL divergence, when beta=1 is Valina VAE
+
+            Modulate the complexity of the model with parameter 'base_enc' and 'base_dec'
+        """
+        self.zdim = zdim
+        self.ydim = ydim
+        self.loss = loss
+        self.input_channels = input_channels
+        self.base_dec = base_dec
+
+        ### initialise GMM parameters
+        self.pi_ = nn.Parameter(torch.FloatTensor(ydim, ).fill_(1) / ydim, requires_grad=True)
+        self.mu_c = nn.Parameter(torch.FloatTensor(ydim, zdim).fill_(0), requires_grad=True)
+        self.log_sigma2_c = nn.Parameter(torch.FloatTensor(ydim, zdim).fill_(0), requires_grad=True)
+
+        ###########################
+        ##### Encoding layers #####
+        ###########################
+        self.conv_enc = nn.Sequential(
+            Conv(self.input_channels, base_enc, 4, stride=2, padding=1),  # stride 2, resolution is splitted by half
+            Conv(base_enc, base_enc * 2, 4, stride=2, padding=1),  # 16x16
+            Conv(base_enc * 2, base_enc * 4, 4, stride=2, padding=1),  # 8x8
+            Conv(base_enc * 4, base_enc * 8, 4, stride=2, padding=1),  # 4x4
+            Conv(base_enc * 8, base_enc * 16, 4, stride=2, padding=1),  # 2x2
+            Conv(base_enc * 16, base_enc * 16, 4, stride=2, padding=1),  # 2
+        )
+        self.linear_enc = nn.Sequential(
+            Linear_block(2 * 2 * base_enc * 16, 1024),  # 2048 -> 1024
+            Linear_block(1024, 256),
+            # nn.Linear(256, self.zdim * 2)
+        )
+        self.mu_l = nn.Linear(256, zdim)
+        self.logvar_l = nn.Linear(256, zdim)
+
+        # to constrain logvar in a reasonable range
+        self.stabilize_exp = nn.Hardtanh(min_val=-6., max_val=2.)  # linear between min and max
+
+        ###########################
+        ##### Decoding layers #####
+        ###########################
+        self.decoder = Decoder(zdim, base_dec)
+
+        ### weight initialization
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d) or isinstance(m, nn.ConvTranspose2d):
+                xavier_normal_(m.weight,
+                               gain=math.sqrt(2. / (1 + 0.01)))  # Gain adapted for LeakyReLU activation function
+                m.bias.data.fill_(0.01)
+            elif isinstance(m, nn.BatchNorm2d):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
+
+    @property
+    def cluster_weights(self):
+        return torch.softmax(self.pi_, dim=0)
+
+    def encode(self, img):
+        batch_size = img.size(0)
+        # encode
+        x = self.conv_enc(img)
+        x = x.view((batch_size, -1))
+        mu_logvar = self.linear_enc(x)
+        mu_z, logvar_z = self.mu_l(mu_logvar), self.logvar_l(mu_logvar)
+        # mu_z, logvar_z = mu_logvar.view(-1, self.zdim, 2).unbind(-1)
+
+        logvar_z = self.stabilize_exp(logvar_z)
+        return mu_z, logvar_z
+
+    def get_latent(self, x):
+        # (32, 3, 64, 64) or (3, 100)
+        mu_z, logvar_z = self.encode(x)
+        z = self.reparameterize(mu_z, logvar_z)
+        return z
+
+    def forward(self, x):
+        ### encode
+        mu_z, logvar_z = self.encode(x)
+        ### inference
+        z = reparameterize(mu_z, logvar_z)
+        ### decode
+        x_recon = self.decoder(z)
+        return x_recon, mu_z, logvar_z, z.squeeze()
+
+    def classify(self, x, n_samples=8):
+        with torch.no_grad():
+            mu, logvar = self.encode(x)
+            z = torch.stack(
+                [reparameterize(mu, logvar) for _ in range(n_samples)], dim=1)
+            z = z.unsqueeze(2)
+            h = z - self.mu_c
+            h = torch.exp(-0.5 * torch.sum(h * h / self.log_sigma2_c.exp(), dim=3))
+            # Same as `torch.sqrt(torch.prod(self.logvar.exp(), dim=1))`
+            h = h / torch.sum(0.5 * self.log_sigma2_c, dim=1).exp()
+            p_z_given_c = h / (2 * math.pi)
+            p_z_c = p_z_given_c * self.cluster_weights
+            y = p_z_c / torch.sum(p_z_c, dim=2, keepdim=True)
+            y = torch.sum(y, dim=1)
+            pred = torch.argmax(y, dim=1)
+        return pred
+
+    def lossfun(self, x, recon_x, mu, logvar):
+        batch_size = x.size(0)
+
+        # Compute gamma ( q(c|x) )
+        z = reparameterize(mu, logvar).unsqueeze(1)
+        h = z - self.mu_c
+        h = torch.exp(-0.5 * torch.sum((h * h / self.log_sigma2_c.exp()), dim=2))
+        # Same as `torch.sqrt(torch.prod(model.logvar.exp(), dim=1))`
+        h = h / torch.sum(0.5 * self.log_sigma2_c, dim=1).exp()
+        p_z_given_c = h / (2 * math.pi)
+        p_z_c = p_z_given_c * self.cluster_weights
+        gamma = p_z_c / torch.sum(p_z_c, dim=1, keepdim=True)
+
+        h = logvar.exp().unsqueeze(1) + (mu.unsqueeze(1) - self.mu_c).pow(2)
+        h = torch.sum(self.log_sigma2_c + h / self.log_sigma2_c.exp(), dim=2)
+
+        loss_recon = F.binary_cross_entropy_with_logits(recon_x, x, reduction='sum')
+        loss_kl = 0.5 * torch.sum(gamma * h) \
+               - torch.sum(gamma * torch.log(self.cluster_weights + 1e-9)) \
+               + torch.sum(gamma * torch.log(gamma + 1e-9)) \
+               - 0.5 * torch.sum(1 + logvar)
+        loss = (loss_recon + loss_kl) / batch_size
+        return loss, loss_kl, loss_recon
+
+    # predict the cluster number
+    def predict(self, x):
+        mu_z, logvar_z = self.encode(x)
+        z = reparameterize(mu_z, logvar_z)
+
+        pi, logvar_c, mu_c = self.pi_, self.log_sigma2_c, self.mu_c
+        yita_c = torch.exp(torch.log(pi.unsqueeze(0))+ self.gaussian_pdfs_log(z, mu_c, logvar_c))
+        yita_c = yita_c.detach().cpu().numpy()
+
+        return np.argmax(yita_c, axis=1)
+
+    def ELBO_Loss(self, x, L=1):
+        det = 1e-10
+
+        # computer recon loss
+        L_recon = 0
+        z_mu, z_sigma2_log = self.encode(x)
+        for _ in range(L):
+            # reparameterization / sampling
+            z = reparameterize(z_mu, z_sigma2_log)
+            x_recon = self.decoder(z)
+            L_recon += F.binary_cross_entropy_with_logits(x_recon, x)
+        L_recon /= L
+
+        Loss = L_recon * x.size(1)
+
+
+        pi = self.pi_
+        log_sigma2_c = self.log_sigma2_c
+        mu_c = self.mu_c
+        # reparameterization / sampling
+        z = torch.randn_like(z_mu) * torch.exp(z_sigma2_log / 2) + z_mu
+        yita_c = torch.exp(torch.log(pi.unsqueeze(0)) + self.gaussian_pdfs_log(z, mu_c, log_sigma2_c)) + det
+
+        yita_c = yita_c / (yita_c.sum(1).view(-1, 1))  # batch_size*Clusters
+
+        Loss += 0.5 * torch.mean(torch.sum(yita_c * torch.sum(log_sigma2_c.unsqueeze(0) +
+                                                              torch.exp(z_sigma2_log.unsqueeze(1) -
+                                                                        log_sigma2_c.unsqueeze(0)) +
+                                                              (z_mu.unsqueeze(1) - mu_c.unsqueeze(0)).pow(2) /
+                                                              torch.exp(log_sigma2_c.unsqueeze(0))
+                                                              , 2)
+                                           , 1)
+                                 )
+
+        Loss -= torch.mean(torch.sum(yita_c * torch.log(pi.unsqueeze(0) / (yita_c)), 1)) + 0.5 * torch.mean(
+            torch.sum(1 + z_sigma2_log, 1))
+
+        return Loss
+
+    def gaussian_pdfs_log(self, x, mus, log_sigma2s):
+        G = []
+        for c in range(self.ydim):
+            G.append(self.gaussian_pdf_log(x, mus[c:c + 1, :], log_sigma2s[c:c + 1, :]).view(-1, 1))
+        return torch.cat(G, 1)
+
+    @staticmethod
+    def gaussian_pdf_log(x, mu, logvar):
+        return -0.5 * (torch.sum(np.log(np.pi * 2) + logvar + (x - mu).pow(2) / torch.exp(logvar), 1))
+
 
 class Skip_VAE(nn.Module):
 
@@ -391,10 +586,6 @@ class Skip_VAE(nn.Module):
         x_recon = self.decode(z)
         return x_recon, mu_z, logvar_z, z.squeeze()
 
-    def kl_divergence(self, mu, logvar):
-        kld = -0.5 * (1 + logvar - mu ** 2 - logvar.exp()).sum(1).mean()
-        return kld
-
 
 class Simple_VAE(nn.Module):
     def __init__(self, zdim=3, input_channels=1, beta=1, base_enc=32, base_dec=32, depth_factor_dec=2, loss='BCE'):
@@ -450,7 +641,7 @@ class Simple_VAE(nn.Module):
             ConvUpsampling(base_dec, base_dec, 4, stride=2, padding=1),  # 8
             ConvUpsampling(base_dec, base_dec, 4, stride=2, padding=1),  # 16
             ConvUpsampling(base_dec, base_dec, 4, stride=2, padding=1),  # 32
-            nn.Upsample(scale_factor=4, mode='bilinear'),
+            nn.Upsample(scale_factor=4, mode='bilinear', align_corners=True),
             nn.Conv2d(base_dec, self.input_channels, 4, 2, 1),  # 192
             # nn.Sigmoid(), #Sigmoid compute directly in the loss (more stable)
         )
@@ -501,7 +692,3 @@ class Simple_VAE(nn.Module):
         z = self.reparameterize(mu_z, logvar_z)
         x_recon = self.decode(z)
         return x_recon, mu_z, logvar_z, z.squeeze()
-
-    def kl_divergence(self, mu, logvar):
-        kld = -0.5 * (1 + logvar - mu ** 2 - logvar.exp()).sum(1).mean()
-        return kld

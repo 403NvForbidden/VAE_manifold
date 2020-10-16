@@ -449,6 +449,55 @@ def plot_train_result(history, best_epoch=None, save_path=None):
     return fig
 
 
+def plot_train_result_GMM(history, save_path=None):
+    """Display training and validation loss evolution over epochs
+
+    Params
+    -------
+    history : DataFrame
+        Panda DataFrame containing train and valid losses
+    best_epoch : int
+        If early stopping is used, display the last saved model
+    save_path : string
+        Path to save the figure
+    infoMax : boolean
+        If True, an additional loss composant (Mutual Information) is plotted
+
+    Return a matplotlib Figure
+    --------
+    """
+    # ['VAE_loss', 'cluster_accuracy', 'KL_loss', 'recon_loss']
+    print(">>>>>>>>>PLOTING INFOz")
+    fig = plt.figure(figsize=(15, 15))
+    gs = GridSpec(2, 2, figure=fig)
+    ax1 = fig.add_subplot(gs[0, 0])  # full top row: global VAE loss
+    ax2 = fig.add_subplot(gs[0, 1])  # top row on 4x4 grid: reconstruction
+    ax3 = fig.add_subplot(gs[1, 0])  # top left on a 4x4 grid: KL divergence
+    ax4 = fig.add_subplot(gs[1, 1])  # bottom right on a 4x4 grid: MI
+
+    #  plot the overall loss
+    ax1.plot(history['VAE_loss'], color='dodgerblue', label='train')
+    ax1.set_title('Global VAE Loss')
+
+    ax2.set_title('CLuster accuracy')
+    ax2.plot(history['cluster_accuracy'], color='dodgerblue', label='VAE_1')
+
+    ax3.set_title('KL loss')
+    ax3.plot(history['KL_loss'], color='dodgerblue', label='train')
+
+    ax4.set_title('reconstruction loss')
+    ax4.plot(history['recon_loss'], color='lightsalmon', label='MI2')
+
+    ax1.legend();
+    ax2.legend();
+    ax3.legend();
+    ax4.legend()
+
+    if save_path != None:
+        plt.savefig(save_path + 'los_evolution.png')
+
+    return fig
+
 ############################
 ######## SAVING & STOPPING
 ############################
