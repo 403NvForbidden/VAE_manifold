@@ -13,6 +13,12 @@ Main File to sequentially :
 - Save and plot the learnt latent representation
 """
 
+"""
+https://github.com/mori97/VaDE
+https://github.com/GuHongyang/VaDE-pytorch
+https://github.com/jariasf/GMVAE
+"""
+
 ##########################################################
 # %% imports
 ##########################################################
