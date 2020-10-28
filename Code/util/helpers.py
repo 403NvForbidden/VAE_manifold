@@ -466,8 +466,9 @@ def plot_train_result_GMM(history, save_path=None):
     Return a matplotlib Figure
     --------
     """
-    # ['VAE_loss', 'cluster_accuracy', 'KL_loss', 'recon_loss']
-    print(">>>>>>>>>PLOTING INFOz")
+    # ['train_loss', 'train_kl_loss', 'train_recon_loss', 'val_loss', 'val_kl_loss', 'val_recon_loss', 'clutering_acc']
+
+    print(">>>>>>>>>PLOTING VaDE")
     fig = plt.figure(figsize=(15, 15))
     gs = GridSpec(2, 2, figure=fig)
     ax1 = fig.add_subplot(gs[0, 0])  # full top row: global VAE loss
@@ -476,21 +477,24 @@ def plot_train_result_GMM(history, save_path=None):
     ax4 = fig.add_subplot(gs[1, 1])  # bottom right on a 4x4 grid: MI
 
     #  plot the overall loss
-    ax1.plot(history['VAE_loss'], color='dodgerblue', label='train')
-    ax1.set_title('Global VAE Loss')
+    ax1.plot(history['train_loss'], color='dodgerblue', label='train')
+    ax1.plot(history['val_loss'], linestyle='--', color='dodgerblue', label='val')
+    ax1.set_title('Overall Loss')
 
     ax2.set_title('CLuster accuracy')
-    ax2.plot(history['cluster_accuracy'], color='dodgerblue', label='VAE_1')
+    ax2.plot(history['clutering_acc'], color='dodgerblue', label='GMM clustering')
 
     ax3.set_title('KL loss')
-    ax3.plot(history['KL_loss'], color='dodgerblue', label='train')
+    ax3.plot(history['train_kl_loss'], color='dodgerblue', label='train')
+    ax3.plot(history['val_kl_loss'], linestyle='--', color='dodgerblue', label='val')
 
     ax4.set_title('reconstruction loss')
-    ax4.plot(history['recon_loss'], color='lightsalmon', label='MI2')
+    ax4.plot(history['train_recon_loss'], color='lightsalmon', label='train')
+    ax4.plot(history['val_recon_loss'], linestyle='--', color='lightsalmon', label='val')
 
-    ax1.legend();
-    ax2.legend();
-    ax3.legend();
+    ax1.legend()
+    ax2.legend()
+    ax3.legend()
     ax4.legend()
 
     if save_path != None:

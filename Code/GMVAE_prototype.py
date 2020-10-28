@@ -40,7 +40,9 @@ from util.data_processing import get_train_val_dataloader, imshow_tensor, get_in
 from models.train_net import train_VAE_model, train_2stage_VAE_model, train_vaDE_model
 from util.helpers import plot_train_result, save_checkpoint, load_checkpoint, save_brute, load_brute, plot_from_csv, \
     metadata_latent_space, save_reconstruction, plot_train_result_GMM
-
+from torch.autograd import Variable
+from torchvision.utils import save_image
+from PIL import Image
 ##########################################################
 # %% META
 ##########################################################
@@ -67,7 +69,7 @@ print(f'\tTrain on: {device}\t')
 input_size = 128  # the input size of the image
 batch_size = 64  # Change to fit hardware
 
-EPOCHS = 20
+EPOCHS = 10
 train_loader, valid_loader = get_train_val_dataloader(dataset_path, input_size, batch_size, test_split=0.1)
 model_name = f'VaDE_test_Chaffer_Data'  # {datetime.datetime.now().strftime("%Y-%m-%d-%H:%M")}'
 save_model_path = None
@@ -88,6 +90,7 @@ _,_ = imshow_tensor(features[0])
 ##########################################################
 model = VaDE(zdim=3, ydim=12, input_channels=4).to(device)
 
+'''
 optimizer = optim.Adam(model.parameters(), lr=0.0005, betas=(0.9, 0.999))
 
 model, history = train_vaDE_model(EPOCHS, model, optimizer, train_loader, valid_loader, save_model_path, device)
@@ -103,6 +106,23 @@ plt.show()
 if save:
     history.to_csv(save_model_path + 'epochs.csv')
 
+'''
 ##########################################################
 # %% Visualize latent space and save it
 ##########################################################
+'''
+# load model
+model.load_state_dict(torch.load(save_model_path + 'model.pth'))
+sample = Variable(torch.randn(10, 3)).to(device)
+# %%
+sample = model.decoder(sample)[0].detach().cpu()
+
+# %%
+plt.imshow(sample[:3, :, :].permute(1, 2, 0).numpy())
+# %%
+
+im = Image.fromarray(sample[0])
+im.save(save_model_path + str(EPOCHS) + '.tif')
+# save_image(sample.data.view(10, 4, 128, 128),
+#                            save_model_path + str(EPOCHS) + '.tif')
+'''

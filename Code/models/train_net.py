@@ -141,15 +141,14 @@ def pretrain_vaDE_model(model, dataloader, pre_epoch=10, save_path='', device='c
 
 
 def train_vaDE_epoch(model, data_loader, optimizer, epoch, device):
-    model.train()
     start = timer()
-
-    total_loss = 0
+    model.train()
     loss_iter, kl_loss_iter, recon_loss_iter = [], [], []
-    for x, _ in data_loader:
+
+    for batch_idx, (x, _) in enumerate(data_loader):
         x = x.to(device)
         recon_x, mu, logvar, z = model(x)
-        loss, loss_recon, loss_kl = model.loss_function(x, recon_x, z, mu, logvar)
+        loss, loss_recon, loss_kl, _ = model.loss_function(x, recon_x, z, mu, logvar)
 
         optimizer.zero_grad()
         loss.backward()
@@ -159,26 +158,54 @@ def train_vaDE_epoch(model, data_loader, optimizer, epoch, device):
         kl_loss_iter.append(loss_kl.detach().cpu().numpy())
         recon_loss_iter.append(loss_recon.detach().cpu().numpy())
 
-    # if (epoch % 5 == 0) or (epoch == 1):
-    print('==========> Epoch: {} ==========> Average loss: {:.4f}'.format(epoch, np.mean(loss_iter)))
-    print(f'{timer() - start:.2f} seconds elapsed in epoch.')
-    print(f'KL loss : {np.mean(kl_loss_iter):.2f}, Recon Loss : {np.mean(recon_loss_iter)}')
-    # writer.add_scalar()
+        if batch_idx % 10 == 0:
+            print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
+                epoch, batch_idx * len(x), len(data_loader.dataset),
+                       100. * batch_idx / len(data_loader),
+                loss_iter[-1]), end='\r')
+
+    if (epoch % 10 == 0) or (epoch == 1):
+        print('==========> Epoch: {} ==========> Average loss: {:.4f}'.format(epoch, np.mean(loss_iter)))
+        print(f'{timer() - start:.2f} seconds elapsed in epoch.')
+        print(f'KL loss : {np.mean(kl_loss_iter):.2f}, Recon Loss : {np.mean(recon_loss_iter)}')
+        # writer.add_scalar()
+
     return np.mean(loss_iter), np.mean(kl_loss_iter), np.mean(recon_loss_iter)
 
-def test_vaDE_epoch(model, data_loader, epoch, device):
+def test_vaDE_epoch(model, val_loader, epoch, device):
+    start = timer()
     model.eval()
-    pre, tru = [], []
+    loss_iter, kl_loss_iter, recon_loss_iter, cluster_accuracy = [], [], [], []
     with torch.no_grad():
-        for x, y in data_loader:
+        Y, Y_pred = [], []
+        for batch_idx, (x, labels) in enumerate(val_loader):
             x = x.to(device)
-            tru.append(y.numpy())
-            pre.append(model.classify(x).detach().cpu().numpy())
-    # convert to numpy array
-    tru = np.concatenate(tru, 0)
-    pre = np.concatenate(pre, 0)
 
-    print('Acc/test: ', cluster_acc(pre, tru)[0] * 100, epoch)
+            recon_x, mu, logvar, z = model.forward(x)
+
+            loss, loss_recon, loss_kl, gamma = model.loss_function(x, recon_x, z, mu, logvar)
+
+            # prediction
+            gamma = gamma.data.cpu().numpy()
+            Y.append(labels.numpy())
+            Y_pred.append(np.argmax(gamma, axis=1))
+
+            loss_iter.append(loss.item())
+            kl_loss_iter.append(loss_kl.detach().cpu().numpy())
+            recon_loss_iter.append(loss_recon.detach().cpu().numpy())
+
+        Y = np.concatenate(Y)
+        Y_pred = np.concatenate(Y_pred)
+        cluster_accuracy.append(cluster_acc(Y_pred, Y)[0] * 100)
+
+        if (epoch % 10 == 0) or (epoch == 1):
+            print('---------val-----------')
+            # print('==========> Epoch: {} ==========> Average loss: {:.4f}'.format(epoch, np.mean(loss_iter)))
+            print(f'{timer() - start:.2f} seconds elapsed in epoch.')
+            print(f'KL loss : {np.mean(kl_loss_iter):.2f}, Recon Loss : {np.mean(recon_loss_iter)}')
+            print(f"Clustering Accuracy {cluster_accuracy[-1]:.2f}")
+
+    return np.mean(loss_iter), np.mean(kl_loss_iter), np.mean(recon_loss_iter), np.mean(cluster_accuracy)
 
 
 def train_vaDE_model(num_epochs, model, optimizer, train_loader, valid_loader, save_path='', device='cpu'):
@@ -191,6 +218,7 @@ def train_vaDE_model(num_epochs, model, optimizer, train_loader, valid_loader, s
 
     overall_start = timer()
     best_epoch = 0
+    history = []
 
     ### Pretrain
     pretrain_vaDE_model(model, train_loader, save_path=save_path, device=device)
@@ -198,55 +226,26 @@ def train_vaDE_model(num_epochs, model, optimizer, train_loader, valid_loader, s
 
     ### start trianning epochs
     lr_s = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.9)
-
-    history = []
     epoch_bar = tqdm(range(num_epochs))
     for epoch in epoch_bar:
         ### train
-        train_vaDE_epoch(model, train_loader, optimizer, epoch, device)
-        # ------------------------------
-        # Loss = 0
-        # model.train()
-        # for batch_idx, (x, _) in enumerate(train_loader):
-        #     x = x.to(device)
-        #
-        #     loss, loss_recon, loss_kl = model.loss_function(x)
-        #
-        #     optimizer.zero_grad()
-        #     loss.backward()
-        #     optimizer.step()
-        #
-        #     Loss += loss.detach().cpu().numpy()
-
-        # pre = []
-        # tru = []
-
+        train_loss, train_kl_loss, train_recon_loss = train_vaDE_epoch(model, train_loader, optimizer, epoch, device)
         ### test
-        # test_vaDE_epoch(model, valid_loader, epoch, device)
-        # -------------------------------
-        # model.eval()
-        # with torch.no_grad():
-        #     for x, y in train_loader:
-        #         x = x.to(device)
-        #         tru.append(y.numpy())
-        #         pre.append(model.predict(x))
-        #
-        # # convert to numpy array
-        # tru = np.concatenate(tru, 0)
-        # pre = np.concatenate(pre, 0)
+        val_loss, val_kl_loss, val_recon_loss, clutering_acc = test_vaDE_epoch(model, train_loader, epoch, device)
 
         lr_s.step()
-        # if epoch % 5 == 0 or epoch == 1:
-        # print('loss ', Loss / len(train_loader))
-        # print('acc ', cluster_acc(pre, tru)[0] * 100)
-        # history.append([Loss, cluster_acc(pre, tru)[0] * 100])
+        # keep record
+        history.append([train_loss, train_kl_loss, train_recon_loss, val_loss, val_kl_loss, val_recon_loss, clutering_acc])
+
     ### save model
     # save_brute(model, save_path + 'model.pth')
+    torch.save(model.state_dict(), save_path + 'model.pth')
 
-    # history = pd.DataFrame(
-    #     history,
-    #     columns=['VAE_loss', 'cluster_accuracy']
-    # )
+    history = pd.DataFrame(
+        history,
+        columns=['train_loss', 'train_kl_loss', 'train_recon_loss', 'val_loss', 'val_kl_loss', 'val_recon_loss', 'clutering_acc']
+    )
+
     return model, history
 
 #########################################

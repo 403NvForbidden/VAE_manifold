@@ -408,7 +408,6 @@ class VaDE(nn.Module):
         x_recon = self.decoder(z)
         return x_recon, mu_z, logvar_z, z
 
-
     def loss_function(self, x, recon_x, z, z_mean, z_log_var):
         Z = z.unsqueeze(2).expand(z.size()[0], z.size()[1], self.ydim)  # NxDxK
         z_mean_t = z_mean.unsqueeze(2).expand(z_mean.size()[0], z_mean.size()[1], self.ydim)
@@ -439,112 +438,7 @@ class VaDE(nn.Module):
         # Normalise by same number of elements as in reconstruction
         loss = torch.mean(BCE_withlogits + KL_loss)
 
-        return loss, torch.mean(BCE_withlogits), torch.mean(KL_loss)
-
-    ##################### mori97/VaDE ####################
-    def classify(self, x, n_samples=8):
-        with torch.no_grad():
-            mu, logvar = self.encode(x)
-            z = torch.stack(
-                [reparameterize(mu, logvar) for _ in range(n_samples)], dim=1)
-            z = z.unsqueeze(2)
-            h = z - self.mu_c
-            h = torch.exp(-0.5 * torch.sum(h * h / self.log_sigma2_c.exp(), dim=3))
-            # Same as `torch.sqrt(torch.prod(self.logvar.exp(), dim=1))`
-            h = h / torch.sum(0.5 * self.log_sigma2_c, dim=1).exp()
-            p_z_given_c = h / (2 * math.pi)
-            p_z_c = p_z_given_c * self.cluster_weights
-            y = p_z_c / torch.sum(p_z_c, dim=2, keepdim=True)
-            y = torch.sum(y, dim=1)
-            pred = torch.argmax(y, dim=1)
-        return pred
-
-    def lossfun(self, x, recon_x, z, z_mu, z_logvar):
-        batch_size = x.size(0)
-
-        ### Compute gamma ( q(c|x) )
-        h = z - self.mu_c
-        h = torch.exp(-0.5 * torch.sum((h * h / self.log_sigma2_c.exp()), dim=2))
-        # Same as `torch.sqrt(torch.prod(model.logvar.exp(), dim=1))`
-        h = h / torch.sum(0.5 * self.log_sigma2_c, dim=1).exp()
-        p_z_given_c = h / (2 * math.pi)
-        p_z_c = p_z_given_c * self.cluster_weights
-        # q(c|x)
-        gamma = p_z_c / torch.sum(p_z_c, dim=1, keepdim=True)
-
-        h = z_logvar.exp().unsqueeze(1) + (z_mu.unsqueeze(1) - self.mu_c).pow(2)
-        h = torch.sum(self.log_sigma2_c + h / self.log_sigma2_c.exp(), dim=2)
-
-        loss_recon = F.binary_cross_entropy_with_logits(recon_x, x, reduction='sum')
-        p_c = - torch.sum(gamma * torch.log(self.cluster_weights + 1e-9))
-        q_c_x = torch.sum(gamma * torch.log(gamma + 1e-9))
-
-        loss_kl = 0.5 * torch.sum(gamma * h) \
-                  + p_c \
-                  + q_c_x \
-                  - 0.5 * torch.sum(1 + z_logvar) # qentropy
-        loss = (loss_recon + loss_kl) / batch_size
-        return loss, loss_kl, loss_recon
-
-    ##################### GuHongyang/VaDE-pytorch ####################
-    # predict the cluster number
-    def predict(self, x):
-        mu_z, logvar_z = self.encode(x)
-        z = reparameterize(mu_z, logvar_z)
-
-        pi, logvar_c, mu_c = self.pi_, self.log_sigma2_c, self.mu_c
-        yita_c = torch.exp(torch.log(pi.unsqueeze(0)) + self.gaussian_pdfs_log(z, mu_c, logvar_c))
-        yita_c = yita_c.detach().cpu().numpy()
-
-        return np.argmax(yita_c, axis=1)
-
-    def ELBO_Loss(self, x, L=1):
-        det = 1e-10
-
-        # computer recon loss
-        L_recon = 0
-        z_mu, z_sigma2_log = self.encode(x)
-        for _ in range(L):
-            # reparameterization / sampling
-            z = reparameterize(z_mu, z_sigma2_log)
-            x_recon = self.decoder(z)
-            L_recon += F.binary_cross_entropy_with_logits(x_recon, x)
-        L_recon /= L
-
-        Loss = L_recon * x.size(1)
-
-        pi = self.pi_
-        log_sigma2_c = self.log_sigma2_c
-        mu_c = self.mu_c
-        # reparameterization / sampling
-        z = torch.randn_like(z_mu) * torch.exp(z_sigma2_log / 2) + z_mu
-        yita_c = torch.exp(torch.log(pi.unsqueeze(0)) + self.gaussian_pdfs_log(z, mu_c, log_sigma2_c)) + det
-
-        yita_c = yita_c / (yita_c.sum(1).view(-1, 1))  # batch_size*Clusters
-
-        Loss += 0.5 * torch.mean(torch.sum(yita_c * torch.sum(log_sigma2_c.unsqueeze(0) +
-                                                              torch.exp(z_sigma2_log.unsqueeze(1) -
-                                                                        log_sigma2_c.unsqueeze(0)) +
-                                                              (z_mu.unsqueeze(1) - mu_c.unsqueeze(0)).pow(2) /
-                                                              torch.exp(log_sigma2_c.unsqueeze(0))
-                                                              , 2)
-                                           , 1)
-                                 )
-
-        Loss -= torch.mean(torch.sum(yita_c * torch.log(pi.unsqueeze(0) / (yita_c)), 1)) + 0.5 * torch.mean(
-            torch.sum(1 + z_sigma2_log, 1))
-
-        return Loss
-
-    def gaussian_pdfs_log(self, x, mus, log_sigma2s):
-        G = []
-        for c in range(self.ydim):
-            G.append(self.gaussian_pdf_log(x, mus[c:c + 1, :], log_sigma2s[c:c + 1, :]).view(-1, 1))
-        return torch.cat(G, 1)
-
-    @staticmethod
-    def gaussian_pdf_log(x, mu, logvar):
-        return -0.5 * (torch.sum(np.log(np.pi * 2) + logvar + (x - mu).pow(2) / torch.exp(logvar), 1))
+        return loss, torch.mean(BCE_withlogits), torch.mean(KL_loss), gamma
 
 
 class Skip_VAE(nn.Module):
