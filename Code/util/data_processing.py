@@ -58,7 +58,7 @@ def get_train_val_dataloader(root_dir, input_size, batchsize, test_split=0.2):
     train_idx, valid_idx = train_test_split(np.arange(len(targets)),
                                             test_size=test_split,
                                             shuffle=True,
-                                            stratify=targets)
+                                            stratify=targets, random_state=0)
 
     train_sampler = SubsetRandomSampler(train_idx)
     valid_sampler = SubsetRandomSampler(valid_idx)

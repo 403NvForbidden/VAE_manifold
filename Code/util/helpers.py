@@ -165,7 +165,6 @@ def save_reconstruction(loader, VAE_1, VAE_2, save_path, device, num_img=8, doub
     data = Variable(data[:num_img], requires_grad=False).to(device)
     label = label[:num_img].to(device)
 
-
     if VAE_2.conditional:
         y_onehot = torch.zeros((len(label), 7))
         y_onehot[torch.arange(len(label)), label] = 1

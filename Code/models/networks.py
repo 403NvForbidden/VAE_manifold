@@ -356,7 +356,7 @@ class VaDE(nn.Module):
             Conv(base_enc * 2, base_enc * 4, 4, stride=2, padding=1),  # 8x8
             Conv(base_enc * 4, base_enc * 8, 4, stride=2, padding=1),  # 4x4
             Conv(base_enc * 8, base_enc * 16, 4, stride=2, padding=1),  # 2x2
-            Conv(base_enc * 16, base_enc * 16, 4, stride=2, padding=1),  # 2
+            # Conv(base_enc * 16, base_enc * 16, 4, stride=2, padding=1),  # 2
         )
         self.linear_enc = nn.Sequential(
             Linear_block(2 * 2 * base_enc * 16, 1024),  # 2048 -> 1024
@@ -414,7 +414,7 @@ class VaDE(nn.Module):
         z_log_var_t = z_log_var.unsqueeze(2).expand(z_log_var.size()[0], z_log_var.size()[1], self.ydim)
         u_tensor3 = self.mu_c.unsqueeze(0).expand(z.size()[0], self.mu_c.size()[0], self.mu_c.size()[1])  # NxDxK
         lambda_tensor3 = self.log_sigma2_c.unsqueeze(0).expand(z.size()[0], self.log_sigma2_c.size()[0],
-                                                           self.log_sigma2_c.size()[1])
+                                                               self.log_sigma2_c.size()[1])
         theta_tensor2 = self.pi_.unsqueeze(0).expand(z.size()[0], self.ydim)  # NxK
 
         p_c_z = torch.exp(torch.log(theta_tensor2) - torch.sum(0.5 * torch.log(2 * math.pi * lambda_tensor3) + \
@@ -424,15 +424,17 @@ class VaDE(nn.Module):
 
         # adding min for loss to prevent log(0)
         BCE_withlogits = -torch.sum(x * torch.log(torch.clamp(torch.sigmoid(recon_x), min=1e-10)) +
-                         (1 - x) * torch.log(torch.clamp(1 - torch.sigmoid(recon_x), min=1e-10)), 1).sum(1).sum(1)
+                                    (1 - x) * torch.log(torch.clamp(1 - torch.sigmoid(recon_x), min=1e-10)), 1).sum(
+            1).sum(1)
+        # BCE_withlogits = F.binary_cross_entropy_with_logits(recon_x, x)
 
-        logpzc = torch.sum(0.5 * gamma * torch.sum(math.log(2 * math.pi) + torch.log(lambda_tensor3) + \
-                                                   torch.exp(z_log_var_t) / lambda_tensor3 + (
-                                                               z_mean_t - u_tensor3) ** 2 / lambda_tensor3, dim=1),
-                           dim=1)
-        qentropy = -0.5 * torch.sum(1 + z_log_var + math.log(2 * math.pi), 1)
-        logpc = -torch.sum(torch.log(theta_tensor2) * gamma, 1)
-        logqcx = torch.sum(torch.log(gamma) * gamma, 1)
+        logpzc = torch.sum(0.5 * gamma * torch.sum(self.zdim * math.log(2 * math.pi) + torch.log(lambda_tensor3) + \
+                                                   torch.exp(z_log_var_t) / lambda_tensor3 + \
+                                                   (z_mean_t - u_tensor3) ** 2 / lambda_tensor3, dim=1),
+                           dim=-1)
+        qentropy = -0.5 * torch.sum(1 + z_log_var + self.zdim * math.log(2 * math.pi), -1)
+        logpc = -torch.sum(torch.log(theta_tensor2) * gamma, -1)
+        logqcx = torch.sum(torch.log(gamma) * gamma, -1)
 
         KL_loss = logpzc + qentropy + logpc + logqcx
         # Normalise by same number of elements as in reconstruction

@@ -41,7 +41,7 @@ from models.train_net import train_VAE_model, train_2stage_VAE_model, train_vaDE
 from util.helpers import plot_train_result, save_checkpoint, load_checkpoint, save_brute, load_brute, plot_from_csv, \
     metadata_latent_space, save_reconstruction, plot_train_result_GMM
 from torch.autograd import Variable
-from torchvision.utils import save_image
+from torchvision.utils import save_image, make_grid
 from PIL import Image
 ##########################################################
 # %% META
@@ -53,25 +53,25 @@ save = True
 
 ### META of dataset
 datadir_BBBC = datadir + 'Synthetic_Data_1'
-datadir_Horvarth = datadir + 'Peter_Horvath_Subsample'
-datadir_Chaffer = datadir + 'Chaffer_Data'
-dataset_path = datadir_Chaffer
+datadir_Horvarth = datadir + 'Selected_Hovarth' #'Peter_Horvath_Subsample'
+datadir_Chaffer = datadir + 'Selected_Chaffer'
+dataset_path = datadir_Horvarth
 
-# path_to_GT = '../DataSets/MetaData2_PeterHorvath_GT_link_CP_SUBSAMPLE.csv'
+path_to_GT = '../DataSets/MetaData2_PeterHorvath_GT_link_CP_SUBSAMPLE.csv'
 # path_to_GT = datadir + 'MetaData1_GT_link_CP.csv'
-path_to_GT = '../DataSets/MetaData3_Chaffer_GT_link_CP.csv'
+# path_to_GT = '../DataSets/MetaData3_Chaffer_GT_link_CP.csv'
 
 ### META of training device
 device = torch.device('cpu' if not cuda.is_available() else 'cuda')
 print(f'\tTrain on: {device}\t')
 
 ### META of training
-input_size = 128  # the input size of the image
-batch_size = 64  # Change to fit hardware
+input_size = 64  # the input size of the image
+batch_size = 128  # Change to fit hardware
 
-EPOCHS = 10
+EPOCHS = 80
 train_loader, valid_loader = get_train_val_dataloader(dataset_path, input_size, batch_size, test_split=0.1)
-model_name = f'VaDE_test_Chaffer_Data'  # {datetime.datetime.now().strftime("%Y-%m-%d-%H:%M")}'
+model_name = f'VaDE_Selected_Hovarth'  # {datetime.datetime.now().strftime("%Y-%m-%d-%H:%M")}'
 save_model_path = None
 if save:
     save_model_path = outdir + f'{model_name}/' if save else ''
@@ -88,9 +88,9 @@ _,_ = imshow_tensor(features[0])
 ##########################################################
 # %% Build custom VAE Model
 ##########################################################
-model = VaDE(zdim=3, ydim=12, input_channels=4).to(device)
+model = VaDE(zdim=3, ydim=3, input_channels=3).to(device)
 
-'''
+
 optimizer = optim.Adam(model.parameters(), lr=0.0005, betas=(0.9, 0.999))
 
 model, history = train_vaDE_model(EPOCHS, model, optimizer, train_loader, valid_loader, save_model_path, device)
@@ -106,23 +106,35 @@ plt.show()
 if save:
     history.to_csv(save_model_path + 'epochs.csv')
 
-'''
+
 ##########################################################
 # %% Visualize latent space and save it
-##########################################################
-'''
+
 # load model
-model.load_state_dict(torch.load(save_model_path + 'model.pth'))
-sample = Variable(torch.randn(10, 3)).to(device)
-# %%
-sample = model.decoder(sample)[0].detach().cpu()
+# model.load_state_dict(torch.load(save_model_path + 'model.pth'))
+sample = Variable(torch.randn(15, 100, 1, 1), requires_grad=False).to(device)
+recon = model.decoder(sample)
 
-# %%
-plt.imshow(sample[:3, :, :].permute(1, 2, 0).numpy())
-# %%
+img_grid = make_grid(torch.sigmoid(recon[:, :3, :, :]),
+                             nrow=4, padding=12, pad_value=1)
+plt.figure(figsize=(25, 16))
+plt.imshow(img_grid.detach().cpu().permute(1, 2, 0))
+plt.axis('off')
+plt.title(f'Random generated samples')
+plt.show()
+# plt.savefig(pre'generatedSamples.png')
+''''''
 
-im = Image.fromarray(sample[0])
-im.save(save_model_path + str(EPOCHS) + '.tif')
-# save_image(sample.data.view(10, 4, 128, 128),
-#                            save_model_path + str(EPOCHS) + '.tif')
-'''
+# %% Sample from a cluster
+cluster = 2
+# zzz = torch.randn(3, 100, 1, 1)
+sample = Variable(model.mu_c[:, cluster].unsqueeze(-1).unsqueeze(-1).unsqueeze(0), requires_grad=False).to(device)
+recon = model.decoder(sample)
+
+img_grid = make_grid(torch.sigmoid(recon[:, :3, :, :]),
+                             nrow=4, padding=12, pad_value=1)
+plt.figure(figsize=(25, 16))
+plt.imshow(img_grid.detach().cpu().permute(1, 2, 0))
+plt.axis('off')
+plt.title(f'Random generated samples')
+plt.show()

@@ -36,6 +36,7 @@ import torch.optim as optim
 from torch import cuda
 from torchvision.utils import save_image, make_grid
 from tensorboardX import SummaryWriter
+import matplotlib.pyplot as plt
 
 from util.helpers import plot_latent_space, show, EarlyStopping, save_brute
 from models.infoMAX_VAE import infoNCE_bound
@@ -85,13 +86,13 @@ def scalar_loss(data, loss_recon, mu_z, logvar_z, beta):
 #########################################
 ##### train vaDE
 #########################################
-def pretrain_vaDE_model(model, dataloader, pre_epoch=10, save_path='', device='cpu'):
+def pretrain_vaDE_model(model, dataloader, pre_epoch=30, save_path='', device='cpu'):
     if os.path.exists(save_path + 'pretrain_model.pk'):
         model.load_state_dict(torch.load(save_path + 'pretrain_model.pk'))
         return
 
     Loss = nn.MSELoss()
-    opti = optim.Adam(model.parameters(), lr=0.001, betas=(0.9, 0.999))
+    opti = optim.Adam(model.parameters(), lr=0.0005, betas=(0.9, 0.999))
 
     print('Pretraining......')
     epoch_bar = tqdm(range(pre_epoch))
@@ -102,7 +103,7 @@ def pretrain_vaDE_model(model, dataloader, pre_epoch=10, save_path='', device='c
 
             z, _ = model.encode(x)
             x_recon = model.decoder(z)
-            loss = Loss(x, x_recon)
+            loss = Loss(x, torch.sigmoid(x_recon))
 
             L += loss.detach().cpu().numpy()
 
@@ -110,7 +111,7 @@ def pretrain_vaDE_model(model, dataloader, pre_epoch=10, save_path='', device='c
             loss.backward()
             opti.step()
 
-        epoch_bar.write('\nL2={:.4f}\n'.format(L / len(dataloader)))
+        epoch_bar.write('\n L2={:.4f}\n'.format(L / len(dataloader)))
     # reset to save weight???? TODO: check
     model.logvar_l.load_state_dict(model.mu_l.state_dict())
 
@@ -129,11 +130,22 @@ def pretrain_vaDE_model(model, dataloader, pre_epoch=10, save_path='', device='c
     Z = torch.cat(Z, 0).detach().cpu().numpy()
     Y = torch.cat(Y, 0).detach().numpy()
 
+    # select number of clusters
+    # n_components = np.arange(1, 12)
+    # models = [GaussianMixture(n, covariance_type='full', random_state=0).fit(Z) for n in n_components]
+    # bic = [m.bic(Z) for m in models]
+    # aic = [m.aic(Z) for m in models]
+    # plt.plot(n_components, bic, label='BIC')
+    # plt.plot(n_components, aic, label='AIC')
+    # plt.legend(loc='best')
+    # plt.xlabel('n_components')
+    # plt.show()
+
     gmm = GaussianMixture(n_components=model.ydim, covariance_type='diag')
     pre = gmm.fit_predict(Z)
     print('Acc={:.4f}%'.format(cluster_acc(pre, Y)[0] * 100))
 
-    model.pi_.data = torch.from_numpy(gmm.weights_).cuda().float()
+    # model.pi_.data = torch.from_numpy(gmm.weights_).cuda().float()
     model.mu_c.data = torch.from_numpy(gmm.means_.T).cuda().float()
     model.log_sigma2_c.data = torch.from_numpy(gmm.covariances_.T).cuda().float()
 
