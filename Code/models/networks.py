@@ -339,9 +339,13 @@ class VaDE(nn.Module):
         self.base_dec = base_dec
 
         ### initialise GMM parameters
+        # theta p
         self.pi_ = nn.Parameter(torch.FloatTensor(ydim, ).fill_(1) / ydim, requires_grad=True)
-        self.mu_c = nn.Parameter(torch.FloatTensor(ydim, zdim).fill_(0), requires_grad=True)
-        self.log_sigma2_c = nn.Parameter(torch.FloatTensor(ydim, zdim).fill_(0), requires_grad=True)
+        # self.mu_c = nn.Parameter(torch.randn(zdim, ydim), requires_grad=True)
+        self.mu_c = nn.Parameter(torch.FloatTensor(zdim, ydim).fill_(0), requires_grad=True)
+        # lambda p
+        # self.log_sigma2_c = nn.Parameter(torch.randn(zdim, ydim), requires_grad=True)
+        self.log_sigma2_c = nn.Parameter(torch.FloatTensor(zdim, ydim).fill_(0), requires_grad=True)
 
         ###########################
         ##### Encoding layers #####
@@ -391,16 +395,9 @@ class VaDE(nn.Module):
         x = x.view((batch_size, -1))
         mu_logvar = self.linear_enc(x)
         mu_z, logvar_z = self.mu_l(mu_logvar), self.logvar_l(mu_logvar)
-        # mu_z, logvar_z = mu_logvar.view(-1, self.zdim, 2).unbind(-1)
 
         logvar_z = self.stabilize_exp(logvar_z)
         return mu_z, logvar_z
-
-    def get_latent(self, x):
-        # (32, 3, 64, 64) or (3, 100)
-        mu_z, logvar_z = self.encode(x)
-        z = self.reparameterize(mu_z, logvar_z)
-        return z
 
     def forward(self, x):
         ### encode
@@ -409,8 +406,42 @@ class VaDE(nn.Module):
         z = reparameterize(mu_z, logvar_z)
         ### decode
         x_recon = self.decoder(z)
-        return x_recon, mu_z, logvar_z, z.squeeze()
+        return x_recon, mu_z, logvar_z, z
 
+
+    def loss_function(self, x, recon_x, z, z_mean, z_log_var):
+        Z = z.unsqueeze(2).expand(z.size()[0], z.size()[1], self.ydim)  # NxDxK
+        z_mean_t = z_mean.unsqueeze(2).expand(z_mean.size()[0], z_mean.size()[1], self.ydim)
+        z_log_var_t = z_log_var.unsqueeze(2).expand(z_log_var.size()[0], z_log_var.size()[1], self.ydim)
+        u_tensor3 = self.mu_c.unsqueeze(0).expand(z.size()[0], self.mu_c.size()[0], self.mu_c.size()[1])  # NxDxK
+        lambda_tensor3 = self.log_sigma2_c.unsqueeze(0).expand(z.size()[0], self.log_sigma2_c.size()[0],
+                                                           self.log_sigma2_c.size()[1])
+        theta_tensor2 = self.pi_.unsqueeze(0).expand(z.size()[0], self.ydim)  # NxK
+
+        p_c_z = torch.exp(torch.log(theta_tensor2) - torch.sum(0.5 * torch.log(2 * math.pi * lambda_tensor3) + \
+                                                               (Z - u_tensor3) ** 2 / (2 * lambda_tensor3),
+                                                               dim=1)) + 1e-9  # NxK
+        gamma = p_c_z / torch.sum(p_c_z, dim=1, keepdim=True)  # NxK
+
+        # adding min for loss to prevent log(0)
+        BCE_withlogits = -torch.sum(x * torch.log(torch.clamp(torch.sigmoid(recon_x), min=1e-10)) +
+                         (1 - x) * torch.log(torch.clamp(1 - torch.sigmoid(recon_x), min=1e-10)), 1).sum(1).sum(1)
+
+        logpzc = torch.sum(0.5 * gamma * torch.sum(math.log(2 * math.pi) + torch.log(lambda_tensor3) + \
+                                                   torch.exp(z_log_var_t) / lambda_tensor3 + (
+                                                               z_mean_t - u_tensor3) ** 2 / lambda_tensor3, dim=1),
+                           dim=1)
+        qentropy = -0.5 * torch.sum(1 + z_log_var + math.log(2 * math.pi), 1)
+        logpc = -torch.sum(torch.log(theta_tensor2) * gamma, 1)
+        logqcx = torch.sum(torch.log(gamma) * gamma, 1)
+
+        KL_loss = logpzc + qentropy + logpc + logqcx
+        # Normalise by same number of elements as in reconstruction
+        loss = torch.mean(BCE_withlogits + KL_loss)
+
+        return loss, torch.mean(BCE_withlogits), torch.mean(KL_loss)
+
+    ##################### mori97/VaDE ####################
     def classify(self, x, n_samples=8):
         with torch.no_grad():
             mu, logvar = self.encode(x)
@@ -428,37 +459,41 @@ class VaDE(nn.Module):
             pred = torch.argmax(y, dim=1)
         return pred
 
-    def lossfun(self, x, recon_x, mu, logvar):
+    def lossfun(self, x, recon_x, z, z_mu, z_logvar):
         batch_size = x.size(0)
 
-        # Compute gamma ( q(c|x) )
-        z = reparameterize(mu, logvar).unsqueeze(1)
+        ### Compute gamma ( q(c|x) )
         h = z - self.mu_c
         h = torch.exp(-0.5 * torch.sum((h * h / self.log_sigma2_c.exp()), dim=2))
         # Same as `torch.sqrt(torch.prod(model.logvar.exp(), dim=1))`
         h = h / torch.sum(0.5 * self.log_sigma2_c, dim=1).exp()
         p_z_given_c = h / (2 * math.pi)
         p_z_c = p_z_given_c * self.cluster_weights
+        # q(c|x)
         gamma = p_z_c / torch.sum(p_z_c, dim=1, keepdim=True)
 
-        h = logvar.exp().unsqueeze(1) + (mu.unsqueeze(1) - self.mu_c).pow(2)
+        h = z_logvar.exp().unsqueeze(1) + (z_mu.unsqueeze(1) - self.mu_c).pow(2)
         h = torch.sum(self.log_sigma2_c + h / self.log_sigma2_c.exp(), dim=2)
 
         loss_recon = F.binary_cross_entropy_with_logits(recon_x, x, reduction='sum')
+        p_c = - torch.sum(gamma * torch.log(self.cluster_weights + 1e-9))
+        q_c_x = torch.sum(gamma * torch.log(gamma + 1e-9))
+
         loss_kl = 0.5 * torch.sum(gamma * h) \
-               - torch.sum(gamma * torch.log(self.cluster_weights + 1e-9)) \
-               + torch.sum(gamma * torch.log(gamma + 1e-9)) \
-               - 0.5 * torch.sum(1 + logvar)
+                  + p_c \
+                  + q_c_x \
+                  - 0.5 * torch.sum(1 + z_logvar) # qentropy
         loss = (loss_recon + loss_kl) / batch_size
         return loss, loss_kl, loss_recon
 
+    ##################### GuHongyang/VaDE-pytorch ####################
     # predict the cluster number
     def predict(self, x):
         mu_z, logvar_z = self.encode(x)
         z = reparameterize(mu_z, logvar_z)
 
         pi, logvar_c, mu_c = self.pi_, self.log_sigma2_c, self.mu_c
-        yita_c = torch.exp(torch.log(pi.unsqueeze(0))+ self.gaussian_pdfs_log(z, mu_c, logvar_c))
+        yita_c = torch.exp(torch.log(pi.unsqueeze(0)) + self.gaussian_pdfs_log(z, mu_c, logvar_c))
         yita_c = yita_c.detach().cpu().numpy()
 
         return np.argmax(yita_c, axis=1)
@@ -477,7 +512,6 @@ class VaDE(nn.Module):
         L_recon /= L
 
         Loss = L_recon * x.size(1)
-
 
         pi = self.pi_
         log_sigma2_c = self.log_sigma2_c

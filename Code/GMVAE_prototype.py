@@ -67,7 +67,7 @@ print(f'\tTrain on: {device}\t')
 input_size = 128  # the input size of the image
 batch_size = 64  # Change to fit hardware
 
-EPOCHS = 30
+EPOCHS = 20
 train_loader, valid_loader = get_train_val_dataloader(dataset_path, input_size, batch_size, test_split=0.1)
 model_name = f'VaDE_test_Chaffer_Data'  # {datetime.datetime.now().strftime("%Y-%m-%d-%H:%M")}'
 save_model_path = None
