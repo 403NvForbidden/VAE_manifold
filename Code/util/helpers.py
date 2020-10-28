@@ -39,6 +39,106 @@ from torchvision.utils import save_image, make_grid
 ######## Match Latent Code and Ground Truth
 ##############################################
 
+def metadata_latent_space_single(model, infer_dataloader, device, GT_csv_path, save_csv=False, with_rawdata=False, csv_path='no_name_specified.csv'):
+    '''
+    Once a VAE model is trained, take its predictions (3D latent code) and store it in a csv
+    file alongside the ground truth information. Useful for plots and downstream analyses.
+
+    Params :
+        - model (nn.Module) :  trained Pytorch VAE model that will produce latent codes of dataset
+        - inder_dataloader (DataLoader) : Dataloader that iterates the dataset by batch
+        - train_on_gpu (boolean) : Wheter infer latent codes on GPU or not.
+        - GT_csv_path (string) : path to a csv file that contains all the ground truth information
+                to keep alongside the latent codes. A column 'Unique_ID' (the name of the tiff files)
+                needs to be present to match latent code and ground truth
+        - save_csv (boolean) : If False, the new Panda DataFrame in only returned.
+        - csv_path (string) : the path where to store a new csv file that contains the matched
+                latent code and ground truth. Ignored if 'save_csv' is False
+        - with_rawdata (boolean): If True, the raw data (images pixels) is also save in the csv file
+
+    Return :
+        - MetaData_csv (Pandas DataFrame) : DataFrame that contains both latent codes and ground truth, matched
+    '''
+    labels_list = []
+    z_list = []
+    id_list = []
+    list_of_tensors = [] #Store raw_data for performance metrics
+
+    if model.zdim > 3 :
+        print(f'Latent space is >3D ({model.zdim} dimensional), no visualization is provided')
+        return None
+
+    ###### Iterate throughout inference dataset #####
+    #################################################
+
+    for i, (data, labels, file_names) in enumerate(infer_dataloader):
+        #Extract unique cell id from file_names
+        id_list.append([file_name for file_name in file_names])
+        data = data.to(device)
+        model.eval()
+        with torch.no_grad():
+            if with_rawdata:
+                raw_data = data.view(data.size(0),-1) #B x HxWxC
+                list_of_tensors.append(raw_data.data.cpu().numpy())
+
+            data = Variable(data, requires_grad=False)
+            z, _ = model.encode(data)
+            z = z.view(-1, model.zdim)
+            z_list.append((z.data).cpu().numpy())
+            labels_list.append(labels.numpy())
+
+        print(f'In progress...{i*len(data)}/{len(infer_dataloader.dataset)}',end='\r')
+
+    ###### Matching samples to metadata info #####
+    #################################################
+
+    unique_ids = list(itertools.chain.from_iterable(id_list))
+
+    ###### Store raw data in a separate data frame #####
+    if with_rawdata:
+        raw_data = np.concatenate(list_of_tensors,axis=0)
+        rawdata_frame = pd.DataFrame(data=raw_data[0:,0:],
+                                index=[i for i in range(raw_data.shape[0])],
+                               columns=['feature'+str(i) for i in range(raw_data.shape[1])])
+        rawdata_frame['Unique_ID']=np.nan
+        rawdata_frame.Unique_ID=unique_ids
+        rawdata_frame = rawdata_frame.sort_values(by=['Unique_ID'])
+
+    ##### Store latent code in a temporary dataframe #####
+    z_points = np.concatenate(z_list,axis=0) # datasize x 3
+    true_label = np.concatenate(labels_list,axis=0)
+
+    temp_matching_df = pd.DataFrame(columns=['VAE_x_coord','VAE_y_coord','VAE_z_coord','Unique_ID'])
+    temp_matching_df.VAE_x_coord = z_points[:,0]
+    temp_matching_df.VAE_y_coord = z_points[:,1]
+    if model.zdim == 3 :
+        temp_matching_df.VAE_z_coord = z_points[:,2]
+    else:
+        temp_matching_df.VAE_z_coord = 0
+    temp_matching_df.Unique_ID = unique_ids
+    temp_matching_df = temp_matching_df.sort_values(by=['Unique_ID'])
+
+
+    ##### Load Ground Truth information about the dataset #####
+    MetaData_csv = pd.read_csv(GT_csv_path)
+    MetaData_csv = MetaData_csv.sort_values(by=['Unique_ID'])
+
+    ##### Match latent code information with ground truth info #####
+    # assert np.all(temp_matching_df.Unique_ID.values == MetaData_csv.Unique_ID.values), "Inference dataset doesn't match with csv metadata"
+    MetaData_csv = MetaData_csv.join(temp_matching_df.set_index('Unique_ID'), on='Unique_ID')
+
+    ##### Match raw data information with ground truth info #####
+    if with_rawdata:
+        assert np.all(rawdata_frame.Unique_ID.values == MetaData_csv.Unique_ID.values), "Inference dataset doesn't match with csv metadata"
+        MetaData_csv = MetaData_csv.join(rawdata_frame.set_index('Unique_ID'), on='Unique_ID')
+
+    #### Save Final CSV file #####
+    if save_csv:
+        MetaData_csv.to_csv(csv_path,index=False)
+        print(f'Final CSV saved to : {csv_path}')
+
+    return MetaData_csv
+
 def metadata_latent_space(VAE1, VAE2, infer_dataloader, device, GT_csv_path, save_csv=False, with_rawdata=False,
                           csv_path='no_name_specified.csv'):
     """
@@ -307,7 +407,7 @@ def plot_from_csv(path_to_csv, low_dim_names=['VAE_x_coord', 'VAE_y_coord', 'VAE
         if column == None:
             ##### Fig 1 : Plot each single cell in latent space with GT cluster labels
             traces = []
-            for i in range(num_class):
+            for i in [2, 3, 4]: #range(3,5): # TODO: change it back to original form
                 scatter = go.Scatter3d(x=MetaData_csv[MetaData_csv['GT_label'] == i + 1][low_dim_names[0]].values,
                                        y=MetaData_csv[MetaData_csv['GT_label'] == i + 1][low_dim_names[1]].values,
                                        z=MetaData_csv[MetaData_csv['GT_label'] == i + 1][low_dim_names[2]].values,

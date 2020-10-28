@@ -131,21 +131,21 @@ def pretrain_vaDE_model(model, dataloader, pre_epoch=30, save_path='', device='c
     Y = torch.cat(Y, 0).detach().numpy()
 
     # select number of clusters
-    # n_components = np.arange(1, 12)
-    # models = [GaussianMixture(n, covariance_type='full', random_state=0).fit(Z) for n in n_components]
-    # bic = [m.bic(Z) for m in models]
-    # aic = [m.aic(Z) for m in models]
-    # plt.plot(n_components, bic, label='BIC')
-    # plt.plot(n_components, aic, label='AIC')
-    # plt.legend(loc='best')
-    # plt.xlabel('n_components')
-    # plt.show()
+    n_components = np.arange(1, 12)
+    models = [GaussianMixture(n, covariance_type='full', random_state=0).fit(Z) for n in n_components]
+    bic = [m.bic(Z) for m in models]
+    aic = [m.aic(Z) for m in models]
+    plt.plot(n_components, bic, label='BIC')
+    plt.plot(n_components, aic, label='AIC')
+    plt.legend(loc='best')
+    plt.xlabel('n_components')
+    plt.show()
 
     gmm = GaussianMixture(n_components=model.ydim, covariance_type='diag')
     pre = gmm.fit_predict(Z)
     print('Acc={:.4f}%'.format(cluster_acc(pre, Y)[0] * 100))
 
-    # model.pi_.data = torch.from_numpy(gmm.weights_).cuda().float()
+    model.pi_.data = torch.from_numpy(gmm.weights_).cuda().float()
     model.mu_c.data = torch.from_numpy(gmm.means_.T).cuda().float()
     model.log_sigma2_c.data = torch.from_numpy(gmm.covariances_.T).cuda().float()
 
