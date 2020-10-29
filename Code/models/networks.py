@@ -251,8 +251,8 @@ class VAE(nn.Module):
         ###########################
         ##### Conditional Embedding
         ###########################
-        self.embed_class = nn.Linear(7, 64 * 64)
-        self.embed_data = nn.Conv2d(3, 3, kernel_size=1)
+        # self.embed_class = nn.Linear(7, 64 * 64)
+        # self.embed_data = nn.Conv2d(3, 3, kernel_size=1)
 
         ### weight initialization
         for m in self.modules():

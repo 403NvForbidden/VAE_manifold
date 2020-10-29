@@ -765,7 +765,7 @@ def train_2stage_infoMaxVAE_model(num_epochs, VAE_1, VAE_2, opti_VAE1, opti_VAE2
 ###################################################
 
 
-def train(epoch, model, optimizer, train_loader, train_on_gpu=True):
+def train(epoch, model, optimizer, train_loader, device='cpu'):
     """
     Train a VAE model with standard ELBO objective function for one single epoch
 
@@ -787,13 +787,11 @@ def train(epoch, model, optimizer, train_loader, train_on_gpu=True):
 
     start = timer()
 
-    criterion_recon = nn.BCEWithLogitsLoss().cuda()  # more stable than handmade sigmoid as last layer and BCELoss
+    criterion_recon = nn.BCEWithLogitsLoss().to(device) # more stable than handmade sigmoid as last layer and BCELoss
 
     # each `data` is of BATCH_SIZE samples and has shape [batch_size, 4, 128, 128]
     for batch_idx, (data, _) in enumerate(train_loader):
-        data = Variable(data)
-        if train_on_gpu:
-            data = data.cuda()
+        data = Variable(data).to(device)
 
         # push whole batch of data through VAE.forward() to get recon_loss
         x_recon, mu_z, logvar_z, _ = model(data)
@@ -828,7 +826,7 @@ def train(epoch, model, optimizer, train_loader, train_on_gpu=True):
     return np.mean(global_VAE_iter), np.mean(kl_loss_iter), np.mean(recon_loss_iter)
 
 
-def test(epoch, model, optimizer, test_loader, train_on_gpu=True):
+def test(epoch, model, optimizer, test_loader, device='cpu'):
     """
     Evaluate a VAE model on validation dataloader with standard ELBO objective function
 
@@ -847,12 +845,11 @@ def test(epoch, model, optimizer, test_loader, train_on_gpu=True):
         kl_loss_iter = []
         recon_loss_iter = []
 
-        criterion_recon = nn.BCEWithLogitsLoss().cuda()  # more stable than handmade sigmoid as last layer and BCELoss
+        criterion_recon = nn.BCEWithLogitsLoss().to(device)  # more stable than handmade sigmoid as last layer and BCELoss
 
         # each data is of BATCH_SIZE (default 128) samples
         for i, (data, _) in enumerate(test_loader):
-            if train_on_gpu:
-                data = data.cuda()
+            data = data.to(device)
 
             # we're only going to infer, so no autograd at all required
             data = Variable(data, requires_grad=False)
@@ -875,7 +872,7 @@ def test(epoch, model, optimizer, test_loader, train_on_gpu=True):
 
 
 def train_VAE_model(epochs, model, optimizer, train_loader, valid_loader, saving_path='best_model.pth',
-                    train_on_gpu=True):
+                    device='cpu'):
     """
     Main function to train a VAE model with standard ELBO objective function for a given number of epochs
     Possible to train from scratch or resume a training (simply pass a trained VAE as input)
@@ -905,25 +902,17 @@ def train_VAE_model(epochs, model, optimizer, train_loader, valid_loader, saving
     best_epoch = 0
 
     history = []
-    early_stopping = EarlyStopping(patience=30, verbose=True, path=saving_path)
     lr_schedul_VAE = torch.optim.lr_scheduler.StepLR(optimizer=optimizer, step_size=40, gamma=0.6)
 
     for epoch in range(model.epochs + 1, model.epochs + epochs + 1):
-        global_VAE_loss, kl_loss, recon_loss = train(epoch, model, optimizer, train_loader, train_on_gpu)
-        global_VAE_loss_val, kl_loss_val, recon_loss_val = test(epoch, model, optimizer, valid_loader, train_on_gpu)
+        global_VAE_loss, kl_loss, recon_loss = train(epoch, model, optimizer, train_loader, device)
+        global_VAE_loss_val, kl_loss_val, recon_loss_val = test(epoch, model, optimizer, valid_loader, device)
 
         # early stopping takes the validation loss to check if it has decereased,
         # if so, model is saved, if not for 'patience' time in a row, the training loop is broken
-        early_stopping(global_VAE_loss_val, VAE=model, MLP=None)
-        best_epoch = early_stopping.stop_epoch
-
         history.append([global_VAE_loss, kl_loss, recon_loss, global_VAE_loss_val, kl_loss_val, recon_loss_val])
         model.epochs += 1
         lr_schedul_VAE.step()
-
-        if early_stopping.early_stop:
-            print(f'#### Early stopping occured. Best model saved is from epoch {early_stopping.stop_epoch}')
-            break
 
     history = pd.DataFrame(
         history,
@@ -938,8 +927,9 @@ def train_VAE_model(epochs, model, optimizer, train_loader, valid_loader, saving
 
     # Attach the optimizer
     model.optimizer = optimizer
+    torch.save(model.state_dict(), saving_path + 'model.pth')
 
-    return model, history, best_epoch
+    return model, history
 
 
 ###################################################

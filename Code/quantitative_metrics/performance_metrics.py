@@ -76,8 +76,7 @@ from quantitative_metrics.backbone_metric import dist_preservation_err
 
 
 def compute_perf_metrics(data_source, params_preferences):
-    '''
-    From a csv or a pandas DataFrame containing the projection (latent code) of
+    '''compute_perf_metricstion (latent code) of
     the dataset, compute and save different performance metrics, that can be used
     to evaluate the quality of the learnt representation.
     '''
