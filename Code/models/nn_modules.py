@@ -21,17 +21,18 @@ from torch.nn import functional as F
 class Decoder(nn.Module):
     '''Downsampling block'''
 
-    def __init__(self, zdim: int = 3, base_dec: int = 32, stride: int = 2, padding: int = 1):
+    def __init__(self, zdim: int = 3, input_channel=3, base_dec: int = 32, stride: int = 2, padding: int = 1):
         super(Decoder, self).__init__()
 
         ### p(z|y)
         # self.y_mu = nn.Linear(ydim, 2*zdim)
         # self.y_var = nn.Linear(ydim, zdim)
         self.base_dec = base_dec
+        self.input_channels = input_channel
 
         self.linear_dec = nn.Sequential(
             Linear_block(zdim, 1024),
-            Linear_block(1024, 2 * 2 * base_dec * 16),
+            Linear_block(1024, pow(2, input_channel - 1) * base_dec * 16),
         )
 
         self.conv_dec = nn.Sequential(
@@ -43,7 +44,7 @@ class Decoder(nn.Module):
             # ConvUpsampling(base_dec, base_dec, 4, stride=2, padding=1),  # 96
 
             nn.Upsample(scale_factor=4, mode='bilinear', align_corners=True),
-            nn.Conv2d(in_channels=base_dec, out_channels=3, kernel_size=4, stride=2, padding=1),  # 192
+            nn.Conv2d(in_channels=base_dec, out_channels=input_channel, kernel_size=4, stride=2, padding=1),  # 192
         )
 
     def forward(self, z):
@@ -55,7 +56,7 @@ class Decoder(nn.Module):
         ### p(x|z) reconstruction
         z = z.view((batch_size, -1))
         x = self.linear_dec(z)
-        x = x.view((batch_size, self.base_dec * 16, 2, 2))
+        x = x.view((batch_size, self.base_dec * 16, 2 ** ((self.input_channels - 1) // 2), 2 ** ((self.input_channels - 1) // 2)))
         x_recon = self.conv_dec(x)
         return x_recon
 

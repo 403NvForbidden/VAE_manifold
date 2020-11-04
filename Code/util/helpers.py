@@ -12,6 +12,8 @@ from a model and to save / load model. """
 ####### Imports ###############
 ###############################
 import sys, os
+import warnings
+
 import pandas as pd
 import numpy as np
 import itertools
@@ -38,6 +40,50 @@ from torchvision.utils import save_image, make_grid
 ##############################################
 ######## Match Latent Code and Ground Truth
 ##############################################
+def meta_MNIST(model, dataloader, device='cpu'):
+    z_list, labels_list = [], []
+    for i, (data, labels) in enumerate(dataloader):
+        #Extract unique cell id from file_names
+        data = data.to(device)
+        model.eval()
+        with torch.no_grad():
+            # if with_rawdata:
+            #     raw_data = data.view(data.size(0),-1) #B x HxWxC
+            #     list_of_tensors.append(raw_data.data.cpu().numpy())
+
+            data = Variable(data, requires_grad=False)
+            z, _ = model.encode(data)
+            z = z.view(-1, model.zdim)
+            z_list.append((z.data).cpu().numpy())
+            labels_list.append(labels.numpy())
+
+        print(f'In progress...{i*len(data)}/{len(dataloader.dataset)}', end='\r')
+
+    z_points = np.concatenate(z_list, axis=0) # datasize
+    true_label = np.concatenate(labels_list, axis=0)
+    df = pd.DataFrame(z_points, columns=['x', 'y', 'z'])
+    df["GT"] = pd.Series(true_label)
+
+    ### plot ###
+    ##### Fig 1 : Plot each single cell in latent space with GT cluster labels
+    traces = []
+    for i in np.unique(true_label):  # range(3,5): # TODO: change it back to original form
+        df_filter = df[df['GT'] == i]
+        scatter = go.Scatter3d(x=df_filter['x'].values,
+                               y=df_filter['y'].values,
+                               z=df_filter['z'].values,
+                               mode='markers',
+                               marker=dict(size=3, opacity=1),
+                               name=f'Cluster {i}')
+        traces.append(scatter)
+    layout = dict(title='Latent Representation, colored by GT clustered')
+    fig_3d_1 = go.Figure(data=traces, layout=layout)
+    fig_3d_1.update_layout(margin=dict(l=0, r=0, b=0, t=0), showlegend=True, legend=dict(y=-.1))
+
+    # TODO
+    return fig_3d_1
+
+
 
 def metadata_latent_space_single(model, infer_dataloader, device, GT_csv_path, save_csv=False, with_rawdata=False, csv_path='no_name_specified.csv'):
     '''
@@ -64,9 +110,8 @@ def metadata_latent_space_single(model, infer_dataloader, device, GT_csv_path, s
     id_list = []
     list_of_tensors = [] #Store raw_data for performance metrics
 
-    if model.zdim > 3 :
-        print(f'Latent space is >3D ({model.zdim} dimensional), no visualization is provided')
-        return None
+    if model.zdim > 3:
+        warnings.warn(f'Latent space is >3D ({model.zdim} dimensional), no visualization is provided')
 
     ###### Iterate throughout inference dataset #####
     #################################################
@@ -429,7 +474,7 @@ def plot_from_csv(path_to_csv, low_dim_names=['VAE_x_coord', 'VAE_y_coord', 'VAE
             fig.update_traces(marker=dict(size=3))
             return fig
 
-    if dim == 2:
+    elif dim == 2:
 
         traces = []
         MS = MetaData_csv
@@ -601,6 +646,53 @@ def plot_train_result_GMM(history, save_path=None):
 
     return fig
 
+def plot_singleVAE_result(history, save_path=None):
+    """Display training and validation loss evolution over epochs
+
+    Params
+    -------
+    history : DataFrame
+        Panda DataFrame containing train and valid losses
+    best_epoch : int
+        If early stopping is used, display the last saved model
+    save_path : string
+        Path to save the figure
+    infoMax : boolean
+        If True, an additional loss composant (Mutual Information) is plotted
+
+    Return a matplotlib Figure
+    --------
+    """
+
+    # ['global_VAE_loss', 'kl_loss', 'recon_loss', 'global_VAE_loss_val', 'kl_loss_val', 'recon_loss_val']
+    print(">>>>>>>>>PLOTING Single VAE")
+    fig = plt.figure(figsize=(15, 15))
+    gs = GridSpec(2, 2, figure=fig)
+    ax1 = fig.add_subplot(gs[0, :])
+    ax3 = fig.add_subplot(gs[1, 0])
+    ax4 = fig.add_subplot(gs[1, 1])
+
+    #  plot the overall loss
+    ax1.plot(history['global_VAE_loss'], color='dodgerblue', label='train')
+    ax1.plot(history['global_VAE_loss_val'], linestyle='--', color='dodgerblue', label='val')
+    ax1.set_title('Overall Loss')
+
+    ax3.set_title('KL loss')
+    ax3.plot(history['kl_loss'], color='dodgerblue', label='train')
+    ax3.plot(history['kl_loss_val'], linestyle='--', color='dodgerblue', label='val')
+
+    ax4.set_title('reconstruction loss')
+    ax4.plot(history['recon_loss'], color='lightsalmon', label='train')
+    ax4.plot(history['recon_loss_val'], linestyle='--', color='lightsalmon', label='val')
+
+    ax1.legend()
+    ax3.legend()
+    ax4.legend()
+
+    if save_path != None:
+        plt.savefig(save_path + 'los_evolution.png')
+
+    return fig
 ############################
 ######## SAVING & STOPPING
 ############################

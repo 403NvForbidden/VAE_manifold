@@ -13,7 +13,7 @@ def get_MNIST_dataloader(path='/mnt/Linux_Storage/', batch_size=128):
                                            (0.1307,), (0.3081,))
                                    ]))
 
-    train_dataset = torch.utils.data.random_split(train_dataset, [len(train_dataset), len(train_dataset) - len(train_dataset) // 4])[0]
+    train_dataset = torch.utils.data.random_split(train_dataset, [20000, len(train_dataset)-20000])[0]
 
 
     test_dataset = torchvision.datasets.MNIST(path, train=False, download=True,
@@ -24,7 +24,7 @@ def get_MNIST_dataloader(path='/mnt/Linux_Storage/', batch_size=128):
                                        (0.1307,), (0.3081,))
                                ]))
 
-    test_dataset = torch.utils.data.random_split(test_dataset, [len(test_dataset), len(test_dataset) - len(test_dataset) // 4])[0]
+    test_dataset = torch.utils.data.random_split(test_dataset, [5000, len(test_dataset) - 5000])[0]
 
 
     train_loader = torch.utils.data.DataLoader(

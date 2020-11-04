@@ -213,12 +213,8 @@ class VAE(nn.Module):
             Conv(base_enc * 8, base_enc * 16, 4, stride=2, padding=1),  # 2x2
         )
         self.linear_enc = nn.Sequential(
-            nn.Linear(pow(2, self.input_channels - 1) * base_enc * 16, 1024),  # 2048 -> 1024
-            nn.BatchNorm1d(1024),
-            nn.ReLU(),
-            nn.Linear(1024, 256),
-            nn.BatchNorm1d(256),
-            nn.ReLU()
+            Linear_block(pow(2, self.input_channels - 1) * base_enc * 16, 1024),
+            Linear_block(1024, 256),
         )
         self.mu_logvar_gen = nn.Linear(256, self.zdim * 2)  # 245 -> 200
 
@@ -228,12 +224,8 @@ class VAE(nn.Module):
         hidden_dim = self.zdim + 7 if conditional else zdim
         # TODO: linear decoder shorter than VAE2???
         self.linear_dec = nn.Sequential(
-            nn.Linear(hidden_dim, 1024),
-            nn.BatchNorm1d(1024),
-            nn.ReLU(),
-            nn.Linear(1024, pow(2, self.input_channels - 1) * base_dec * 16),
-            nn.BatchNorm1d(pow(2, self.input_channels - 1) * base_dec * 16),
-            nn.ReLU()
+            Linear_block(hidden_dim, 1024),
+            Linear_block(1024, pow(2, self.input_channels - 1) * base_dec * 16),
         )
 
         self.conv_dec = nn.Sequential(
@@ -359,7 +351,7 @@ class VaDE(nn.Module):
             # Conv(base_enc * 16, base_enc * 16, 4, stride=2, padding=1),  # 2
         )
         self.linear_enc = nn.Sequential(
-            Linear_block(2 * 2 * base_enc * 16, 1024),  # 2048 -> 1024
+            Linear_block(pow(2, input_channels - 1) * base_dec * 16, 1024),  # 2048 -> 1024
             Linear_block(1024, 256),
             # nn.Linear(256, self.zdim * 2)
         )
@@ -372,7 +364,7 @@ class VaDE(nn.Module):
         ###########################
         ##### Decoding layers #####
         ###########################
-        self.decoder = Decoder(zdim, base_dec)
+        self.decoder = Decoder(zdim, input_channel=input_channels)
 
         ### weight initialization
         for m in self.modules():

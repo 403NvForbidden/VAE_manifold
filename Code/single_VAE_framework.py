@@ -84,13 +84,13 @@ if save:
 ### Qualitative inspection of one data example
 trainiter = iter(train_loader)
 features, labels = next(trainiter)
-_,_ = imshow_tensor(features[0])
-""""""
+_, _ = imshow_tensor(features[0])
 
 ##########################################################
 # %% Build custom VAE Model
 ##########################################################
-model = VAE(zdim=3, input_channels=3).to(device)
+# model = VAE(zdim=3, input_channels=3).to(device)
+model = VAE(zdim=3, input_channels=1).to(device)
 '''
 optimizer = optim.Adam(model.parameters(), lr=0.0005, betas=(0.9, 0.999))
 

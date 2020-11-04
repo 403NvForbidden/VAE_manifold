@@ -787,7 +787,7 @@ def train(epoch, model, optimizer, train_loader, device='cpu'):
 
     start = timer()
 
-    criterion_recon = nn.BCEWithLogitsLoss().to(device) # more stable than handmade sigmoid as last layer and BCELoss
+    criterion_recon = nn.MSELoss().to(device) # more stable than handmade sigmoid as last layer and BCELoss
 
     # each `data` is of BATCH_SIZE samples and has shape [batch_size, 4, 128, 128]
     for batch_idx, (data, _) in enumerate(train_loader):
@@ -797,8 +797,8 @@ def train(epoch, model, optimizer, train_loader, device='cpu'):
         x_recon, mu_z, logvar_z, _ = model(data)
 
         # calculate scalar loss
-        loss_recon = criterion_recon(x_recon, data)
-        zzz  = criterion_recon(data, x_recon)
+        loss_recon = criterion_recon(torch.sigmoid(x_recon), data)
+        #zzz  = criterion_recon(data, x_recon)
         loss_recon *= data.size(1) * data.size(2) * data.size(3)
         loss_recon.div(data.size(0))
 
@@ -846,7 +846,7 @@ def test(epoch, model, optimizer, test_loader, device='cpu'):
         kl_loss_iter = []
         recon_loss_iter = []
 
-        criterion_recon = nn.BCEWithLogitsLoss().to(device)  # more stable than handmade sigmoid as last layer and BCELoss
+        criterion_recon = nn.MSELoss().to(device)  # more stable than handmade sigmoid as last layer and BCELoss
 
         # each data is of BATCH_SIZE (default 128) samples
         for i, (data, _) in enumerate(test_loader):
@@ -856,7 +856,7 @@ def test(epoch, model, optimizer, test_loader, device='cpu'):
             data = Variable(data, requires_grad=False)
             x_recon, mu_z, logvar_z, _ = model(data)
 
-            loss_recon = criterion_recon(x_recon, data)
+            loss_recon = criterion_recon(torch.sigmoid(x_recon), data)
             loss_recon *= data.size(1) * data.size(2) * data.size(3)
             loss_recon.div(data.size(0))
             loss_kl = kl_divergence(mu_z, logvar_z)
@@ -928,14 +928,15 @@ def train_VAE_model(epochs, model, optimizer, train_loader, valid_loader, saving
 
     # Attach the optimizer
     model.optimizer = optimizer
-    torch.save(model.state_dict(), saving_path + 'model.pth')
+    if saving_path:
+        torch.save(model.state_dict(), saving_path + 'model.pth')
 
     return model, history
 
 
-###################################################
+#########################################
 ##### InfoMax VAE training ##############
-###################################################
+#########################################
 def train_infoM_epoch(epoch, VAE, MLP, opti_VAE, opti_MLP, train_loader, train_on_gpu=False):
     """
     Train a VAE model with InfoMAX VAE objective function for one single epoch

@@ -11,6 +11,7 @@ import pickle as pkl
 
 import torch
 import torchvision
+from matplotlib.gridspec import GridSpec
 from torch import cuda, optim
 from torchsummary import summary
 
@@ -19,8 +20,7 @@ from models.infoMAX_VAE import CNN_128_VAE
 from util.Process_Mnist import get_MNIST_dataloader
 from util.data_processing import get_train_val_dataloader, imshow_tensor, get_inference_dataset
 from models.train_net import train_VAE_model, train_2stage_VAE_model, train_vaDE_model
-from util.helpers import plot_train_result, save_checkpoint, load_checkpoint, save_brute, load_brute, plot_from_csv, \
-    metadata_latent_space, save_reconstruction, plot_train_result_GMM, metadata_latent_space_single
+from util.helpers import plot_singleVAE_result, meta_MNIST, plot_train_result_GMM
 from torch.autograd import Variable
 from torchvision.utils import save_image, make_grid
 from PIL import Image
@@ -28,10 +28,11 @@ from PIL import Image
 ##########################################################
 # %% META
 ##########################################################
+
 # datadir = '/content/drive/My Drive/Colab Notebooks/Thesis/Datasets/' # colab
 datadir = '/mnt/Linux_Storage/'
 outdir = '../outputs/'
-save = False
+save = True
 
 ### META of dataset
 device = torch.device('cpu' if not cuda.is_available() else 'cuda')
@@ -39,11 +40,11 @@ print(f'\tTrain on: {device}\t')
 
 ### META of training
 input_size = 64  # the input size of the image
-batch_size = 256  # Change to fit hardware
+batch_size = 128  # Change to fit hardware
 
-EPOCHS = 2
+EPOCHS = 50
 train_loader, valid_loader = get_MNIST_dataloader(datadir, batch_size)
-model_name = f'Vanilla_VAE_MNIST_3d'  # {datetime.datetime.now().strftime("%Y-%m-%d-%H:%M")}'
+model_name = f'VaDE_MNIST_3d'  # {datetime.datetime.now().strftime("%Y-%m-%d-%H:%M")}'
 save_model_path = None
 if save:
     save_model_path = outdir + f'{model_name}/' if save else ''
@@ -51,21 +52,40 @@ if save:
     if not os.path.isdir(save_model_path):
         os.mkdir(save_model_path)
 
-'''
-trainiter = iter(train_loader)
-features, labels = next(trainiter)
-_,_ = imshow_tensor(features[0])
-'''
 
+# trainiter = iter(train_loader)
+# features, labels = next(trainiter)
+# _,_ = imshow_tensor(features[0])
 ##########################################################
 # %% Build custom VAE Model
 ##########################################################
-model = VAE(zdim=3, input_channels=1).to(device)
+model = VaDE(zdim=3, ydim=10, input_channels=1).to(device)
+# model = VAE(zdim=3, input_channels=1).to(device)
 
 optimizer = optim.Adam(model.parameters(), lr=0.0005, betas=(0.9, 0.999))
 
-model, history = train_VAE_model(EPOCHS, model, optimizer, train_loader, valid_loader, save_model_path, device)
+# model, history = train_VAE_model(EPOCHS, model, optimizer, train_loader, valid_loader, save_model_path, device)
+model, history = train_vaDE_model(EPOCHS, model, optimizer, train_loader, valid_loader, save_model_path, device)
 
+# %%
+# fig = plot_singleVAE_result(history, save_path=save_model_path)
 fig = plot_train_result_GMM(history, save_path=save_model_path)
 fig.show()
 plt.show()
+
+##########################################################
+# %% 3D plot
+##########################################################
+# potentially load the model
+model.load_state_dict(torch.load(save_model_path + 'model.pth'))
+
+figplotly = meta_MNIST(model, valid_loader, device=device)
+
+html_save = f'{save_model_path}Representation.html'
+plotly.offline.plot(figplotly, filename=html_save, auto_open=True)
+
+##########################################################
+# %% Quantatative evaluation
+##########################################################
+'''
+'''
