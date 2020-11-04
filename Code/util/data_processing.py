@@ -366,7 +366,10 @@ def imshow_tensor(tensor_img, ax=None):
         fig, ax = plt.subplots()
     # Set the color channel as the third dimension
     image = tensor_img.numpy().transpose((1, 2, 0))
-    ax.imshow(image[:, :, 0:3])
+    if image.shape[2] == 1:
+        ax.imshow(image[:, :, 0], cmap='gray')
+    else:
+        ax.imshow(image[:, :, 0:3])
     inSize = image.shape[0]
     plt.title(f'Single_cell image resized to ({inSize}x{inSize})')
     # plt.axis('off')

@@ -12,7 +12,6 @@ Main File to sequentially :
 - Train a Vanilla VAE or SC VAE model with a given set of hyperparameters
 - Save and plot the learnt latent representation
 """
-from quantitative_metrics.performance_metrics_single import compute_perf_metrics
 
 """
 https://github.com/mori97/VaDE
@@ -44,6 +43,7 @@ from util.helpers import plot_train_result, save_checkpoint, load_checkpoint, sa
 from torch.autograd import Variable
 from torchvision.utils import save_image, make_grid
 from PIL import Image
+from quantitative_metrics.performance_metrics_single import compute_perf_metrics
 
 ##########################################################
 # %% META
@@ -80,12 +80,12 @@ if save:
     # if the dir dsnt exist
     if not os.path.isdir(save_model_path):
         os.mkdir(save_model_path)
-"""
+
 ### Qualitative inspection of one data example
 trainiter = iter(train_loader)
 features, labels = next(trainiter)
 _,_ = imshow_tensor(features[0])
-"""
+""""""
 
 ##########################################################
 # %% Build custom VAE Model

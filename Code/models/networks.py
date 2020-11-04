@@ -213,7 +213,7 @@ class VAE(nn.Module):
             Conv(base_enc * 8, base_enc * 16, 4, stride=2, padding=1),  # 2x2
         )
         self.linear_enc = nn.Sequential(
-            nn.Linear(2 * 2 * base_enc * 16, 1024),  # 2048 -> 1024
+            nn.Linear(pow(2, self.input_channels - 1) * base_enc * 16, 1024),  # 2048 -> 1024
             nn.BatchNorm1d(1024),
             nn.ReLU(),
             nn.Linear(1024, 256),
@@ -231,8 +231,8 @@ class VAE(nn.Module):
             nn.Linear(hidden_dim, 1024),
             nn.BatchNorm1d(1024),
             nn.ReLU(),
-            nn.Linear(1024, 2 * 2 * base_dec * 16),
-            nn.BatchNorm1d(2 * 2 * base_dec * 16),
+            nn.Linear(1024, pow(2, self.input_channels - 1) * base_dec * 16),
+            nn.BatchNorm1d(pow(2, self.input_channels - 1) * base_dec * 16),
             nn.ReLU()
         )
 
@@ -242,7 +242,7 @@ class VAE(nn.Module):
             ConvUpsampling(base_dec * 4, base_dec * 2, 4, stride=2, padding=1),  # 16
             ConvUpsampling(base_dec * 2, base_dec, 4, stride=2, padding=1),  # 32
             nn.Upsample(scale_factor=4, mode='bilinear', align_corners=True),
-            nn.Conv2d(base_dec, 3, 4, 2, 1),  # 192
+            nn.Conv2d(base_dec, self.input_channels, 4, 2, 1),  # 192
         )
 
         self.stabilize_exp = nn.Hardtanh(min_val=-6., max_val=2.)  # linear between min and max
@@ -287,7 +287,7 @@ class VAE(nn.Module):
         batch_size = z.size(0)
         z = z.view((batch_size, -1))
         x = self.linear_dec(z)
-        x = x.view((batch_size, self.base_dec * 16, 2, 2))
+        x = x.view((batch_size, self.base_dec * 16, 2 ** ((self.input_channels - 1) // 2), 2 ** ((self.input_channels - 1) // 2)))
         x_recon = self.conv_dec(x)
 
         return x_recon

@@ -798,6 +798,7 @@ def train(epoch, model, optimizer, train_loader, device='cpu'):
 
         # calculate scalar loss
         loss_recon = criterion_recon(x_recon, data)
+        zzz  = criterion_recon(data, x_recon)
         loss_recon *= data.size(1) * data.size(2) * data.size(3)
         loss_recon.div(data.size(0))
 
