@@ -827,7 +827,7 @@ def train(epoch, model, optimizer, train_loader, device='cpu'):
     return np.mean(global_VAE_iter), np.mean(kl_loss_iter), np.mean(recon_loss_iter)
 
 
-def test(epoch, model, optimizer, test_loader, device='cpu'):
+def test(epoch, model, test_loader, device='cpu'):
     """
     Evaluate a VAE model on validation dataloader with standard ELBO objective function
 

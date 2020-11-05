@@ -93,36 +93,36 @@ def compute_perf_metrics(data_source, params_preferences):
     ##############################################
     ########## Unsupervised Metrics ##############
     ##############################################
-
-    if params_preferences['save_unsupervised_metric'] != False:
-        save_path = params_preferences['save_unsupervised_metric']
-        if save_path == 'no_save':
-            save_path = None
-        else:
-            save_path = f"{params_preferences['global_saving_path']}unsup_metric"
-            try:
-                os.mkdir(save_path)
-            except FileExistsError as e:
-                pass
-
-        print('#######################################')
-        print('###### Computing unsupervised score')
-        print('#######################################')
-
-        trust_AUC, cont_AUC, lcmc_AUC,light_df = unsup_metric_and_local_Q(MetaData_df,low_dim_names=params_preferences['low_dim_names'],
-                    raw_data_included=False, feature_size=params_preferences['feature_size'],
-                    path_to_raw_data=params_preferences['path_to_raw_data'], saving_path=save_path,
-                    kt=params_preferences['kt'], ks=params_preferences['ks'],
-                    only_local_Q=params_preferences['only_local_Q'])
-
-        #MetaData_df = light_df
-
-        save_representation_plot(light_df,save_path,low_dim_names=params_preferences['low_dim_names'])
-
-        print(f'Trustworthiness AUC : {trust_AUC}')
-        print(f'Continuity AUC : {cont_AUC}')
-        print(f'LCMC AUC : {lcmc_AUC}')
-
+    #
+    # if params_preferences['save_unsupervised_metric'] != False:
+    #     save_path = params_preferences['save_unsupervised_metric']
+    #     if save_path == 'no_save':
+    #         save_path = None
+    #     else:
+    #         save_path = f"{params_preferences['global_saving_path']}unsup_metric"
+    #         try:
+    #             os.mkdir(save_path)
+    #         except FileExistsError as e:
+    #             pass
+    #
+    #     print('#######################################')
+    #     print('###### Computing unsupervised score')
+    #     print('#######################################')
+    #
+    #     trust_AUC, cont_AUC, lcmc_AUC,light_df = unsup_metric_and_local_Q(MetaData_df,low_dim_names=params_preferences['low_dim_names'],
+    #                 raw_data_included=False, feature_size=params_preferences['feature_size'],
+    #                 path_to_raw_data=params_preferences['path_to_raw_data'], saving_path=save_path,
+    #                 kt=params_preferences['kt'], ks=params_preferences['ks'],
+    #                 only_local_Q=params_preferences['only_local_Q'])
+    #
+    #     #MetaData_df = light_df
+    #
+    #     save_representation_plot(light_df,save_path,low_dim_names=params_preferences['low_dim_names'])
+    #
+    #     print(f'Trustworthiness AUC : {trust_AUC}')
+    #     print(f'Continuity AUC : {cont_AUC}')
+    #     print(f'LCMC AUC : {lcmc_AUC}')
+    #
 
     ##############################################
     ########## Mutual Information ##############

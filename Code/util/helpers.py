@@ -151,16 +151,15 @@ def metadata_latent_space_single(model, infer_dataloader, device, GT_csv_path, s
 
     ##### Store latent code in a temporary dataframe #####
     z_points = np.concatenate(z_list,axis=0) # datasize x 3
-    true_label = np.concatenate(labels_list,axis=0)
+    # true_label = np.concatenate(labels_list,axis=0)
 
-    temp_matching_df = pd.DataFrame(columns=['VAE_x_coord','VAE_y_coord','VAE_z_coord','Unique_ID'])
-    temp_matching_df.VAE_x_coord = z_points[:,0]
-    temp_matching_df.VAE_y_coord = z_points[:,1]
-    if model.zdim == 3 :
-        temp_matching_df.VAE_z_coord = z_points[:,2]
+    if z_points.shape[1] == 3:
+        columns = ['VAE_x_coord', 'VAE_y_coord', 'VAE_z_coord']
     else:
-        temp_matching_df.VAE_z_coord = 0
-    temp_matching_df.Unique_ID = unique_ids
+        columns = [f'z{n}' for n in range(model.zdim)]
+
+    temp_matching_df = pd.DataFrame(z_points, columns=columns)
+    temp_matching_df['Unique_ID']  = unique_ids
     temp_matching_df = temp_matching_df.sort_values(by=['Unique_ID'])
 
 
@@ -179,10 +178,10 @@ def metadata_latent_space_single(model, infer_dataloader, device, GT_csv_path, s
 
     #### Save Final CSV file #####
     if save_csv:
-        MetaData_csv.to_csv(csv_path,index=False)
+        MetaData_csv.to_csv(csv_path, index=False)
         print(f'Final CSV saved to : {csv_path}')
 
-    return MetaData_csv
+    return MetaData_csv.dropna().reindex()
 
 def metadata_latent_space(VAE1, VAE2, infer_dataloader, device, GT_csv_path, save_csv=False, with_rawdata=False,
                           csv_path='no_name_specified.csv'):

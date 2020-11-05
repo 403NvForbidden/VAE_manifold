@@ -83,9 +83,26 @@ figplotly = meta_MNIST(model, valid_loader, device=device)
 
 html_save = f'{save_model_path}Representation.html'
 plotly.offline.plot(figplotly, filename=html_save, auto_open=True)
-
-##########################################################
-# %% Quantatative evaluation
-##########################################################
 '''
+##########################################################
+# %% Qualitative Evaluation
+##########################################################
+cluster = 2
+# zzz = torch.randn(3, 100, 1, 1)
+std =model.log_sigma2_c * 0.1 + model.mu_c
+sample = Variable(std.permute(1, 0).unsqueeze(-1).unsqueeze(-1), requires_grad=False).to(device)
+
+recon = model.decoder(sample)
+
+img_grid = make_grid(torch.sigmoid(recon[:, :3, :, :]),
+                             nrow=4, padding=12, pad_value=1)
+plt.figure(figsize=(25, 16))
+plt.imshow(img_grid.detach().cpu().permute(1, 2, 0))
+plt.axis('off')
+plt.title(f'Random generated samples')
+plt.show()
+##########################################################
+# %% Quantitative evaluation
+##########################################################
+
 '''

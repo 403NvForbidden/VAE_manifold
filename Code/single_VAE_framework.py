@@ -80,17 +80,17 @@ if save:
     # if the dir dsnt exist
     if not os.path.isdir(save_model_path):
         os.mkdir(save_model_path)
-
+'''
 ### Qualitative inspection of one data example
 trainiter = iter(train_loader)
 features, labels = next(trainiter)
 _, _ = imshow_tensor(features[0])
-
+'''
 ##########################################################
 # %% Build custom VAE Model
 ##########################################################
-# model = VAE(zdim=3, input_channels=3).to(device)
-model = VAE(zdim=3, input_channels=1).to(device)
+model = VAE(zdim=3, input_channels=3).to(device)
+
 '''
 optimizer = optim.Adam(model.parameters(), lr=0.0005, betas=(0.9, 0.999))
 
@@ -115,7 +115,7 @@ infer_data, infer_dataloader = get_inference_dataset(dataset_path, batch_size, i
 metadata_csv = metadata_latent_space_single(model, infer_dataloader=infer_dataloader, device=device,
                                             GT_csv_path=path_to_GT, save_csv=True, with_rawdata=False,
                                             csv_path=save_model_path + 'metadata_csv')
-
+'''
 metadata_csv.dropna().reindex().to_csv(save_model_path + 'metadata_csv.csv', index=False)
 # %%
 # load existing local csv fiels
@@ -128,6 +128,7 @@ figplotly = plot_from_csv(metadata_csv, dim=3, num_class=3)  # column='Sub_popul
 
 html_save = f'{save_model_path}_Representation.html'
 plotly.offline.plot(figplotly, filename=html_save, auto_open=True)
+
 
 # %% Qualitative test
 params_preferences = {
@@ -156,3 +157,4 @@ params_preferences = {
     'num_iteration': 8,
 }
 compute_perf_metrics(metadata_csv, params_preferences)
+'''
