@@ -10,11 +10,55 @@ File containing custom pytorch module, to be used as building blocks of VAE mode
 c.f networks.py for the models.
 '''
 
-
 import torch
 from torch import nn
 from torch.nn import functional as F
 
+
+###########################
+###### standard VAE
+###########################
+class Decoder(nn.Module):
+    '''Downsampling block'''
+
+    def __init__(self, zdim: int = 3, input_channel=3, base_dec: int = 32, stride: int = 2, padding: int = 1):
+        super(Decoder, self).__init__()
+
+        ### p(z|y)
+        # self.y_mu = nn.Linear(ydim, 2*zdim)
+        # self.y_var = nn.Linear(ydim, zdim)
+        self.base_dec = base_dec
+        self.input_channels = input_channel
+
+        self.linear_dec = nn.Sequential(
+            Linear_block(zdim, 1024),
+            Linear_block(1024, pow(2, input_channel - 1) * base_dec * 16),
+        )
+
+        self.conv_dec = nn.Sequential(
+            ConvUpsampling(base_dec * 16, base_dec * 8, 4, stride=stride, padding=padding),  # 4
+            ConvUpsampling(base_dec * 8, base_dec * 4, 4, stride=stride, padding=padding),  # 8
+            ConvUpsampling(base_dec * 4, base_dec * 2, 4, stride=stride, padding=padding),  # 16
+            ConvUpsampling(base_dec * 2, base_dec, 4, stride=stride, padding=padding),  # 32
+            # for 4 channel
+            # ConvUpsampling(base_dec, base_dec, 4, stride=2, padding=1),  # 96
+
+            nn.Upsample(scale_factor=4, mode='bilinear', align_corners=True),
+            nn.Conv2d(in_channels=base_dec, out_channels=input_channel, kernel_size=4, stride=2, padding=1),  # 192
+        )
+
+    def forward(self, z):
+        batch_size = z.size(0)
+        ### p(z|y) cluster to dim
+        # y_mu = self.y_mu(y)
+        # y_var = F.softplus(self.y_var(y))
+
+        ### p(x|z) reconstruction
+        z = z.view((batch_size, -1))
+        x = self.linear_dec(z)
+        x = x.view((batch_size, self.base_dec * 16, 2 ** ((self.input_channels - 1) // 2), 2 ** ((self.input_channels - 1) // 2)))
+        x_recon = self.conv_dec(x)
+        return x_recon
 
 ###########################
 ###### Standard CNN
@@ -22,8 +66,9 @@ from torch.nn import functional as F
 
 class Conv(nn.Module):
     '''Downsampling block'''
+
     def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0):
-        super(Conv,self).__init__()
+        super(Conv, self).__init__()
 
         self.conv = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding),
@@ -34,10 +79,12 @@ class Conv(nn.Module):
     def forward(self, x):
         return self.conv(x)
 
+
 class ConvTranspose(nn.Module):
     '''Upsampling block'''
+
     def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0):
-        super(ConvTranspose,self).__init__()
+        super(ConvTranspose, self).__init__()
 
         self.conv = nn.Sequential(
             nn.ConvTranspose2d(in_channels, out_channels, kernel_size, stride, padding),
@@ -52,8 +99,9 @@ class ConvTranspose(nn.Module):
 class ConvUpsampling(nn.Module):
     '''Upsampling block, that interpolate instead of using ConvTranspose2d
     in order to mitigate the checkboard pattern effect'''
+
     def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0):
-        super(ConvUpsampling,self).__init__()
+        super(ConvUpsampling, self).__init__()
 
         self.scale_factor = kernel_size
         self.conv = nn.Sequential(
@@ -67,6 +115,22 @@ class ConvUpsampling(nn.Module):
         return self.conv(x)
 
 
+###########################
+###### Standard Linear
+###########################
+class Linear_block(nn.Module):
+    def __init__(self, in_channels: int, out_channels: int, dropRate: int = 0.):
+        super(Linear_block, self).__init__()
+
+        self.liner = nn.Sequential(
+            nn.Linear(in_channels, out_channels),
+            nn.BatchNorm1d(out_channels),
+            nn.ReLU(),
+            nn.Dropout(dropRate)
+        )
+
+    def forward(self, x):
+        return self.liner(x)
 
 
 ###########################
@@ -80,8 +144,10 @@ class Skip_Conv_down(nn.Module):
     The downsampling of the short cut is an analytical interpolation, not learnable.
     Reduce the resolution by half
     '''
-    def __init__(self, in_channels, out_channels, kernel_size=4, stride=2, padding=1, factor=0.5, mode='trilinear',LastLayer=False):
-        super(Skip_Conv_down,self).__init__()
+
+    def __init__(self, in_channels, out_channels, kernel_size=4, stride=2, padding=1, factor=0.5, mode='trilinear',
+                 LastLayer=False):
+        super(Skip_Conv_down, self).__init__()
 
         self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding)
         self.BN = nn.BatchNorm2d(out_channels)
@@ -94,22 +160,25 @@ class Skip_Conv_down(nn.Module):
         self.LastLayer = LastLayer
 
     def forward(self, x):
-        #Go to volumetric data (5D) to be able to interpolate over channels
-        x_skip_down = F.interpolate(x.unsqueeze(dim=0), scale_factor=(self.ouc/self.inc,self.down_factor,self.down_factor),mode=self.mode)
-        x=self.conv(x)
-        if not(self.LastLayer) :
+        # Go to volumetric data (5D) to be able to interpolate over channels
+        x_skip_down = F.interpolate(x.unsqueeze(dim=0),
+                                    scale_factor=(self.ouc / self.inc, self.down_factor, self.down_factor),
+                                    mode=self.mode)
+        x = self.conv(x)
+        if not (self.LastLayer):
             x = self.BN(x)
             return self.activation(x + x_skip_down.squeeze(dim=0))
         else:
-            return x+x_skip_down.squeeze(dim=0)
+            return x + x_skip_down.squeeze(dim=0)
 
 
 class Skip_DeConv_up(nn.Module):
     '''
     Increase the resolution by a factor two
     '''
-    def __init__(self, in_channels, out_channels,LastLayer=False):
-        super(Skip_DeConv_up,self).__init__()
+
+    def __init__(self, in_channels, out_channels, LastLayer=False):
+        super(Skip_DeConv_up, self).__init__()
 
         self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=4, stride=2, padding=1)
         self.BN = nn.BatchNorm2d(out_channels)
@@ -119,15 +188,14 @@ class Skip_DeConv_up(nn.Module):
         self.ouc = out_channels
 
     def forward(self, x):
-        #Go to volumetric data (5D) to be able to interpolate over channels
-        x_skip_up = F.interpolate(x.unsqueeze(dim=0), scale_factor=(self.ouc/self.inc,2,2),mode='trilinear')
-        x = self.conv(F.interpolate(x,scale_factor=4,mode='bilinear'))
-        if not(self.LastLayer) :
-            x = self.BN(x) #Replace a transpose conv
+        # Go to volumetric data (5D) to be able to interpolate over channels
+        x_skip_up = F.interpolate(x.unsqueeze(dim=0), scale_factor=(self.ouc / self.inc, 2, 2), mode='trilinear')
+        x = self.conv(F.interpolate(x, scale_factor=4, mode='bilinear'))
+        if not (self.LastLayer):
+            x = self.BN(x)  # Replace a transpose conv
             return self.activation(x + x_skip_up.squeeze(dim=0))
-        else :
+        else:
             return x + x_skip_up.squeeze(0)
-
 
 
 class ResBlock_identity(nn.Module):
@@ -136,8 +204,9 @@ class ResBlock_identity(nn.Module):
     - Shortcut identity mapping
 
     Both paths are added at the end. Keep same dimensionality'''
-    def __init__(self, channels, kernel_size=(3,3)):
-        super(ConvUpsampling,self).__init__()
+
+    def __init__(self, channels, kernel_size=(3, 3)):
+        super(ConvUpsampling, self).__init__()
 
         self.conv1 = nn.Sequential(
             nn.Conv2d(channels, channels, kernel_size, padding=1),
@@ -151,12 +220,12 @@ class ResBlock_identity(nn.Module):
         self.activation = nn.LeakyReLU()
 
     def forward(self, x):
-        #shortcut path
+        # shortcut path
         identity = x
-        #main path
+        # main path
         x = self.conv1(x)
         x = self.conv2(x)
-        #add
+        # add
         x += idendity
         out = self.activation(x)
 
@@ -169,31 +238,32 @@ class ResBlock_Conv(nn.Module):
     - Shortcut with one conv2D to match dimension
 
     Both paths are added at the end. Keep same dimensionality'''
+
     def __init__(self, in_channels, out_channels, kernel_size):
-        super(ConvUpsampling,self).__init__()
+        super(ConvUpsampling, self).__init__()
 
         self.conv1 = nn.Sequential(
-            nn.Conv2d(in_channels, out_channels, kernel_size, stride=2, padding=1), #Resolution / 2
+            nn.Conv2d(in_channels, out_channels, kernel_size, stride=2, padding=1),  # Resolution / 2
             nn.BatchNorm2d(out_channels),
             nn.LeakyReLU()
         )
         self.conv2 = nn.Sequential(
-            nn.Conv2d(out_channels, out_channels, kernel_size, padding=1), # Keep same dim
+            nn.Conv2d(out_channels, out_channels, kernel_size, padding=1),  # Keep same dim
             nn.BatchNorm2d(out_channels),
         )
         self.convShortcut = nn.Sequential(
-            nn.Conv2d(in_channels, out_channels, kernel_size, stride=2, padding=1), #Resolution / 2
+            nn.Conv2d(in_channels, out_channels, kernel_size, stride=2, padding=1),  # Resolution / 2
             nn.BatchNorm2d(out_channels)
         )
         self.activation = nn.LeakyReLU()
 
     def forward(self, x):
-        #shortcut path
+        # shortcut path
         shortcut = self.convShortcut(x)
-        #main path
+        # main path
         x = self.conv1(x)
         x = self.conv2(x)
-        #add
+        # add
         x += shortcut
         out = self.activation(x)
 

@@ -183,8 +183,6 @@ def reduce_logmeanexp_nodiag(x, axis=None):
 #####################################
 ##### Train Critic and Baseline #####
 #####################################
-
-
 def train_MINE(MINE,path_to_csv,low_dim_names,epochs,infer_dataloader,bound_type='infoNCE',baseline=None,alpha_logit=0.,train_GPU=True):
     '''
     Need a CSV that link every input (single cell images) to its latent code
@@ -317,7 +315,7 @@ def compute_MI(data_csv,low_dim_names=['x_coord','y_coord','z_coord'],path_to_ra
     epochs = epochs
     _, infer_dataloader = get_inference_dataset(path_to_raw_data,batch_size,input_size,shuffle=True,droplast=True)
 
-    MINEnet = MINE(input_size*input_size*3,zdim=3) #CHANGE DEPENDING ON DATASET ###########
+    MINEnet = MINE(input_size*input_size*3,zdim=len(low_dim_names)) #CHANGE DEPENDING ON DATASET ###########
     MINEnet.cuda()
 
     baseline=None
@@ -328,7 +326,7 @@ def compute_MI(data_csv,low_dim_names=['x_coord','y_coord','z_coord'],path_to_ra
     MI_history = train_MINE(MINEnet,data_csv,low_dim_names,epochs,infer_dataloader,bound_type,baseline,alpha_logit,train_GPU=True)
 
     if save_path != None:
-        MI_pkl_path = save_path+f'/MI_training_history.pkl'
+        MI_pkl_path = save_path+f'/{len(low_dim_names)}_MI_training_history.pkl'
         with open(MI_pkl_path, 'wb') as f:
             pkl.dump(MI_history, f, protocol=pkl.HIGHEST_PROTOCOL)
 
@@ -340,7 +338,7 @@ def compute_MI(data_csv,low_dim_names=['x_coord','y_coord','z_coord'],path_to_ra
     plt.title(f"Mutual information estimation with bound '{bound_type}'")
 
     if save_path != None:
-        plt.savefig(save_path+f'/MI_score_plot.png')
+        plt.savefig(save_path+f'/{len(low_dim_names)}_MI_score_plot.png')
     plt.show()
 
     return MI_Score
