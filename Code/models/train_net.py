@@ -907,7 +907,7 @@ def train_VAE_model(epochs, model, optimizer, train_loader, valid_loader, saving
 
     for epoch in range(model.epochs + 1, model.epochs + epochs + 1):
         global_VAE_loss, kl_loss, recon_loss = train(epoch, model, optimizer, train_loader, device)
-        global_VAE_loss_val, kl_loss_val, recon_loss_val = test(epoch, model, optimizer, valid_loader, device)
+        global_VAE_loss_val, kl_loss_val, recon_loss_val = test(epoch, model, valid_loader, device)
 
         # early stopping takes the validation loss to check if it has decereased,
         # if so, model is saved, if not for 'patience' time in a row, the training loop is broken

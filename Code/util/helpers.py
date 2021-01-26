@@ -43,7 +43,7 @@ from torchvision.utils import save_image, make_grid
 def meta_MNIST(model, dataloader, device='cpu'):
     z_list, labels_list = [], []
     for i, (data, labels) in enumerate(dataloader):
-        #Extract unique cell id from file_names
+        # Extract unique cell id from file_names
         data = data.to(device)
         model.eval()
         with torch.no_grad():
@@ -57,9 +57,9 @@ def meta_MNIST(model, dataloader, device='cpu'):
             z_list.append((z.data).cpu().numpy())
             labels_list.append(labels.numpy())
 
-        print(f'In progress...{i*len(data)}/{len(dataloader.dataset)}', end='\r')
+        print(f'In progress...{i * len(data)}/{len(dataloader.dataset)}', end='\r')
 
-    z_points = np.concatenate(z_list, axis=0) # datasize
+    z_points = np.concatenate(z_list, axis=0)  # datasize
     true_label = np.concatenate(labels_list, axis=0)
     df = pd.DataFrame(z_points, columns=['x', 'y', 'z'])
     df["GT"] = pd.Series(true_label)
@@ -84,8 +84,8 @@ def meta_MNIST(model, dataloader, device='cpu'):
     return fig_3d_1
 
 
-
-def metadata_latent_space_single(model, infer_dataloader, device, GT_csv_path, save_csv=False, with_rawdata=False, csv_path='no_name_specified.csv'):
+def metadata_latent_space_single(model, infer_dataloader, device, GT_csv_path, save_csv=False, with_rawdata=False,
+                                 csv_path='no_name_specified.csv'):
     '''
     Once a VAE model is trained, take its predictions (3D latent code) and store it in a csv
     file alongside the ground truth information. Useful for plots and downstream analyses.
@@ -108,7 +108,7 @@ def metadata_latent_space_single(model, infer_dataloader, device, GT_csv_path, s
     labels_list = []
     z_list = []
     id_list = []
-    list_of_tensors = [] #Store raw_data for performance metrics
+    list_of_tensors = []  # Store raw_data for performance metrics
 
     if model.zdim > 3:
         warnings.warn(f'Latent space is >3D ({model.zdim} dimensional), no visualization is provided')
@@ -117,13 +117,13 @@ def metadata_latent_space_single(model, infer_dataloader, device, GT_csv_path, s
     #################################################
 
     for i, (data, labels, file_names) in enumerate(infer_dataloader):
-        #Extract unique cell id from file_names
+        # Extract unique cell id from file_names
         id_list.append([file_name for file_name in file_names])
         data = data.to(device)
         model.eval()
         with torch.no_grad():
             if with_rawdata:
-                raw_data = data.view(data.size(0),-1) #B x HxWxC
+                raw_data = data.view(data.size(0), -1)  # B x HxWxC
                 list_of_tensors.append(raw_data.data.cpu().numpy())
 
             data = Variable(data, requires_grad=False)
@@ -132,7 +132,7 @@ def metadata_latent_space_single(model, infer_dataloader, device, GT_csv_path, s
             z_list.append((z.data).cpu().numpy())
             labels_list.append(labels.numpy())
 
-        print(f'In progress...{i*len(data)}/{len(infer_dataloader.dataset)}',end='\r')
+        print(f'In progress...{i * len(data)}/{len(infer_dataloader.dataset)}', end='\r')
 
     ###### Matching samples to metadata info #####
     #################################################
@@ -141,16 +141,16 @@ def metadata_latent_space_single(model, infer_dataloader, device, GT_csv_path, s
 
     ###### Store raw data in a separate data frame #####
     if with_rawdata:
-        raw_data = np.concatenate(list_of_tensors,axis=0)
-        rawdata_frame = pd.DataFrame(data=raw_data[0:,0:],
-                                index=[i for i in range(raw_data.shape[0])],
-                               columns=['feature'+str(i) for i in range(raw_data.shape[1])])
-        rawdata_frame['Unique_ID']=np.nan
-        rawdata_frame.Unique_ID=unique_ids
+        raw_data = np.concatenate(list_of_tensors, axis=0)
+        rawdata_frame = pd.DataFrame(data=raw_data[0:, 0:],
+                                     index=[i for i in range(raw_data.shape[0])],
+                                     columns=['feature' + str(i) for i in range(raw_data.shape[1])])
+        rawdata_frame['Unique_ID'] = np.nan
+        rawdata_frame.Unique_ID = unique_ids
         rawdata_frame = rawdata_frame.sort_values(by=['Unique_ID'])
 
     ##### Store latent code in a temporary dataframe #####
-    z_points = np.concatenate(z_list,axis=0) # datasize x 3
+    z_points = np.concatenate(z_list, axis=0)  # datasize x 3
     # true_label = np.concatenate(labels_list,axis=0)
 
     if z_points.shape[1] == 3:
@@ -159,9 +159,8 @@ def metadata_latent_space_single(model, infer_dataloader, device, GT_csv_path, s
         columns = [f'z{n}' for n in range(model.zdim)]
 
     temp_matching_df = pd.DataFrame(z_points, columns=columns)
-    temp_matching_df['Unique_ID']  = unique_ids
+    temp_matching_df['Unique_ID'] = unique_ids
     temp_matching_df = temp_matching_df.sort_values(by=['Unique_ID'])
-
 
     ##### Load Ground Truth information about the dataset #####
     MetaData_csv = pd.read_csv(GT_csv_path)
@@ -173,7 +172,8 @@ def metadata_latent_space_single(model, infer_dataloader, device, GT_csv_path, s
 
     ##### Match raw data information with ground truth info #####
     if with_rawdata:
-        assert np.all(rawdata_frame.Unique_ID.values == MetaData_csv.Unique_ID.values), "Inference dataset doesn't match with csv metadata"
+        assert np.all(
+            rawdata_frame.Unique_ID.values == MetaData_csv.Unique_ID.values), "Inference dataset doesn't match with csv metadata"
         MetaData_csv = MetaData_csv.join(rawdata_frame.set_index('Unique_ID'), on='Unique_ID')
 
     #### Save Final CSV file #####
@@ -182,6 +182,7 @@ def metadata_latent_space_single(model, infer_dataloader, device, GT_csv_path, s
         print(f'Final CSV saved to : {csv_path}')
 
     return MetaData_csv.dropna().reindex()
+
 
 def metadata_latent_space(VAE1, VAE2, infer_dataloader, device, GT_csv_path, save_csv=False, with_rawdata=False,
                           csv_path='no_name_specified.csv'):
@@ -292,6 +293,40 @@ def metadata_latent_space(VAE1, VAE2, infer_dataloader, device, GT_csv_path, sav
 ##############################################
 ######## Visualization
 ##############################################
+def single_reconstruciton(loader, model, save_path, device, num_img=12):
+    data, label, _ = next(iter(loader))
+    data = Variable(data[:num_img], requires_grad=False).to(device)
+
+    ### reconstruction
+    label = Variable(label.float()).to(device)
+    x_recon_1, _, _, z_1 = model(data)
+
+    img_grid = make_grid(
+        torch.cat(
+            (data[:, :3, :, :], torch.sigmoid(x_recon_1[:, :3, :, :]))),
+        nrow=num_img, padding=12,
+        pad_value=1)
+
+    pre, ext = os.path.splitext(save_path)
+
+    plt.figure(figsize=(10, 5))
+    plt.imshow(img_grid.detach().cpu().permute(1, 2, 0))
+    plt.axis('off')
+    plt.title(f'Example data and its reconstruction')
+    plt.savefig(pre + 'reconstructions.png')
+
+    samples_1 = Variable(torch.randn(num_img, model.zdim, 1, 1), requires_grad=False).to(device)
+    recon_1 = model.decode(samples_1)
+    img_grid = make_grid(torch.sigmoid(recon_1[:, :3, :, :]),
+                         nrow=num_img, padding=12, pad_value=1)
+
+    plt.figure(figsize=(10, 5))
+    plt.imshow(img_grid.detach().cpu().permute(1, 2, 0))
+    plt.axis('off')
+    plt.title(f'Random generated samples')
+    plt.savefig(pre + 'generatedSamples.png')
+
+
 def save_reconstruction(loader, VAE_1, VAE_2, save_path, device, num_img=8, double_embed=False, gen=False):
     """ Show (and save) reconstruction produced by a trained VAE model of 4 random
     samples, alongside 8 newly generated samples, sampled from the prior dataset3_class_distribution
@@ -381,7 +416,6 @@ def conditional_gen(loader, VAE_1, VAE_2, save_path, device, num_img=8):
     # designated label
     label = torch.tensor([6, 6, 6, 6, 6, 6, 6])
 
-
     metadata_csv = pd.read_csv("../outputs/2stage_cVAE_2020-10-08-20:38_30/_metedata.csv")
     for i in range(num_img):
         metadata_csv = metadata_csv.append(pd.Series(), ignore_index=True)
@@ -399,8 +433,6 @@ def conditional_gen(loader, VAE_1, VAE_2, save_path, device, num_img=8):
     # label = Variable(y_onehot.float()).to(device)
     # samples_1 = torch.cat((samples_1, label), axis=1)
     # samples_2 = torch.cat((samples_2, label), axis=1)
-
-
 
     figplotly = plot_from_csv(metadata_csv, dim=3, num_class=8)
 
@@ -451,7 +483,7 @@ def plot_from_csv(path_to_csv, low_dim_names=['VAE_x_coord', 'VAE_y_coord', 'VAE
         if column == None:
             ##### Fig 1 : Plot each single cell in latent space with GT cluster labels
             traces = []
-            for i in [2, 3, 4]: #range(3,5): # TODO: change it back to original form
+            for i in [2, 3, 4]:  # range(3,5): # TODO: change it back to original form
                 scatter = go.Scatter3d(x=MetaData_csv[MetaData_csv['GT_label'] == i + 1][low_dim_names[0]].values,
                                        y=MetaData_csv[MetaData_csv['GT_label'] == i + 1][low_dim_names[1]].values,
                                        z=MetaData_csv[MetaData_csv['GT_label'] == i + 1][low_dim_names[2]].values,
@@ -645,6 +677,7 @@ def plot_train_result_GMM(history, save_path=None):
 
     return fig
 
+
 def plot_singleVAE_result(history, save_path=None):
     """Display training and validation loss evolution over epochs
 
@@ -692,6 +725,8 @@ def plot_singleVAE_result(history, save_path=None):
         plt.savefig(save_path + 'los_evolution.png')
 
     return fig
+
+
 ############################
 ######## SAVING & STOPPING
 ############################

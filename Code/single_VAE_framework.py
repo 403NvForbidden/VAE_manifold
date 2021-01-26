@@ -39,7 +39,8 @@ from models.infoMAX_VAE import CNN_128_VAE
 from util.data_processing import get_train_val_dataloader, imshow_tensor, get_inference_dataset
 from models.train_net import train_VAE_model, train_2stage_VAE_model, train_vaDE_model
 from util.helpers import plot_train_result, save_checkpoint, load_checkpoint, save_brute, load_brute, plot_from_csv, \
-    metadata_latent_space, save_reconstruction, plot_train_result_GMM, metadata_latent_space_single
+    metadata_latent_space, save_reconstruction, single_reconstruciton, plot_train_result_GMM, \
+    metadata_latent_space_single, plot_singleVAE_result
 from torch.autograd import Variable
 from torchvision.utils import save_image, make_grid
 from PIL import Image
@@ -71,7 +72,7 @@ print(f'\tTrain on: {device}\t')
 input_size = 64  # the input size of the image
 batch_size = 128  # Change to fit hardware
 
-EPOCHS = 80
+EPOCHS = 30
 train_loader, valid_loader = get_train_val_dataloader(dataset_path, input_size, batch_size, test_split=0.1)
 model_name = f'Vanilla_VAE_Selected_Hovarth_3d'  # {datetime.datetime.now().strftime("%Y-%m-%d-%H:%M")}'
 save_model_path = None
@@ -91,8 +92,9 @@ _, _ = imshow_tensor(features[0])
 ##########################################################
 model = VAE(zdim=3, input_channels=3).to(device)
 
-'''
+
 optimizer = optim.Adam(model.parameters(), lr=0.0005, betas=(0.9, 0.999))
+
 
 model, history = train_VAE_model(EPOCHS, model, optimizer, train_loader, valid_loader, save_model_path, device)
 
@@ -100,21 +102,26 @@ model, history = train_VAE_model(EPOCHS, model, optimizer, train_loader, valid_l
 # %% Visualize latent space and save it
 ##########################################################
 # fig = plot_train_result_GMM(history, save_path=save_model_path)
-# fig.show()
-# plt.show()
+fig = plot_singleVAE_result(history, save_path=save_model_path)
+fig.show()
+plt.show()
 
 # SAVE TRAINED MODEL and history
 if save:
     history.to_csv(save_model_path + 'epochs.csv')
-'''
-
+''''''
 # %%
 # Visualize on the WHOLE dataset (train & validation)
 infer_data, infer_dataloader = get_inference_dataset(dataset_path, batch_size, input_size, shuffle=False,
                                                      droplast=False)
+'''
 metadata_csv = metadata_latent_space_single(model, infer_dataloader=infer_dataloader, device=device,
-                                            GT_csv_path=path_to_GT, save_csv=True, with_rawdata=False,
-                                            csv_path=save_model_path + 'metadata_csv')
+                   GT_csv_path=path_to_GT, save_csv=True, with_rawdata=False,
+                   csv_path=save_model_path + 'metadata_csv')
+'''
+
+#### random generation
+single_reconstruciton(infer_dataloader, model, save_model_path, device, num_img=12)
 '''
 metadata_csv.dropna().reindex().to_csv(save_model_path + 'metadata_csv.csv', index=False)
 # %%
