@@ -17,12 +17,14 @@ import math
 from torch import nn
 from torch.nn import functional as F
 from torch.nn.init import xavier_normal_
-from models.nn_modules import Conv, ConvTranspose, ConvUpsampling, Skip_Conv_down, Skip_DeConv_up, Linear_block, Decoder
+from models.nn_modules import Conv, ConvTranspose, ConvUpsampling, Skip_Conv_down, Skip_DeConv_up, Linear_block, \
+    Encoder, Decoder
 import numpy as np
-
 from models.train_net import reparameterize
 from sklearn.mixture import GaussianMixture
+from .model import AbstractModel
 
+# class twoStageVAE():
 
 class VAE2(nn.Module):
     def __init__(self, VAE1_conv_encoder, VAE1_linear_encoder, zdim=3, alpha=1, beta=1, input_channels=3,
@@ -75,36 +77,12 @@ class VAE2(nn.Module):
         ###########################
         ##### Decoding layers #####
         ###########################
-        # 3 -> 64 -> 256 -> 1024 -> 2048 -> 1024*2*2 -> 512*4*4 -> 256*8*8 -> 128*16*16 -> 64*32*32 -> 4*64*64
-        hidden_dim = self.zdim + 7 if conditional else zdim
-        self.linear_dec = nn.Sequential(
-            nn.Linear(hidden_dim, 64),
-            nn.BatchNorm1d(64),
-            nn.ReLU(),
-            nn.Linear(64, 256),
-            nn.BatchNorm1d(256),
-            nn.ReLU(),
-            nn.Linear(256, 1024),
-            nn.BatchNorm1d(1024),
-            nn.ReLU(),
-            nn.Linear(1024, 2 * 2 * base_dec_size * 16),
-            nn.BatchNorm1d(2 * 2 * base_dec_size * 16),
-            nn.ReLU()
-        )
-
-        ### Decoder 2.5
-        self.conv_dec = nn.Sequential(
-            ConvUpsampling(base_dec_size * 16, base_dec_size * 8, 4, stride=2, padding=1),  # 4
-            ConvUpsampling(base_dec_size * 8, base_dec_size * 4, 4, stride=2, padding=1),  # 8
-            ConvUpsampling(base_dec_size * 4, base_dec_size * 2, 4, stride=2, padding=1),  # 16
-            ConvUpsampling(base_dec_size * 2, base_dec_size, 4, stride=2, padding=1),  # 32
-            nn.Upsample(scale_factor=4, mode='bilinear', align_corners=True),
-            nn.Conv2d(base_dec_size, 3, 4, 2, 1)
-        )
-
+        # 3 -> 64 -> 256 -> 1024 -> 2048 -> 1024*2*2 -> 512*4*4 -> 256*8*8 -> 128*16*16 -> 64*32*32 -> 4*64*64a
+        self.decoder = Decoder(zdim=self.zdim, input_channel=3)
         ### to constrain logvar in a reasonable range
         self.stabilize_exp = nn.Hardtanh(min_val=-6., max_val=2.)  # linear between min and max
 
+    def initialization(self):
         ### weight initialization
         for m in self.modules():
             if isinstance(m, nn.Conv2d) or isinstance(m, nn.ConvTranspose2d):
@@ -118,21 +96,9 @@ class VAE2(nn.Module):
                 xavier_normal_(m.weight, gain=math.sqrt(2. / (1 + 0.01)))
                 m.bias.data.fill_(0.01)
 
-        ###########################
-        ##### Conditional Embedding
-        ###########################
-        self.embed_class = nn.Linear(7, 64 * 64)
-        self.embed_data = nn.Conv2d(3, 3, kernel_size=1)
-
-    def reparameterize(self, mu, logvar):
-        if self.training:  # if prediction, give the mean as a sample, which is the most likely
-            std = torch.exp(0.5 * logvar)
-            eps = torch.randn_like(std)  # random numbers from a normal distribution with mean 0 and variance 1
-            return mu + eps * std
-        else:
-            return mu
-
     def encode(self, x):
+        # the input x here should be xxx
+
         batch_size = x.size(0)
         # x is image if not double embedding
         if not self.double_embed:
@@ -143,110 +109,49 @@ class VAE2(nn.Module):
         mu_z, logvar_z = mu_logvar.view(-1, self.zdim, 2).unbind(-1)
 
         logvar_z = self.stabilize_exp(logvar_z)
-
-        return mu_z, logvar_z
+        z = self.reparameterize(mu_z, logvar_z), mu_z, logvar_z
+        return z, mu_z, logvar_z
 
     def decode(self, z):
-        batch_size = z.size(0)
-        z = z.view((batch_size, -1))
-        x = self.linear_dec(z)
-        x = x.view((batch_size, self.base_dec * 16, 2, 2))
-        x_recon = self.conv_dec(x)
-
-        return x_recon
-
-    def get_latent(self, x):
-        # (32, 3, 64, 64) or (3, 100)
-        mu_z, logvar_z = self.encode(x)
-        return self.reparameterize(mu_z, logvar_z)
+        return self.decoder(z)
 
     def forward(self, input):
-        if self.conditional:
-            assert len(input) == 2
-            x, y = input
-            embedded_class = self.embed_class(y)
-            embedded_class = embedded_class.view(-1, 64, 64).unsqueeze(1)
-            embedded_input = self.embed_data(x)
-            x = torch.cat([embedded_input, embedded_class], dim=1)
-        else:
-            x = input
-
         # (32, 3, 64, 64) or (3, 100)
-        mu_z, logvar_z = self.encode(x)
-        z = self.reparameterize(mu_z, logvar_z)
-        if self.conditional:
-            z = torch.cat((z, y), axis=1)
-            # z = torch.cat((z, torch.unsqueeze(y, -1)), axis=1)
-
+        z, mu_z, logvar_z = self.encode(input)
         x_recon = self.decode(z)
         return x_recon, mu_z, logvar_z, z.squeeze()
 
-
-class VAE(nn.Module):
-    def __init__(self, zdim=3, input_channels=3, alpha=1, beta=1, base_enc=32, base_dec=32,
-                 loss='BCEWithLogitsLoss', conditional=False):
-        super(VAE, self).__init__()
+class VAE(AbstractModel):
+    def __init__(self, zdim=3, input_channels=3, alpha=1, beta=1, loss='BCEWithLogitsLoss', filepath=None):
+        super(AbstractModel, self).__init__(filepath)
         """
         param :
             zdim (int) : dimension of the latent space
             beta (float) : weight coefficient for DL divergence, when beta=1 is Valina VAE
-
             Modulate the complexity of the model with parameter 'base_enc' and 'base_dec'
         """
-
         self.zdim = zdim
         self.alpha = alpha
         self.beta = beta
         self.loss = loss
         self.input_channels = input_channels
-        self.base_dec = base_dec
-        self.conditional = conditional
 
-        ###########################
         ##### Encoding layers #####
-        ###########################
-        self.conv_enc = nn.Sequential(
-            Conv(self.input_channels, base_enc, 4, stride=2, padding=1),  # stride 2, resolution is splitted by half
-            Conv(base_enc, base_enc * 2, 4, stride=2, padding=1),  # 16x16
-            Conv(base_enc * 2, base_enc * 4, 4, stride=2, padding=1),  # 8x8
-            Conv(base_enc * 4, base_enc * 8, 4, stride=2, padding=1),  # 4x4
-            Conv(base_enc * 8, base_enc * 16, 4, stride=2, padding=1),  # 2x2
-        )
-        self.linear_enc = nn.Sequential(
-            Linear_block(pow(2, self.input_channels - 1) * base_enc * 16, 1024),
-            Linear_block(1024, 256),
-        )
-        self.mu_logvar_gen = nn.Linear(256, self.zdim * 2)  # 245 -> 200
+        self.encoder = Encoder(out_size=256, input_channel=input_channels)
 
-        ###########################
-        ##### Decoding layers #####
-        ###########################
-        hidden_dim = self.zdim + 7 if conditional else zdim
-        # TODO: linear decoder shorter than VAE2???
-        self.linear_dec = nn.Sequential(
-            Linear_block(hidden_dim, 1024),
-            Linear_block(1024, pow(2, self.input_channels - 1) * base_dec * 16),
-        )
+        # inference mean and std
+        self.mu_logvar_gen = nn.Linear(256, self.zdim * 2)  # 256 -> 6
 
-        self.conv_dec = nn.Sequential(
-            ConvUpsampling(base_dec * 16, base_dec * 8, 4, stride=2, padding=1),  # 4
-            ConvUpsampling(base_dec * 8, base_dec * 4, 4, stride=2, padding=1),  # 8
-            ConvUpsampling(base_dec * 4, base_dec * 2, 4, stride=2, padding=1),  # 16
-            ConvUpsampling(base_dec * 2, base_dec, 4, stride=2, padding=1),  # 32
-            nn.Upsample(scale_factor=4, mode='bilinear', align_corners=True),
-            nn.Conv2d(base_dec, self.input_channels, 4, 2, 1),  # 192
-        )
-
-        self.stabilize_exp = nn.Hardtanh(min_val=-6., max_val=2.)  # linear between min and max
         # to constrain logvar in a reasonable range
+        self.stabilize_exp = nn.Hardtanh(min_val=-6., max_val=2.)  # linear between min and max
 
-        ###########################
-        ##### Conditional Embedding
-        ###########################
-        # self.embed_class = nn.Linear(7, 64 * 64)
-        # self.embed_data = nn.Conv2d(3, 3, kernel_size=1)
+        ##### Decoding layers #####
+        self.decoder = Decoder(zdim=zdim, input_channel=input_channels)
 
-        ### weight initialization
+        # run weight initialization TODO: make this abstract class
+        self.initialization()
+
+    def initialization(self):
         for m in self.modules():
             if isinstance(m, nn.Conv2d) or isinstance(m, nn.ConvTranspose2d):
                 xavier_normal_(m.weight,
@@ -256,61 +161,48 @@ class VAE(nn.Module):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
 
-    def reparameterize(self, mu, logvar):
-        if self.training:  # if prediction, give the mean as a sample, which is the most likely
-            std = torch.exp(0.5 * logvar)
-            eps = torch.randn_like(std)  # random numbers from a normal distribution with mean 0 and variance 1
-            return mu + eps * std
-        else:
-            return mu
-
     def encode(self, x):
-        batch_size = x.size(0)
-        x = self.conv_enc(x)
-        x = x.view((batch_size, -1))
-        x = self.linear_enc(x)
+        return self.encoder(x)
+
+    def inference(self, x):
         mu_logvar = self.mu_logvar_gen(x)
         mu_z, logvar_z = mu_logvar.view(-1, self.zdim, 2).unbind(-1)
         logvar_z = self.stabilize_exp(logvar_z)
-
-        return mu_z, logvar_z
+        return self.reparameterize(mu_z, logvar_z), mu_z, logvar_z
 
     def decode(self, z):
-        batch_size = z.size(0)
-        z = z.view((batch_size, -1))
-        x = self.linear_dec(z)
-        x = x.view((batch_size, self.base_dec * 16, 2 ** ((self.input_channels - 1) // 2), 2 ** ((self.input_channels - 1) // 2)))
-        x_recon = self.conv_dec(x)
-
-        return x_recon
-
-    def get_latent(self, x):
-        # (32, 3, 64, 64) or (3, 100)
-        mu_z, logvar_z = self.encode(x)
-        z = self.reparameterize(mu_z, logvar_z)
-        return z
+        return self.decoder(z)
 
     def forward(self, input):
-        if self.conditional:
-            assert len(input) == 2
-            x, y = input
-            embedded_class = self.embed_class(y)
-            embedded_class = embedded_class.view(-1, 64, 64).unsqueeze(1)
-            embedded_input = self.embed_data(x)
-            x = torch.cat([embedded_input, embedded_class], dim=1)
-        else:
-            x = input
-
-        ### encode
-        mu_z, logvar_z = self.encode(x)
-        z = self.reparameterize(mu_z, logvar_z)
-        if self.conditional:
-            # concat GT to hidden feature
-            z = torch.cat((z, y), axis=1)
-            # z = torch.cat((z, torch.unsqueeze(y, -1)), axis=1)
-        ### decode
+        # (32, 3, 64, 64) or (3, 100)
+        x = self.encode(input)
+        z, mu_z, logvar_z = self.inference(x)
         x_recon = self.decode(z)
         return x_recon, mu_z, logvar_z, z.squeeze()
+
+class TwoStageVAE(AbstractModel):
+    def __init__(self, z1_dim=100, z2_dim=3, input_channel=3, base_enc=32, base_dec=32, doubleEmbed=False, filepath=None):
+        super(AbstractModel, self).__init__(filepath)
+        self.z1_dim = z1_dim
+        self.z2_dim = z2_dim
+        self.doubleEmbed=doubleEmbed
+
+        self.VAE1 = VAE(zdim=z1_dim, input_channels=input_channel)
+        self.linEnc = nn.Sequential(
+            Linear_block(zdim, 256),
+            Linear_block(256, 1024),
+            Linear_block(1024, pow(2, input_channel - 1) * base_dec * 16),
+        )
+        self.decoder2 = Decoder(zdim=z2_dim, input_channel=input_channel)
+
+    def forward(self, x):
+        if self.doubleEmbed:
+
+        else:
+            x_encoded = self.VAE1.encode(x)
+
+
+
 
 
 class VaDE(nn.Module):

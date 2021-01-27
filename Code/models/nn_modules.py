@@ -18,10 +18,41 @@ from torch.nn import functional as F
 ###########################
 ###### standard VAE
 ###########################
+class Encoder(nn.Module):
+    def __init__(self, out_size=256, input_channel=3, base_enc=32):
+        super(Encoder, self).__init__()
+        '''
+        Down sampling
+        usgae: 
+        '''
+        self.out_size = out_size
+        self.base_enc = base_enc
+        self.input_channels = input_channel
+
+        self.conv_enc = nn.Sequential(
+            Conv(self.input_channels, base_enc, 4, stride=2, padding=1),  # stride 2, resolution is splitted by half
+            Conv(base_enc, base_enc * 2, 4, stride=2, padding=1),  # 16x16
+            Conv(base_enc * 2, base_enc * 4, 4, stride=2, padding=1),  # 8x8
+            Conv(base_enc * 4, base_enc * 8, 4, stride=2, padding=1),  # 4x4
+            Conv(base_enc * 8, base_enc * 16, 4, stride=2, padding=1),  # 2x2
+        )
+        self.linear_enc = nn.Sequential(
+            Linear_block(pow(2, self.input_channels - 1) * base_enc * 16, 1024),
+            Linear_block(1024, 256),
+        )
+
+    def forward(self, x):
+        batch_size = x.size(0)
+        x = self.conv_enc(x)
+        x = x.view((batch_size, -1))
+        x = self.linear_enc(self.out_size)
+        return x
+
+
+
 class Decoder(nn.Module):
     '''Downsampling block'''
-
-    def __init__(self, zdim: int = 3, input_channel=3, base_dec: int = 32, stride: int = 2, padding: int = 1):
+    def __init__(self, zdim=3, input_channel=3, base_dec=32, stride=2, padding=1):
         super(Decoder, self).__init__()
 
         ### p(z|y)
@@ -31,7 +62,8 @@ class Decoder(nn.Module):
         self.input_channels = input_channel
 
         self.linear_dec = nn.Sequential(
-            Linear_block(zdim, 1024),
+            Linear_block(zdim, 256),
+            Linear_block(256, 1024),
             Linear_block(1024, pow(2, input_channel - 1) * base_dec * 16),
         )
 
@@ -42,7 +74,6 @@ class Decoder(nn.Module):
             ConvUpsampling(base_dec * 2, base_dec, 4, stride=stride, padding=padding),  # 32
             # for 4 channel
             # ConvUpsampling(base_dec, base_dec, 4, stride=2, padding=1),  # 96
-
             nn.Upsample(scale_factor=4, mode='bilinear', align_corners=True),
             nn.Conv2d(in_channels=base_dec, out_channels=input_channel, kernel_size=4, stride=2, padding=1),  # 192
         )
@@ -56,13 +87,40 @@ class Decoder(nn.Module):
         ### p(x|z) reconstruction
         z = z.view((batch_size, -1))
         x = self.linear_dec(z)
-        x = x.view((batch_size, self.base_dec * 16, 2 ** ((self.input_channels - 1) // 2), 2 ** ((self.input_channels - 1) // 2)))
+        edge_size = 2 ** ((self.input_channels - 1) // 2)
+        x = x.view((batch_size, self.base_dec * 16, edge_size, edge_size))
         x_recon = self.conv_dec(x)
         return x_recon
+
 
 ###########################
 ###### Standard CNN
 ###########################
+class ConvEnc():
+
+
+class ConvDec(nn.Module):
+    def __init__(self, zdim: int = 3, input_channel=3, base_dec: int = 32, stride: int = 2, padding: int = 1):
+        super(ConvDec, self).__init__()
+        self.conv_dec = nn.Sequential(
+            ConvUpsampling(base_dec * 16, base_dec * 8, 4, stride=stride, padding=padding),  # 4
+            ConvUpsampling(base_dec * 8, base_dec * 4, 4, stride=stride, padding=padding),  # 8
+            ConvUpsampling(base_dec * 4, base_dec * 2, 4, stride=stride, padding=padding),  # 16
+            ConvUpsampling(base_dec * 2, base_dec, 4, stride=stride, padding=padding),  # 32
+            # for 4 channel
+            # ConvUpsampling(base_dec, base_dec, 4, stride=2, padding=1),  # 96
+            nn.Upsample(scale_factor=4, mode='bilinear', align_corners=True),
+            nn.Conv2d(in_channels=base_dec, out_channels=input_channel, kernel_size=4, stride=2, padding=1),  # 192
+        )
+
+    def forward(self, x):
+
+
+class LinEnc():
+
+
+class LinDec():
+
 
 class Conv(nn.Module):
     '''Downsampling block'''
@@ -97,8 +155,10 @@ class ConvTranspose(nn.Module):
 
 
 class ConvUpsampling(nn.Module):
-    '''Upsampling block, that interpolate instead of using ConvTranspose2d
-    in order to mitigate the checkboard pattern effect'''
+    '''
+    Upsampling block, that interpolate instead of using ConvTranspose2d
+    in order to mitigate the checkboard pattern effect
+    '''
 
     def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0):
         super(ConvUpsampling, self).__init__()

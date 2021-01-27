@@ -48,7 +48,7 @@ data, _, _ = next(iter(infer_dataloader))
 data = Variable(data, requires_grad=False).to(device)
 
 ### Encoder images
-latentStart, latentEnd = VAE_2.get_latent(data)
+latentStart, latentEnd = VAE_2.encode(data)
 # images back to CPU
 startImage, endImage = data.detach().cpu()
 

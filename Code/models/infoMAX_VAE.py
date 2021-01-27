@@ -54,6 +54,7 @@ class MLP_MI_estimator(nn.Module):
         )
 
     def forward(self, x, z):
+        # flatten
         x = x.view(-1, self.input_dim)
         z = z.view(-1, self.zdim)
         x_g = self.MLP_g(x)  # Batchsize x 32
