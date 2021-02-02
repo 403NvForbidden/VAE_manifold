@@ -44,10 +44,14 @@ from models.infoMAX_VAE import infoNCE_bound
 from scipy.optimize import linear_sum_assignment as linear_assignment
 from sklearn.mixture import GaussianMixture
 
+import pytorch_lightning as pl
+from .model import AbstractModel
+from ._types_ import *
+
 
 def kl_divergence(mu, logvar):
-    kld = -0.5 * (1 + logvar - mu ** 2 - logvar.exp()).sum(1).mean()
-    return kld
+    return torch.mean(-0.5 * (1 + logvar - mu ** 2 - logvar.exp()).sum(dim=1))
+
 
 def reparameterize(mu, logvar, training=True):
     """Reparameterization trick.
@@ -56,14 +60,16 @@ def reparameterize(mu, logvar, training=True):
         std = torch.exp(0.5 * logvar)
         eps = torch.randn_like(std)
         return mu + eps * std
-    else: # val
+    else:  # val
         return mu
 
+
 def adjust_learning_rate(init_lr, optimizer, epoch):
-    lr = max(init_lr * (0.9 ** (epoch//10)), 0.0002)
+    lr = max(init_lr * (0.9 ** (epoch // 10)), 0.0002)
     for param_group in optimizer.param_groups:
         param_group["lr"] = lr
     return lr
+
 
 def cluster_acc(Y_pred, Y):
     assert Y_pred.size == Y.size
@@ -184,6 +190,7 @@ def train_vaDE_epoch(model, data_loader, optimizer, epoch, device):
 
     return np.mean(loss_iter), np.mean(kl_loss_iter), np.mean(recon_loss_iter)
 
+
 def test_vaDE_epoch(model, val_loader, epoch, device):
     start = timer()
     model.eval()
@@ -247,7 +254,8 @@ def train_vaDE_model(num_epochs, model, optimizer, train_loader, valid_loader, s
 
         lr_s.step()
         # keep record
-        history.append([train_loss, train_kl_loss, train_recon_loss, val_loss, val_kl_loss, val_recon_loss, clutering_acc])
+        history.append(
+            [train_loss, train_kl_loss, train_recon_loss, val_loss, val_kl_loss, val_recon_loss, clutering_acc])
 
     ### save model
     # save_brute(model, save_path + 'model.pth')
@@ -255,10 +263,12 @@ def train_vaDE_model(num_epochs, model, optimizer, train_loader, valid_loader, s
 
     history = pd.DataFrame(
         history,
-        columns=['train_loss', 'train_kl_loss', 'train_recon_loss', 'val_loss', 'val_kl_loss', 'val_recon_loss', 'clutering_acc']
+        columns=['train_loss', 'train_kl_loss', 'train_recon_loss', 'val_loss', 'val_kl_loss', 'val_recon_loss',
+                 'clutering_acc']
     )
 
     return model, history
+
 
 #########################################
 ##### 2 stage VAE training ##############
@@ -764,6 +774,135 @@ def train_2stage_infoMaxVAE_model(num_epochs, VAE_1, VAE_2, opti_VAE1, opti_VAE2
 ##### Vanilla VAE and SCVAE training ##############
 ###################################################
 
+class VAEXperiment(pl.LightningModule):
+
+    def __init__(self,
+                 vae_model: AbstractModel,
+                 params: dict) -> None:
+        super(VAEXperiment, self).__init__()
+
+        self.model = vae_model
+        self.params = params
+        self.curr_device = None
+        # self.hold_graph = False
+        # try:
+        #     self.hold_graph = self.params['retain_first_backpass']
+        # except:
+        #     pass
+
+    def forward(self, input: Tensor, **kwargs) -> Tensor:
+        return self.model(input, **kwargs)
+
+    ### required
+    def training_step(self, batch, batch_idx, optimizer_idx=0):
+        img, labels = batch
+        self.curr_device = img.device
+        print(self.curr_device)
+
+        x_recon, mu_z, logvar_z, _ = self.forward(img, labels=labels)
+        train_loss = self.model.objective_func(img, x_recon, mu_z, logvar_z)
+
+        self.log_dict({key: val.item() for key, val in train_loss.items()}, on_step=False, on_epoch=False, prog_bar=True,
+                      logger=True)
+        return train_loss
+
+    # def training_step_end(...)
+
+    # def training_epoch_end(...)
+    '''
+        Validation
+    '''
+
+    def validation_step(self, batch, batch_idx, optimizer_idx=0):
+        img, labels = batch
+        self.curr_device = img.device
+
+        x_recon, mu_z, logvar_z, _ = self.forward(img, labels=labels)
+        val_loss = self.model.objective_func(img, x_recon, mu_z, logvar_z)
+        return val_loss
+
+    # def validation_end(self, outputs):
+    #     avg_loss = torch.stack([x['loss'] for x in outputs]).mean()
+    #     tensorboard_logs = {'avg_val_loss': avg_loss}
+    #     self.sample_images()
+    #     # self.log('my_loss', loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
+    #     return {'val_loss': avg_loss, 'log': tensorboard_logs}
+
+    '''
+        Config Optimizer (requries)
+    '''
+
+    ### required
+    def configure_optimizers(self):
+        optims = []
+        scheds = []
+
+        optimizer = optim.Adam(self.model.parameters(),
+                               lr=self.params['lr'], betas=(0.9, 0.999),
+                               weight_decay=self.params['weight_decay'])
+        optims.append(optimizer)
+
+        try:
+            if self.params['LR_2']:
+                optimizer2 = optim.Adam(getattr(self.model, self.params['submodel']).parameters(),
+                                        lr=self.params['LR_2'])
+                optims.append(optimizer2)
+        except:
+            pass
+
+        try:
+            if self.params['scheduler_gamma']:
+                scheduler = optim.lr_scheduler.ExponentialLR(optims[0],
+                                                             gamma=self.params['scheduler_gamma'])
+                scheds.append(scheduler)
+
+                # Check if another scheduler is required for the second optimizer
+                try:
+                    if self.params['scheduler_gamma_2'] is not None:
+                        scheduler2 = optim.lr_scheduler.ExponentialLR(optims[1],
+                                                                      gamma=self.params['scheduler_gamma_2'])
+                        scheds.append(scheduler2)
+                except:
+                    pass
+                return optims, scheds
+        except:
+            return optims
+
+    """
+        def sample_images(self):
+            # Get sample reconstruction image
+            test_input, test_label = next(iter(self.sample_dataloader))
+            test_input = test_input.to(self.curr_device)
+            test_label = test_label.to(self.curr_device)
+            recons = self.model.generate(test_input, labels = test_label)
+            vutils.save_image(recons.data,
+                              f"{self.logger.save_dir}{self.logger.name}/version_{self.logger.version}/"
+                              f"recons_{self.logger.name}_{self.current_epoch}.png",
+                              normalize=True,
+                              nrow=12)
+    
+            # vutils.save_image(test_input.data,
+            #                   f"{self.logger.save_dir}{self.logger.name}/version_{self.logger.version}/"
+            #                   f"real_img_{self.logger.name}_{self.current_epoch}.png",
+            #                   normalize=True,
+            #                   nrow=12)
+    
+            try:
+                samples = self.model.sample(144,
+                                            self.curr_device,
+                                            labels = test_label)
+                vutils.save_image(samples.cpu().data,
+                                  f"{self.logger.save_dir}{self.logger.name}/version_{self.logger.version}/"
+                                  f"{self.logger.name}_{self.current_epoch}.png",
+                                  normalize=True,
+                                  nrow=12)
+            except:
+                pass
+    
+    
+            del test_input, recons #, samples
+    """
+
 
 def train(epoch, model, optimizer, train_loader, device='cpu'):
     """
@@ -787,7 +926,7 @@ def train(epoch, model, optimizer, train_loader, device='cpu'):
 
     start = timer()
 
-    criterion_recon = nn.MSELoss().to(device) # more stable than handmade sigmoid as last layer and BCELoss
+    criterion_recon = nn.MSELoss().to(device)  # more stable than handmade sigmoid as last layer and BCELoss
 
     # each `data` is of BATCH_SIZE samples and has shape [batch_size, 4, 128, 128]
     for batch_idx, (data, _) in enumerate(train_loader):
@@ -798,7 +937,7 @@ def train(epoch, model, optimizer, train_loader, device='cpu'):
 
         # calculate scalar loss
         loss_recon = criterion_recon(torch.sigmoid(x_recon), data)
-        #zzz  = criterion_recon(data, x_recon)
+        # zzz  = criterion_recon(data, x_recon)
         loss_recon *= data.size(1) * data.size(2) * data.size(3)
         loss_recon.div(data.size(0))
 

@@ -17,7 +17,7 @@ different populations of cells, highly valuable for many downstream analyses.
 ├── InfoMAX_VAE_framework.py
 ├── models
 │   ├── infoMAX_VAE.py
-│   ├── networks.py
+│   ├── networks_refactoring.py
 │   ├── nn_modules.py
 │   └── train_net.py
 ├── optimization

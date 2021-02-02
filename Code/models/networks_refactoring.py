@@ -17,12 +17,13 @@ import math
 from torch import nn
 from torch.nn import functional as F
 from torch.nn.init import xavier_normal_
-from models.nn_modules import Conv, ConvTranspose, ConvUpsampling, Skip_Conv_down, Skip_DeConv_up, Linear_block, \
+from models.nn_modules import Conv, ConvUpsampling, Skip_Conv_down, Skip_DeConv_up, Linear_block, \
     Encoder, Decoder
 import numpy as np
-from models.train_net import reparameterize
+from models.train_net import reparameterize, kl_divergence
 from sklearn.mixture import GaussianMixture
 from .model import AbstractModel
+
 
 # class twoStageVAE():
 
@@ -121,9 +122,10 @@ class VAE2(nn.Module):
         x_recon = self.decode(z)
         return x_recon, mu_z, logvar_z, z.squeeze()
 
-class VAE(AbstractModel):
-    def __init__(self, zdim=3, input_channels=3, alpha=1, beta=1, loss='BCEWithLogitsLoss', filepath=None):
-        super(AbstractModel, self).__init__(filepath)
+
+class betaVAE(AbstractModel):
+    def __init__(self, zdim=3, input_channels=3, beta=1, filepath=None):
+        super().__init__(filepath=filepath)
         """
         param :
             zdim (int) : dimension of the latent space
@@ -131,9 +133,7 @@ class VAE(AbstractModel):
             Modulate the complexity of the model with parameter 'base_enc' and 'base_dec'
         """
         self.zdim = zdim
-        self.alpha = alpha
         self.beta = beta
-        self.loss = loss
         self.input_channels = input_channels
 
         ##### Encoding layers #####
@@ -168,18 +168,46 @@ class VAE(AbstractModel):
         mu_logvar = self.mu_logvar_gen(x)
         mu_z, logvar_z = mu_logvar.view(-1, self.zdim, 2).unbind(-1)
         logvar_z = self.stabilize_exp(logvar_z)
-        return self.reparameterize(mu_z, logvar_z), mu_z, logvar_z
+        return reparameterize(mu_z, logvar_z, self.training), mu_z, logvar_z
 
     def decode(self, z):
         return self.decoder(z)
 
-    def forward(self, input):
+    def forward(self, img, **kwargs):
         # (32, 3, 64, 64) or (3, 100)
-        x = self.encode(input)
+        x = self.encode(img)
         z, mu_z, logvar_z = self.inference(x)
         x_recon = self.decode(z)
         return x_recon, mu_z, logvar_z, z.squeeze()
 
+    def objective_func(self, x, x_recon, mu_z, logvar_z, *args,
+                      **kwargs) -> dict:
+        """
+        :param x:
+        :param x_recon:
+        :param mu_z:
+        :param logvar_z:
+        :return: the loss of beta VAEs
+        """
+        loss_recon = F.mse_loss(torch.sigmoid(x_recon), x)
+        loss_recon *= x.size(1) * x.size(2) * x.size(3)
+        loss_recon.div(x.size(0))
+
+        loss_kl = kl_divergence(mu_z, logvar_z)
+
+        # if self.loss_type == 'H':  # https://openreview.net/forum?id=Sy2fzU9gl
+        #     loss = recons_loss + self.beta * kld_weight * kld_loss
+        # elif self.loss_type == 'B':  # https://arxiv.org/pdf/1804.03599.pdf
+        #     self.C_max = self.C_max.to(input.device)
+        #     C = torch.clamp(self.C_max / self.C_stop_iter * self.num_iter, 0, self.C_max.data[0])
+        #     loss = recons_loss + self.gamma * kld_weight * (kld_loss - C).abs()
+        # else:
+        #     raise ValueError('Undefined loss type.')
+
+        return {'loss': loss_recon + self.beta * loss_kl, 'Recon_Loss': loss_recon, 'KLD': loss_kl}
+
+
+"""
 class TwoStageVAE(AbstractModel):
     def __init__(self, z1_dim=100, z2_dim=3, input_channel=3, base_enc=32, base_dec=32, doubleEmbed=False, filepath=None):
         super(AbstractModel, self).__init__(filepath)
@@ -187,7 +215,7 @@ class TwoStageVAE(AbstractModel):
         self.z2_dim = z2_dim
         self.doubleEmbed=doubleEmbed
 
-        self.VAE1 = VAE(zdim=z1_dim, input_channels=input_channel)
+        self.VAE1 = betaVAE(zdim=z1_dim, input_channels=input_channel)
         self.linEnc = nn.Sequential(
             Linear_block(zdim, 256),
             Linear_block(256, 1024),
@@ -200,9 +228,7 @@ class TwoStageVAE(AbstractModel):
 
         else:
             x_encoded = self.VAE1.encode(x)
-
-
-
+"""
 
 
 class VaDE(nn.Module):

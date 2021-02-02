@@ -28,7 +28,7 @@ import torch
 from torch import cuda, optim
 from torchsummary import summary
 
-from models.networks import VAE, Skip_VAE, VAE2
+from models.networks_refactoring import betaVAE, Skip_VAE, VAE2
 from models.infoMAX_VAE import CNN_128_VAE
 from util.data_processing import get_train_val_dataloader, imshow_tensor, get_inference_dataset
 from models.train_net import train_VAE_model, train_2stage_VAE_model
@@ -80,7 +80,7 @@ _,_ = imshow_tensor(features[0])
 ##########################################################
 # %% Build custom VAE Model
 ##########################################################
-VAE_1 = VAE(zdim=100, beta=1, base_enc=32, input_channels=3, base_dec=32).to(device)
+VAE_1 = betaVAE(zdim=100, input_channels=3, beta=1).to(device)
 VAE_2 = VAE2(VAE_1.conv_enc, VAE_1.linear_enc, input_channels=3, zdim=3).to(device)
 
 optimizer1 = optim.Adam(VAE_1.parameters(), lr=0.0001, betas=(0.9, 0.999))

@@ -24,7 +24,7 @@ import torch
 from torch import cuda, optim
 
 from models.infoMAX_VAE import MLP_MI_estimator
-from models.networks import VAE, VAE2
+from models.networks_refactoring import betaVAE, VAE2
 from models.train_net import train_2stage_infoMaxVAE_model
 from util.data_processing import get_train_val_dataloader, get_inference_dataset
 from util.helpers import plot_train_result_infoMax, save_reconstruction
@@ -73,7 +73,7 @@ if save and not os.path.isdir(save_model_path):
 ##########################################################
 
 ### Architecture to use if input size is 64x64
-VAE_1 = VAE(zdim=100, alpha=500, beta=100, input_channels=input_channel).to(device)
+VAE_1 = betaVAE(zdim=100, input_channels=input_channel, beta=100).to(device)
 VAE_2 = VAE2(VAE_1.conv_enc, VAE_1.linear_enc, zdim=3, alpha=500, beta=100, input_channels=input_compress,
              double_embed=double_embed).to(device)
 

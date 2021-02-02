@@ -24,7 +24,7 @@ import plotly.offline
 import torch
 from torch import cuda, optim
 
-from models.networks import VAE, VAE2
+from models.networks_refactoring import betaVAE, VAE2
 from models.train_net import train_2stage_VAE_model
 from util.data_processing import get_train_val_dataloader, get_inference_dataset
 from util.helpers import plot_train_result, plot_from_csv, metadata_latent_space, load_brute, save_reconstruction, \

@@ -15,7 +15,7 @@ from matplotlib.gridspec import GridSpec
 from torch import cuda, optim
 from torchsummary import summary
 
-from models.networks import VAE, Skip_VAE, VAE2, VaDE
+from models.networks_refactoring import betaVAE, Skip_VAE, VAE2, VaDE
 from models.infoMAX_VAE import CNN_128_VAE
 from util.Process_Mnist import get_MNIST_dataloader
 from util.data_processing import get_train_val_dataloader, imshow_tensor, get_inference_dataset

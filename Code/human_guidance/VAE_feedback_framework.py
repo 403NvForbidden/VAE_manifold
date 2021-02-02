@@ -44,7 +44,7 @@ from torch.autograd import Variable
 
 from util.helpers import save_brute, load_brute
 from models.train_net import train_Simple_VAE
-from models.networks import Simple_VAE
+from models.networks_refactoring import Simple_VAE
 from util.data_processing import imshow_tensor
 from human_guidance.feedback_helpers import latent_to_index, sample_latent, show_images_grid, show_density, \
     DSpritesDataset, save_latent_code, plot_train_history

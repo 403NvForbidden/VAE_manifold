@@ -7,7 +7,7 @@
 
 '''
 File containing custom pytorch module, to be used as building blocks of VAE models.
-c.f networks.py for the models.
+c.f networks_refactoring.py for the models.
 '''
 
 import torch
@@ -45,13 +45,13 @@ class Encoder(nn.Module):
         batch_size = x.size(0)
         x = self.conv_enc(x)
         x = x.view((batch_size, -1))
-        x = self.linear_enc(self.out_size)
+        x = self.linear_enc(x)
         return x
-
 
 
 class Decoder(nn.Module):
     '''Downsampling block'''
+
     def __init__(self, zdim=3, input_channel=3, base_dec=32, stride=2, padding=1):
         super(Decoder, self).__init__()
 
@@ -96,32 +96,6 @@ class Decoder(nn.Module):
 ###########################
 ###### Standard CNN
 ###########################
-class ConvEnc():
-
-
-class ConvDec(nn.Module):
-    def __init__(self, zdim: int = 3, input_channel=3, base_dec: int = 32, stride: int = 2, padding: int = 1):
-        super(ConvDec, self).__init__()
-        self.conv_dec = nn.Sequential(
-            ConvUpsampling(base_dec * 16, base_dec * 8, 4, stride=stride, padding=padding),  # 4
-            ConvUpsampling(base_dec * 8, base_dec * 4, 4, stride=stride, padding=padding),  # 8
-            ConvUpsampling(base_dec * 4, base_dec * 2, 4, stride=stride, padding=padding),  # 16
-            ConvUpsampling(base_dec * 2, base_dec, 4, stride=stride, padding=padding),  # 32
-            # for 4 channel
-            # ConvUpsampling(base_dec, base_dec, 4, stride=2, padding=1),  # 96
-            nn.Upsample(scale_factor=4, mode='bilinear', align_corners=True),
-            nn.Conv2d(in_channels=base_dec, out_channels=input_channel, kernel_size=4, stride=2, padding=1),  # 192
-        )
-
-    def forward(self, x):
-
-
-class LinEnc():
-
-
-class LinDec():
-
-
 class Conv(nn.Module):
     '''Downsampling block'''
 
@@ -196,7 +170,6 @@ class Linear_block(nn.Module):
 ###########################
 ###### Conv ResBlock to Keep Mutual Info high
 ###########################
-
 class Skip_Conv_down(nn.Module):
     '''
     Standard Conv2d to learn best downsampling, but add a short cut skip
@@ -257,7 +230,7 @@ class Skip_DeConv_up(nn.Module):
         else:
             return x + x_skip_up.squeeze(0)
 
-
+"""
 class ResBlock_identity(nn.Module):
     '''Basic Identity ResBlock. Input goes through :
     - Two Conv2D + BN + Activation
@@ -328,3 +301,4 @@ class ResBlock_Conv(nn.Module):
         out = self.activation(x)
 
         return out
+"""

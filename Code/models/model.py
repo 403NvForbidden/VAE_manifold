@@ -63,7 +63,7 @@ class AbstractModel(nn.Module):
         objective function for updating weights for neurons
         :return:
         """
-        raise NotImplementedError
+        pass
 
     def encode(self, input: Tensor) -> List[Tensor]:
         raise NotImplementedError
