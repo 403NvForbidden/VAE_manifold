@@ -784,6 +784,7 @@ class VAEXperiment(pl.LightningModule):
         self.model = vae_model
         self.params = params
         self.curr_device = None
+        self.epoch = 1
         # self.hold_graph = False
         # try:
         #     self.hold_graph = self.params['retain_first_backpass']
@@ -797,21 +798,31 @@ class VAEXperiment(pl.LightningModule):
     def training_step(self, batch, batch_idx, optimizer_idx=0):
         img, labels = batch
         self.curr_device = img.device
-        print(self.curr_device)
-
+        print(self.current_epoch)
         x_recon, mu_z, logvar_z, _ = self.forward(img, labels=labels)
         train_loss = self.model.objective_func(img, x_recon, mu_z, logvar_z)
-
-        self.log_dict({key: val.item() for key, val in train_loss.items()}, on_step=False, on_epoch=False, prog_bar=True,
-                      logger=True)
+        # self.log_dict({key: val.item() for key, val in train_loss.items()}, on_step=False, on_epoch=True, prog_bar=True, logger=True)
+        # train_loss['log'] = {key: val.item() for key, val in train_loss.items()}
         return train_loss
 
-    # def training_step_end(...)
+    def custom_histogram(self):
+        for n, p in self.model.named_parameters():
+            self.logger.experiment.add_histogram(n, p, self.current_epoch)
 
-    # def training_epoch_end(...)
-    '''
-        Validation
-    '''
+    def training_epoch_end(self, outputs):
+        # TODO: automate it
+        avg_loss = torch.stack([x['loss'] for x in outputs]).mean()
+        avg_recon = torch.stack([x['recon_loss'] for x in outputs]).mean()
+        avg_kld = torch.stack([x['KLD'] for x in outputs]).mean()
+
+        self.logger.experiment.add_scalar('Loss', avg_loss, self.current_epoch)
+        self.logger.experiment.add_scalar('Recon Loss', avg_recon, self.current_epoch)
+        self.logger.experiment.add_scalar('KLD Loss', avg_kld, self.current_epoch)
+        if (self.current_epoch == 1):
+            sampleimg = torch.rand(1,3,64,64).cuda()
+            self.logger.experiment.add_graph(self.model, sampleimg)
+
+        self.custom_histogram()
 
     def validation_step(self, batch, batch_idx, optimizer_idx=0):
         img, labels = batch

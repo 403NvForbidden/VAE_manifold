@@ -204,8 +204,8 @@ class betaVAE(AbstractModel):
         # else:
         #     raise ValueError('Undefined loss type.')
 
-        return {'loss': loss_recon + self.beta * loss_kl, 'Recon_Loss': loss_recon, 'KLD': loss_kl}
-
+        return {'loss': loss_recon + self.beta * loss_kl, 'recon_loss': loss_recon, 'KLD': loss_kl}
+        # TODO: sample image
 
 """
 class TwoStageVAE(AbstractModel):
