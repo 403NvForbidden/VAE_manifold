@@ -127,7 +127,7 @@ def metadata_latent_space_single(model, infer_dataloader, device, GT_csv_path, s
                 list_of_tensors.append(raw_data.data.cpu().numpy())
 
             data = Variable(data, requires_grad=False)
-            z, _ = model.encode(data)
+            z, _, _ = model.inference(model.encode(data))
             z = z.view(-1, model.zdim)
             z_list.append((z.data).cpu().numpy())
             labels_list.append(labels.numpy())
@@ -153,22 +153,15 @@ def metadata_latent_space_single(model, infer_dataloader, device, GT_csv_path, s
     z_points = np.concatenate(z_list, axis=0)  # datasize x 3
     # true_label = np.concatenate(labels_list,axis=0)
 
-    if z_points.shape[1] == 3:
-        columns = ['VAE_x_coord', 'VAE_y_coord', 'VAE_z_coord']
-    else:
-        columns = [f'z{n}' for n in range(model.zdim)]
-
-    temp_matching_df = pd.DataFrame(z_points, columns=columns)
+    temp_matching_df = pd.DataFrame(z_points, columns=[f'z{n}' for n in range(model.zdim)])
     temp_matching_df['Unique_ID'] = unique_ids
     temp_matching_df = temp_matching_df.sort_values(by=['Unique_ID'])
 
     ##### Load Ground Truth information about the dataset #####
-    MetaData_csv = pd.read_csv(GT_csv_path)
-    MetaData_csv = MetaData_csv.sort_values(by=['Unique_ID'])
-
+    MetaData_csv = pd.read_csv(GT_csv_path).sort_values(by=['Unique_ID'])
     ##### Match latent code information with ground truth info #####
     # assert np.all(temp_matching_df.Unique_ID.values == MetaData_csv.Unique_ID.values), "Inference dataset doesn't match with csv metadata"
-    MetaData_csv = MetaData_csv.join(temp_matching_df.set_index('Unique_ID'), on='Unique_ID')
+    MetaData_csv = pd.merge(MetaData_csv, temp_matching_df.set_index('Unique_ID'), how='outer', on=["Unique_ID"])
 
     ##### Match raw data information with ground truth info #####
     if with_rawdata:

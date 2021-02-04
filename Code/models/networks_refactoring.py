@@ -23,7 +23,7 @@ import numpy as np
 from models.train_net import reparameterize, kl_divergence
 from sklearn.mixture import GaussianMixture
 from .model import AbstractModel
-
+import pytorch_lightning as pl
 
 # class twoStageVAE():
 
@@ -123,7 +123,7 @@ class VAE2(nn.Module):
         return x_recon, mu_z, logvar_z, z.squeeze()
 
 
-class betaVAE(AbstractModel):
+class betaVAE(AbstractModel, pl.LightningModule):
     def __init__(self, zdim=3, input_channels=3, beta=1, filepath=None):
         super().__init__(filepath=filepath)
         """
@@ -205,30 +205,8 @@ class betaVAE(AbstractModel):
         #     raise ValueError('Undefined loss type.')
 
         return {'loss': loss_recon + self.beta * loss_kl, 'recon_loss': loss_recon, 'KLD': loss_kl}
-        # TODO: sample image
-
-"""
-class TwoStageVAE(AbstractModel):
-    def __init__(self, z1_dim=100, z2_dim=3, input_channel=3, base_enc=32, base_dec=32, doubleEmbed=False, filepath=None):
-        super(AbstractModel, self).__init__(filepath)
-        self.z1_dim = z1_dim
-        self.z2_dim = z2_dim
-        self.doubleEmbed=doubleEmbed
-
-        self.VAE1 = betaVAE(zdim=z1_dim, input_channels=input_channel)
-        self.linEnc = nn.Sequential(
-            Linear_block(zdim, 256),
-            Linear_block(256, 1024),
-            Linear_block(1024, pow(2, input_channel - 1) * base_dec * 16),
-        )
-        self.decoder2 = Decoder(zdim=z2_dim, input_channel=input_channel)
-
-    def forward(self, x):
-        if self.doubleEmbed:
-
-        else:
-            x_encoded = self.VAE1.encode(x)
-"""
+        # TODO: sample function
+        # TODO: tensorboard add image follow this tutorial: https://learnopencv.com/tensorboard-with-pytorch-lightning/
 
 
 class VaDE(nn.Module):

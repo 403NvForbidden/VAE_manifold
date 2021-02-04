@@ -24,8 +24,8 @@ args.add_argument('--scheduler_gamma', type=float, default=.6)
 # args = args.parse_args()
 
 dataset_lookUp = {
-    "BBBC": {"path": 'Synthetic_Data_1', "meta": 'MetaData2_PeterHorvath_GT_link_CP_SUBSAMPLE.csv'},
-    "Hovarth": {"path": 'Peter_Horvath_Subsample', "meta": 'MetaData1_GT_link_CP.csv'},
+    "BBBC": {"path": 'Synthetic_Data_1', "meta": 'MetaData1_GT_link_CP.csv'},
+    "Hovarth": {"path": 'Peter_Horvath_Subsample', "meta": 'MetaData2_PeterHorvath_GT_link_CP_SUBSAMPLE.csv'},
     "Chaffer": {"path": 'Chaffer_Data', "meta": 'MetaData3_Chaffer_GT_link_CP.csv'},
 }
 

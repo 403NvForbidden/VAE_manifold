@@ -777,11 +777,11 @@ def train_2stage_infoMaxVAE_model(num_epochs, VAE_1, VAE_2, opti_VAE1, opti_VAE2
 class VAEXperiment(pl.LightningModule):
 
     def __init__(self,
-                 vae_model: AbstractModel,
+                 model: AbstractModel,
                  params: dict) -> None:
         super(VAEXperiment, self).__init__()
 
-        self.model = vae_model
+        self.model = model
         self.params = params
         self.curr_device = None
         self.epoch = 1
@@ -805,6 +805,9 @@ class VAEXperiment(pl.LightningModule):
         # train_loss['log'] = {key: val.item() for key, val in train_loss.items()}
         return train_loss
 
+    '''
+        
+    '''
     def custom_histogram(self):
         for n, p in self.model.named_parameters():
             self.logger.experiment.add_histogram(n, p, self.current_epoch)

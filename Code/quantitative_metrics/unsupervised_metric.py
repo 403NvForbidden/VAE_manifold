@@ -37,20 +37,20 @@ import plotly.offline
 def unsup_metric_and_local_Q(metadata_csv, low_dim_names=['x_coord', 'y_coord', 'z_coord'], raw_data_included=False,
                              feature_size=64 * 64 * 3, path_to_raw_data='DataSets/Synthetic_Data_1', saving_path=None,
                              kt=300, ks=500, only_local_Q=False):
-    """From a csv file containg 3D projection of single cell data, compute unsupervised metric
+    """
+    From a csv file containg low dimensional projection of single cell data, compute unsupervised metric
     (continuity, trustworthiness and LCMC), as well as return a local quality score per sample.
 
-    Params :
-        metadata_csv (string or DataFrame) : Path to csv file or directly DataFrame that contains the latent codes as well as ground information
-        low_dim_names ([string]) : Names of the columns that stores the latent codes
-        raw_data_included (bolean) : True if the raw data (high dim) is saved in the csv file under featurei columns for i from 0 to D-1
-        feature_size (int) : Number of dimension in the high dimensional data
-        path_to_raw_data (string) : Path to the folder where the raw data (single cell images) are stored
-        saving_path (string) : Path to the folder where to store the results
-        kt, ks (int) : Neighborhood size parameter for the local quality score (please refer to local_quality.py)
-        only_local_Q (bolean) : If True, only the local quality score is computed (save computational time)
+    :parameter
+        :param metadata_csv (string or DataFrame) : Path to csv file or directly DataFrame that contains the latent codes as well as ground information
+        :param low_dim_names ([string]) : Names of the columns that stores the latent codes
+        :param raw_data_included (bolean) : True if the raw data (high dim) is saved in the csv file under featurei columns for i from 0 to D-1
+        :param feature_size (int) : Number of dimension in the high dimensional data
+        :param path_to_raw_data (string) : Path to the folder where the raw data (single cell images) are stored
+        :param saving_path (string) : Path to the folder where to store the results
+        :param kt, ks (int) : Neighborhood size parameter for the local quality score (please refer to local_quality.py)
+        :param only_local_Q (bolean) : If True, only the local quality score is computed (save computational time)
     """
-
     ################################
     #### Process high and low dim data
     ################################
@@ -171,9 +171,7 @@ def unsup_metric_and_local_Q(metadata_csv, low_dim_names=['x_coord', 'y_coord', 
     #####################################
     ##### Compute Unsupervised Score based on Q
     #####################################
-
     print('##### Unsupervised score computation ...')
-
     trust, cont, lcmc = unsupervised_score(Q)
 
     aggregate_score = np.mean(np.stack([trust, cont, lcmc], axis=0), axis=0)
@@ -193,38 +191,6 @@ def unsup_metric_and_local_Q(metadata_csv, low_dim_names=['x_coord', 'y_coord', 
         lcmc_curves_plot(trust, trust_AUC, cont, cont_AUC, lcmc, lcmc_AUC, saving_path=saving_path + f'/{low_dim_names[0]}_')
 
     return trust_AUC, cont_AUC, lcmc_AUC, light_df
-
-
-# Use an inference DataLoader to go throughout ALL DATASET, and save each input image
-# as a 64x64x3 vector
-# Intput data must be in shape of  num_sample X 64x64x3
-
-# Can pre-compute rank-matrix for high dimensional input data to save time, but
-# need to be certain that the order match the embedded data !
-
-def compute_coranking(metadata_csv, feature_size, save_matrix=True, saving_path='DataSets/'):
-    """
-    Compute coranking matrix between input data and projected data, from the raw
-    data and latent code saved in csv file
-    """
-    if isinstance(path_to_csv, str):
-        MetaData_csv = pd.read_csv(metadata_csv)
-    else:
-        MetaData_csv = metadata_csv
-
-    data_raw = MetaData_csv[['feature' + str(i) for i in range(feature_size)]].to_numpy()
-    data_embedded = MetaData_csv[['x_coord', 'y_coord', 'z_coord']].to_numpy()
-
-    Q_final = coranking.coranking_matrix(data_raw, data_embedded)
-
-    if save_matrix:
-        # part_name = metadata_csv.split('_')
-        name_pkl = f'{saving_path}/coranking_matrix.pkl'
-        with open(name_pkl, 'wb') as f:
-            pkl.dump(Q_final, f, protocol=pkl.HIGHEST_PROTOCOL)
-
-    return Q_final
-
 
 def unsupervised_score(coranking_matrix):
     """Compute different unsupervised performance metrics

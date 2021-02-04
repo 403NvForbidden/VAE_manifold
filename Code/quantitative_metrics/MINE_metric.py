@@ -96,10 +96,10 @@ class baseline_MLP(nn.Module):
 ##### infoNCE Lower Bound ###########
 #####################################
 
-#Compute the Noise Constrastive Estimation (NCE) loss
+# Compute the Noise Constrastive Estimation (NCE) loss
 def infoNCE_bound(scores):
     '''Bound from Van Den Oord and al. (2018)'''
-    nll = torch.mean( torch.diag(scores) - torch.logsumexp(scores,dim=1))
+    nll = torch.mean(torch.diag(scores) - torch.logsumexp(scores,dim=1))
     k =scores.size()[0]
     mi = np.log(k) + nll
 
