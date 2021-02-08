@@ -209,6 +209,79 @@ class betaVAE(AbstractModel, pl.LightningModule):
         # TODO: tensorboard add image follow this tutorial: https://learnopencv.com/tensorboard-with-pytorch-lightning/
 
 
+class infoMaxVAE(AbstractModel, pl.LightningModule):
+    def __init__(self, zdim=3, input_channels=3, beta=1, filepath=None):
+        super().__init__(filepath=filepath)
+        """
+        param :
+            zdim (int) : dimension of the latent space
+            beta (float) : weight coefficient for DL divergence, when beta=1 is Valina VAE
+            Modulate the complexity of the model with parameter 'base_enc' and 'base_dec'
+        """
+        self.zdim = zdim
+        self.beta = beta
+        self.input_channels = input_channels
+
+        ##### Encoding layers #####
+        self.encoder = Encoder(out_size=256, input_channel=input_channels)
+
+        # inference mean and std
+        self.mu_logvar_gen = nn.Linear(256, self.zdim * 2)  # 256 -> 6
+
+        # to constrain logvar in a reasonable range
+        self.stabilize_exp = nn.Hardtanh(min_val=-6., max_val=2.)  # linear between min and max
+
+        ##### Decoding layers #####
+        self.decoder = Decoder(zdim=zdim, input_channel=input_channels)
+
+        # run weight initialization TODO: make this abstract class
+        self.initialization()
+
+    def initialization(self):
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d) or isinstance(m, nn.ConvTranspose2d):
+                xavier_normal_(m.weight,
+                               gain=math.sqrt(2. / (1 + 0.01)))  # Gain adapted for LeakyReLU activation function
+                m.bias.data.fill_(0.01)
+            elif isinstance(m, nn.BatchNorm2d):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
+
+    def encode(self, x):
+        return self.encoder(x)
+
+    def inference(self, x):
+        mu_logvar = self.mu_logvar_gen(x)
+        mu_z, logvar_z = mu_logvar.view(-1, self.zdim, 2).unbind(-1)
+        logvar_z = self.stabilize_exp(logvar_z)
+        return reparameterize(mu_z, logvar_z, self.training), mu_z, logvar_z
+
+    def decode(self, z):
+        return self.decoder(z)
+
+    def forward(self, img, **kwargs):
+        # (32, 3, 64, 64) or (3, 100)
+        x = self.encode(img)
+        z, mu_z, logvar_z = self.inference(x)
+        x_recon = self.decode(z)
+        return x_recon, mu_z, logvar_z, z.squeeze()
+
+    def objective_func(self, x, x_recon, mu_z, logvar_z, *args,
+                      **kwargs) -> dict:
+        """
+        :param x:
+        :param x_recon:
+        :param mu_z:
+        :param logvar_z:
+        :return: the loss of beta VAEs
+        """
+        loss_recon = F.mse_loss(torch.sigmoid(x_recon), x)
+        loss_recon *= x.size(1) * x.size(2) * x.size(3)
+        loss_recon.div(x.size(0))
+
+        loss_kl = kl_divergence(mu_z, logvar_z)
+
+
 class VaDE(nn.Module):
     def __init__(self, zdim=3, ydim=7, input_channels=3, base_enc=32, base_dec=32,
                  loss='BCEWithLogitsLoss'):

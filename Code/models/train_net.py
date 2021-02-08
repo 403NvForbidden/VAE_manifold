@@ -773,23 +773,20 @@ def train_2stage_infoMaxVAE_model(num_epochs, VAE_1, VAE_2, opti_VAE1, opti_VAE2
 ###################################################
 ##### Vanilla VAE and SCVAE training ##############
 ###################################################
-
 class VAEXperiment(pl.LightningModule):
-
     def __init__(self,
                  model: AbstractModel,
-                 params: dict) -> None:
+                 params: dict, log_path: str = '') -> None:
         super(VAEXperiment, self).__init__()
 
         self.model = model
         self.params = params
         self.curr_device = None
-        self.epoch = 1
-        # self.hold_graph = False
-        # try:
-        #     self.hold_graph = self.params['retain_first_backpass']
-        # except:
-        #     pass
+        self.log_path = log_path
+        # create log path
+        if not os.path.isdir(log_path):
+            print(f'creating path:=======>{log_path}')
+            os.mkdir(log_path)
 
     def forward(self, input: Tensor, **kwargs) -> Tensor:
         return self.model(input, **kwargs)
@@ -805,9 +802,6 @@ class VAEXperiment(pl.LightningModule):
         # train_loss['log'] = {key: val.item() for key, val in train_loss.items()}
         return train_loss
 
-    '''
-        
-    '''
     def custom_histogram(self):
         for n, p in self.model.named_parameters():
             self.logger.experiment.add_histogram(n, p, self.current_epoch)
@@ -822,12 +816,22 @@ class VAEXperiment(pl.LightningModule):
         self.logger.experiment.add_scalar('Recon Loss', avg_recon, self.current_epoch)
         self.logger.experiment.add_scalar('KLD Loss', avg_kld, self.current_epoch)
         if (self.current_epoch == 1):
-            sampleimg = torch.rand(1,3,64,64).cuda()
+            sampleimg = torch.rand(1, 3, 64, 64).cuda()
             self.logger.experiment.add_graph(self.model, sampleimg)
 
         self.custom_histogram()
 
+    '''
+        validation step in main training loop    
+    '''
+
     def validation_step(self, batch, batch_idx, optimizer_idx=0):
+        """
+        :param batch:
+        :param batch_idx:
+        :param optimizer_idx:
+        :return:
+        """
         img, labels = batch
         self.curr_device = img.device
 
@@ -916,6 +920,21 @@ class VAEXperiment(pl.LightningModule):
     
             del test_input, recons #, samples
     """
+
+    def save_manual(self, path):
+        save_brute(self.model, path)
+
+    '''
+        load pretrained weights
+    '''
+    def load_weights(self, ckpt_path):
+        if not ckpt_path: return # no weight path
+        print(ckpt_path)
+        self.load_state_dict(torch.load(ckpt_path)['state_dict'])
+        # try:
+        #     self.load_state_dict(torch.load(ckpt_path))
+        # except:
+        #     raise Exception("CANNOT load weights")
 
 
 def train(epoch, model, optimizer, train_loader, device='cpu'):

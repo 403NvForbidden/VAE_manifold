@@ -110,6 +110,7 @@ def metadata_latent_space_single(model, infer_dataloader, device, GT_csv_path, s
     id_list = []
     list_of_tensors = []  # Store raw_data for performance metrics
 
+    model.to(device)
     if model.zdim > 3:
         warnings.warn(f'Latent space is >3D ({model.zdim} dimensional), no visualization is provided')
 
