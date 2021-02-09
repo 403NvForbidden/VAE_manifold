@@ -9,7 +9,7 @@
 File containing custom pytorch module, to be used as building blocks of VAE models.
 c.f networks_refactoring.py for the models.
 '''
-
+import numpy as np
 import torch
 from torch import nn
 from torch.nn import functional as F
@@ -230,75 +230,57 @@ class Skip_DeConv_up(nn.Module):
         else:
             return x + x_skip_up.squeeze(0)
 
-"""
-class ResBlock_identity(nn.Module):
-    '''Basic Identity ResBlock. Input goes through :
-    - Two Conv2D + BN + Activation
-    - Shortcut identity mapping
+class MLP_MI_estimator(nn.Module):
+    """MLP, that take in input both input data and latent codes and output
+    an unique value in R.
+    This network defines the function t(x,z) that appears in the variational
+    representation of a f-divergence. Finding t() that maximize this f-divergence,
+    lead to a variation representation that is a tight bound estimator of mutual information.
+    """
 
-    Both paths are added at the end. Keep same dimensionality'''
+    def __init__(self, input_dim, zdim=3):
+        super(MLP_MI_estimator, self).__init__()
 
-    def __init__(self, channels, kernel_size=(3, 3)):
-        super(ConvUpsampling, self).__init__()
+        self.input_dim = input_dim
+        self.zdim = zdim
+        self.epochs = 0
 
-        self.conv1 = nn.Sequential(
-            nn.Conv2d(channels, channels, kernel_size, padding=1),
-            nn.BatchNorm2d(out_channels),
-            nn.LeakyReLU()
+        self.MLP_g = nn.Sequential(
+            nn.Linear(input_dim, 1024),
+            nn.ReLU(),
+            nn.Linear(1024, 512),
+            nn.ReLU(),
+            nn.Linear(512, 32),
         )
-        self.conv2 = nn.Sequential(
-            nn.Conv2d(channels, channels, kernel_size, padding=1),
-            nn.BatchNorm2d(out_channels),
+        self.MLP_h = nn.Sequential(
+            nn.Linear(zdim, 256),
+            nn.ReLU(),
+            nn.Linear(256, 256),
+            nn.ReLU(),
+            nn.Linear(256, 32),
         )
-        self.activation = nn.LeakyReLU()
 
-    def forward(self, x):
-        # shortcut path
-        identity = x
-        # main path
-        x = self.conv1(x)
-        x = self.conv2(x)
-        # add
-        x += idendity
-        out = self.activation(x)
+    def forward(self, x, z):
+        # flatten
+        x = x.view(-1, self.input_dim)
+        z = z.view(-1, self.zdim)
+        x_g = self.MLP_g(x)  # Batchsize x 32
+        y_h = self.MLP_h(z)  # Batchsize x 32
+        scores = torch.matmul(y_h, torch.transpose(x_g, 0, 1))
 
-        return out
+        return self.infoNCE_bound(scores)  # Each element i,j is a scalar in R. f(xi,proj_j)
 
+    # Compute the Noise Constrastive Estimation (NCE) loss infoNCE_bound
+    def infoNCE_bound(self, scores):
+        """Bound from Van Den Oord and al. (2018)"""
+        nll = torch.mean(torch.diag(scores) - torch.logsumexp(scores, dim=1))
+        k = scores.size()[0]
+        mi = np.log(k) + nll
+        return mi
 
-class ResBlock_Conv(nn.Module):
-    '''DownSampling ResBlock. Input goes through :
-    - Two Conv2D + BN + Activation. First one double the depth and halve the resolution
-    - Shortcut with one conv2D to match dimension
-
-    Both paths are added at the end. Keep same dimensionality'''
-
-    def __init__(self, in_channels, out_channels, kernel_size):
-        super(ConvUpsampling, self).__init__()
-
-        self.conv1 = nn.Sequential(
-            nn.Conv2d(in_channels, out_channels, kernel_size, stride=2, padding=1),  # Resolution / 2
-            nn.BatchNorm2d(out_channels),
-            nn.LeakyReLU()
-        )
-        self.conv2 = nn.Sequential(
-            nn.Conv2d(out_channels, out_channels, kernel_size, padding=1),  # Keep same dim
-            nn.BatchNorm2d(out_channels),
-        )
-        self.convShortcut = nn.Sequential(
-            nn.Conv2d(in_channels, out_channels, kernel_size, stride=2, padding=1),  # Resolution / 2
-            nn.BatchNorm2d(out_channels)
-        )
-        self.activation = nn.LeakyReLU()
-
-    def forward(self, x):
-        # shortcut path
-        shortcut = self.convShortcut(x)
-        # main path
-        x = self.conv1(x)
-        x = self.conv2(x)
-        # add
-        x += shortcut
-        out = self.activation(x)
-
-        return out
-"""
+def infoNCE_bound(self, scores):
+    """Bound from Van Den Oord and al. (2018)"""
+    nll = torch.mean(torch.diag(scores) - torch.logsumexp(scores, dim=1))
+    k = scores.size()[0]
+    mi = np.log(k) + nll
+    return mi

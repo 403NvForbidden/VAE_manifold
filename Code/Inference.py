@@ -22,7 +22,8 @@ from torch.autograd import Variable
 from scipy.stats import norm
 
 from models.networks_refactoring import betaVAE, Skip_VAE, VAE2
-from models.infoMAX_VAE import CNN_128_VAE, MLP_MI_estimator
+from models.infoMAX_VAE import CNN_128_VAE
+from models.nn_modules import MLP_MI_estimator
 from util.data_processing import get_train_val_dataloader, imshow_tensor, get_inference_dataset
 from models.train_net import train_VAE_model, train_2stage_VAE_model, train_2stage_infoMaxVAE_model
 from util.helpers import plot_train_result, plot_train_result_infoMax, save_checkpoint, load_checkpoint, save_brute, \

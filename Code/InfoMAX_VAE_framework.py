@@ -23,7 +23,7 @@ import matplotlib.pyplot as plt
 import torch
 from torch import cuda, optim
 
-from models.infoMAX_VAE import MLP_MI_estimator
+from models.nn_modules import MLP_MI_estimator
 from models.networks_refactoring import betaVAE, VAE2
 from models.train_net import train_2stage_infoMaxVAE_model
 from util.data_processing import get_train_val_dataloader, get_inference_dataset

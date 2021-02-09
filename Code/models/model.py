@@ -76,26 +76,3 @@ class AbstractModel(nn.Module):
 
     def generate(self, x: Tensor, **kwargs) -> Tensor:
         raise NotImplementedError
-
-class AbtractTrainer(ABC):
-    """
-    Abstract base class which will serve as a NN trainer
-    """
-    def __init__(self, dataset,
-                 model,
-                 lr=1e-4):
-        """
-        Initializes the trainer class
-        :param dataset: torch Dataset object
-        :param model: torch.nn object
-        :param lr: float, learning rate
-        """
-        self.dataset = dataset
-        self.model = model
-        self.optimizer = torch.optim.Adam(
-            filter(lambda p: p.requires_grad, self.model.parameters()),
-            lr=lr
-        )
-        self.global_iter = 0
-        self.trainer_config = ''
-        self.writer = None

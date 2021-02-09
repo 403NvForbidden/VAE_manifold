@@ -77,8 +77,8 @@ def get_train_val_dataloader(root_dir, input_size, batchsize, test_split=0.2):
     #     Double_to_Float()])
     # Create DataIterator, yield batch of img and label easily and in time, to not load full heavy set
     # Dataloader iterators
-    train_loader = DataLoader(dataset_train, batch_size=batchsize, sampler=train_sampler, drop_last=True)
-    valid_loader = DataLoader(dataset_valid, batch_size=batchsize, sampler=valid_sampler, drop_last=True)
+    train_loader = DataLoader(dataset_train, batch_size=batchsize, sampler=train_sampler, drop_last=True, num_workers=12)
+    valid_loader = DataLoader(dataset_valid, batch_size=batchsize, sampler=valid_sampler, drop_last=True, num_workers=12)
 
     return train_loader, valid_loader
 
@@ -106,7 +106,7 @@ def get_inference_dataset(dataset_dir, batchsize, input_size, shuffle=False, dro
     data = datasets.DatasetFolder(root=dataset_dir, loader=keep_Metadata_from_path(),
                                   extensions=('.png', '.jpg', '.tif', '.tiff'), transform=inference_trfm)
     dataloaders = DataLoader(data, batch_size=batchsize, collate_fn=My_ID_Collator(), shuffle=shuffle,
-                             drop_last=droplast)
+                             drop_last=droplast, num_workers=12)
 
     return data, dataloaders
 

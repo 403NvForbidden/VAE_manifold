@@ -861,7 +861,7 @@ def load_checkpoint(path):
         checkpoint = torch.load(path, map_location='cpu')  # If saved from GPU, need to be reload on GPU as well !
 
     if checkpoint['model_type'] == 'VAE_CNN_vanilla':
-        model = VAE(zdim=checkpoint['zdim'], channels=checkpoint['channels'], base=checkpoint['base'],
+        model = betaVAE(zdim=checkpoint['zdim'], channels=checkpoint['channels'], base=checkpoint['base'],
                     loss=checkpoint['loss'], layer_count=checkpoint['layer_count'], input_size=checkpoint['input_size'])
 
     # Load in the state dict
