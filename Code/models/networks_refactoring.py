@@ -16,6 +16,7 @@ import torch
 import math
 from torch import nn
 from torch.nn import functional as F
+from torch.nn import Parameter
 from torch.nn.init import xavier_normal_
 from models.nn_modules import Conv, ConvUpsampling, Skip_Conv_down, Skip_DeConv_up, Linear_block, \
     Encoder, Decoder, MLP_MI_estimator
@@ -25,9 +26,14 @@ from sklearn.mixture import GaussianMixture
 from .model import AbstractModel
 import pytorch_lightning as pl
 import torch.optim as optim
+from torch.autograd import Variable
+
+from ._types_ import *
+
 
 class twoStageVAE(AbstractModel, pl.LightningModule):
-    def __init__(self, zdim_1=3, zdim_2=100, input_channels=3, input_size=64, alpha=1, beta=1, gamma=100, filepath=None):
+    def __init__(self, zdim_1=3, zdim_2=100, input_channels=3, input_size=64, alpha=1, beta=1, gamma=100,
+                 filepath=None):
         super().__init__(filepath=filepath)
         """
         param :
@@ -42,16 +48,18 @@ class twoStageVAE(AbstractModel, pl.LightningModule):
         self.gamma = gamma
         self.input_channels = input_channels
         self.input_size = input_size
+        # temp variable that saved the list of last step losses of the model
+        self.list_loss = []
+        self.loss_dict = {}
 
         self.MI_estimator_1 = MLP_MI_estimator(input_dim=input_size * input_size * input_channels, zdim=zdim_1)
         self.MI_estimator_2 = MLP_MI_estimator(input_dim=input_size * input_size * input_channels, zdim=zdim_2)
 
         ##### Encoding layers #####
         self.encoder = Encoder(out_size=256, input_channel=input_channels)
-        self.lin = nn.Sequential(
-            Linear_block(256, 1024),
-            Linear_block(1024, 256)
-        )
+        # self.lin = nn.Sequential(
+        #     Linear_block(256, 64)
+        # )
 
         # inference mean and std
         self.mu_logvar_gen_1 = nn.Linear(256, self.zdim_1 * 2)  # 256 -> 6
@@ -69,7 +77,7 @@ class twoStageVAE(AbstractModel, pl.LightningModule):
 
     def encode(self, x):
         x_1 = self.encoder(x)
-        x_2 = self.lin(x_1)
+        x_2 = x_1.detach().clone()
         return x_1, x_2
 
     def inference(self, x_1, x_2):
@@ -120,34 +128,67 @@ class twoStageVAE(AbstractModel, pl.LightningModule):
         MI_2 = self.MI_estimator_2(x, z_2)
 
         ## adding MI regularizer
-        loss = (loss_1 - self.alpha * MI_2) + self.gamma * (loss_2 - self.alpha * MI_2)
-        return {'loss': loss, 'MI_1': MI_1, 'recon_loss_1': loss_recon_1, 'KLD_1': loss_kl_1,
-                'MI_2': MI_2, 'recon_loss_2': loss_recon_2, "KLD_2": loss_kl_2}
+        loss = (loss_1 - self.alpha * MI_1) + self.gamma * (loss_2 - self.alpha * MI_2)
+        return {'loss': loss, 'MI_1': -MI_1, 'MI_2': -MI_2, 'recon_loss_1': loss_recon_1, 'KLD_1': loss_kl_1,
+                'recon_loss_2': loss_recon_2, "KLD_2": loss_kl_2}
+
+    def training_step(self, batch, batch_idx, optimizer_idx=0, *args, **kwargs):
+        if optimizer_idx == 0:
+            img, labels = batch
+            self.curr_device = img.device
+            # VAE 1 only step once
+            self.loss_dict = self.step(img)
+            # detach and add to to list
+            temp_dict = {}
+            for k, v in self.loss_dict.items():
+                temp_dict[k] = v.clone().data.cpu()
+            self.list_loss.append(temp_dict)
+
+            return self.loss_dict['loss']
+        elif optimizer_idx == 1:
+            # MI_estimator 1
+            return self.loss_dict['MI_1']
+        elif optimizer_idx == 2:
+            return self.loss_dict['MI_2']
+
+    def backward(self, loss: Tensor, optimizer: Optimizer, optimizer_idx: int, *args, **kwargs) -> None:
+        # if optimizer_idx == 0:
+        loss.backward(retain_graph=True)
+        optimizer.step()
+        optimizer.zero_grad()
+        # else:
+        #     loss.backward()
 
     def configure_optimizers(self, params):
-        optimizer_VAE = optim.Adam(self.parameters(),
-                                   lr=params['lr'], betas=(0.9, 0.999),
-                                   weight_decay=params['weight_decay'])
+
+        optimizer_VAE_1 = optim.Adam([
+            {'params': self.encoder.parameters()},
+            {'params': self.mu_logvar_gen_1.parameters()},
+            {'params': self.mu_logvar_gen_2.parameters()},
+            {'params': self.decoder_1.parameters()},
+            {'params': self.decoder_2.parameters()},
+        ],
+            lr=params['lr'], betas=(0.9, 0.999),
+            weight_decay=params['weight_decay'])
+
         optimizer_MI = optim.Adam(self.MI_estimator_1.parameters(),
                                   lr=params['lr'], betas=(0.9, 0.999),
                                   weight_decay=params['weight_decay'])
 
         optimizer_MI_2 = optim.Adam(self.MI_estimator_2.parameters(),
-                                   lr=params['lr'], betas=(0.9, 0.999),
-                                   weight_decay=params['weight_decay'])
+                                    lr=params['lr'], betas=(0.9, 0.999),
+                                    weight_decay=params['weight_decay'])
 
-        for name, param in self.named_parameters():
-            if param.requires_grad:
-                print(name, param.data)
-
-        scheduler_VAE = optim.lr_scheduler.ExponentialLR(optimizer_VAE, gamma=params['scheduler_gamma'])
+        scheduler_VAE_1 = optim.lr_scheduler.ExponentialLR(optimizer_VAE_1, gamma=params['scheduler_gamma'])
+        # scheduler_VAE_2 = optim.lr_scheduler.ExponentialLR(optimizer_VAE_2, gamma=params['scheduler_gamma'])
         scheduler_MI_1 = optim.lr_scheduler.ExponentialLR(optimizer_MI, gamma=params['scheduler_gamma'])
         scheduler_MI_2 = optim.lr_scheduler.ExponentialLR(optimizer_MI_2, gamma=params['scheduler_gamma'])
 
         return (
-            {'optimizer': optimizer_VAE, 'lr_scheduler': scheduler_VAE},
+            {'optimizer': optimizer_VAE_1, 'lr_scheduler': scheduler_VAE_1},
             {'optimizer': optimizer_MI, 'lr_scheduler': scheduler_MI_1},
-            {'optimizer': optimizer_MI_2, 'lr_scheduler': scheduler_MI_2}
+            {'optimizer': optimizer_MI_2, 'lr_scheduler': scheduler_MI_2},
+            # {'optimizer': optimizer_VAE_2, 'lr_scheduler': scheduler_VAE_1},
         )
 
 
@@ -261,6 +302,7 @@ class betaVAE(AbstractModel, pl.LightningModule):
         self.beta = beta
         self.input_channels = input_channels
         self.input_size = input_size
+        self.list_loss = []
         ##### Encoding layers #####
         self.encoder = Encoder(out_size=256, input_channel=input_channels)
 
@@ -298,6 +340,12 @@ class betaVAE(AbstractModel, pl.LightningModule):
     def decode(self, z):
         return self.decoder(z)
 
+    def training_step(self, batch, batch_idx, optimizer_idx=0, *args, **kwargs) -> dict:
+        img, labels = batch
+        self.curr_device = img.device
+        # only forward once
+        return self.step(img)
+
     def forward(self, img, **kwargs):
         # (32, 3, 64, 64) or (3, 100)
         x = self.encode(img)
@@ -309,6 +357,9 @@ class betaVAE(AbstractModel, pl.LightningModule):
         x_recon, mu_z, logvar_z, _ = self.forward(img)
         loss = self.objective_func(img, x_recon, mu_z, logvar_z)
         return loss
+
+    def backward(self, loss: Tensor, optimizer: Optimizer, optimizer_idx: int, *args, **kwargs) -> None:
+        loss.backward()
 
     def objective_func(self, x, x_recon, mu_z, logvar_z, *args,
                        **kwargs) -> dict:
@@ -360,6 +411,9 @@ class infoMaxVAE(AbstractModel, pl.LightningModule):
         self.input_size = input_size
         self.MI_estimator = MLP_MI_estimator(input_dim=input_size * input_size * input_channels, zdim=zdim)
         self.VAE = betaVAE(zdim, input_channels, input_size, beta=beta)
+        # temp variable that saved the list of last step losses of the model
+        self.list_loss = []
+        self.loss_dict = {}
 
     def encode(self, x):
         return self.VAE.encoder(x)
@@ -392,14 +446,45 @@ class infoMaxVAE(AbstractModel, pl.LightningModule):
         MI = self.MI_estimator(x, z)
         ## adding MI regularizer
         loss -= self.alpha * MI
-        return {'loss': loss, 'MI': MI, 'recon_loss': loss_recon, 'KLD': loss_kl}
+        return {'loss': loss, 'MI_loss': -MI, 'recon_loss': loss_recon, 'KLD': loss_kl}
+
+    def training_step(self, batch, batch_idx, optimizer_idx=0, *args, **kwargs):
+        if optimizer_idx == 0:
+            img, labels = batch
+            self.curr_device = img.device
+
+            # VAE 1 only step once
+            self.loss_dict = self.step(img)
+            # detach and add to to list
+            temp_dict = {}
+            for k, v in self.loss_dict.items():
+                temp_dict[k] = v.clone().data.cpu()
+            self.list_loss.append(temp_dict)
+
+            return self.loss_dict['loss']
+        elif optimizer_idx == 1:
+            # MI_estimator 1
+            return self.loss_dict['MI_loss']
+
+    def backward(self, loss: Tensor, optimizer: Optimizer, optimizer_idx: int, *args, **kwargs) -> None:
+        # TODO: explain
+        if optimizer_idx == 0:
+            loss.backward(retain_graph=True)
+            optimizer.step()
+            optimizer.zero_grad()
+        else:
+            loss.backward()
 
     def configure_optimizers(self, params):
-        optimizer_VAE = optim.Adam(self.VAE.parameters(),
-                                   lr=params['lr'], betas=(0.9, 0.999),
-                                   weight_decay=params['weight_decay'])
+        optimizer_VAE = optim.Adam(
+            [
+                {'params': self.VAE.parameters()},
+                {'params': self.MI_estimator.parameters()},
+            ],
+            lr=params['lr'], betas=(0.9, 0.999),
+            weight_decay=params['weight_decay'])
         optimizer_MI = optim.Adam(self.MI_estimator.parameters(),
-                                  lr=params['lr'], betas=(0.9, 0.999),
+                                  lr=params['lr'] * 100, betas=(0.9, 0.999),
                                   weight_decay=params['weight_decay'])
 
         scheduler_VAE = optim.lr_scheduler.ExponentialLR(optimizer_VAE, gamma=params['scheduler_gamma'])

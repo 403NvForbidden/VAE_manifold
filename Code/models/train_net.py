@@ -789,54 +789,66 @@ class VAEXperiment(pl.LightningModule):
             print(f'creating path:=======>{log_path}')
             os.mkdir(log_path)
 
+    def parameter_histogram(self):
+        for n, p in self.model.state_dict().items(): #.named_parameters():
+            self.logger.experiment.add_histogram(n, p, self.global_step)
+
     '''
         extracted method for stepping image data with model
     '''
+
     def training_step(self, batch, batch_idx, optimizer_idx=0) -> dict:
         # self.log_dict({key: val.item() for key, val in train_loss.items()}, on_step=False, on_epoch=True, prog_bar=True, logger=True)
         # train_loss['log'] = {key: val.item() for key, val in train_loss.items()}
         img, labels = batch
         self.curr_device = img.device
-        return self.model.step(img)
+        return self.model.training_step(batch, batch_idx, optimizer_idx)
 
-    def parameter_histogram(self):
-        for n, p in self.model.named_parameters():
-            self.logger.experiment.add_histogram(n, p, self.current_epoch)
+    def backward(self, loss: Tensor, optimizer: Optimizer, optimizer_idx: int, *args, **kwargs) -> None:
+        self.model.backward(loss, optimizer, optimizer_idx)
+
+    def on_after_backward(self) -> None:
+        if self.global_step % 25 == 0:
+            self.parameter_histogram()
 
     def training_epoch_end(self, outputs: list):
         """
         :param outputs: [{loss_name, val}]
         """
         # map reduce the sum of each loss_name, values must be positive
-        if isinstance(outputs[0], list): outputs = outputs[-1]
+        outputs = self.model.list_loss if len(self.model.list_loss) != 0 else outputs
+        # if isinstance(outputs[0], list): outputs = outputs[-1]
         result = dict(functools.reduce(operator.add, map(collections.Counter, outputs)))
         # add each of
-        for k, v in result.items(): self.logger.experiment.add_scalar(k, v/len(outputs), self.current_epoch)
+        for k, v in result.items(): self.logger.experiment.add_scalar(k, v, self.current_epoch)
+        ### reset
+        self.model.loss_dict = []
 
         if self.current_epoch == 1:
             sample_img = torch.rand(1, self.model.input_channels, self.model.input_size, self.model.input_size).to(
                 self.curr_device)
             self.logger.experiment.add_graph(self.model, sample_img)
 
-        self.parameter_histogram()
+        # self.parameter_histogram()
 
     def validation_step(self, batch, batch_idx, optimizer_idx=0):
         """
-        validation step in main training loop
+        Validation step in main training loop (requried) TODO:
         """
-        img, labels = batch
-        self.curr_device = img.device
-        return self.model.step(img)
+        pass
 
     def validation_end(self, outputs):
-        result = dict(functools.reduce(operator.add, map(collections.Counter, outputs)))
-        for k, v in result.items(): self.logger.experiment.add_scalar("val_" + k, v, self.current_epoch)
-        # self.sample_images()
+        '''
+        TODO:
+        '''
+        # result = dict(functools.reduce(operator.add, map(collections.Counter, outputs)))
+        # for k, v in result.items(): self.logger.experiment.add_scalar("val_" + k, v, self.current_epoch)
+        pass
 
     ### required
     def configure_optimizers(self):
         """
-        Config Optimizer (requries)
+        Config Optimizer Wrapper (requried)
         """
         return self.model.configure_optimizers(self.params)
 

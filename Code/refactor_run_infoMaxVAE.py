@@ -35,7 +35,7 @@ GT_path = os.path.join(args.input_path, dataset_lookUp[args.dataset]['meta'])
 device = torch.device('cpu' if not cuda.is_available() else 'cuda')
 
 # if in training model, create new folder,otherwise use a existing parent directory of the pretrained weights
-if args.train:
+if args.train and args.weight_path == '':
     save_model_path = os.path.join(args.output_path,
                                    args.model + "_" + str(datetime.datetime.now().strftime("%Y-%m-%d-%H:%M")))
 else:
@@ -64,7 +64,7 @@ checkpoint_callback = ModelCheckpoint(
     monitor='loss',
     dirpath=os.path.join(save_model_path, "logs"),
     filename='ckpt-{epoch:02d}',
-    save_top_k=3,
+    save_top_k=1,
     mode='min',
 )
 trainer = pl.Trainer(logger=logger, max_epochs=args.epochs, auto_scale_batch_size='binsearch', auto_lr_find=True,
