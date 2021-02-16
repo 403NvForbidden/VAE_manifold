@@ -408,6 +408,7 @@ class infoMaxVAE(AbstractModel, pl.LightningModule):
         self.input_size = input_size
         self.MI_estimator = MLP_MI_estimator(input_dim=input_size * input_size * input_channels, zdim=zdim)
         self.VAE = betaVAE(zdim, input_channels, input_size, beta=beta)
+        self.z = None
         # temp variable that saved the list of last step losses of the model
         self.history = []
         self.loss_dict = {}
@@ -426,6 +427,7 @@ class infoMaxVAE(AbstractModel, pl.LightningModule):
 
     def step(self, img) -> dict:
         x_recon, mu_z, logvar_z, z = self.forward(img)
+        self.z = z
         loss = self.objective_func(img, x_recon, mu_z, logvar_z, z)
         return loss
 
@@ -440,8 +442,7 @@ class infoMaxVAE(AbstractModel, pl.LightningModule):
         """
         loss_recon = F.mse_loss(torch.sigmoid(x_recon), x)
         loss, loss_kl = scalar_loss(x, loss_recon, mu_z, logvar_z, self.beta)
-        MI = self.MI_estimator(x, z)
-        MI_loss = -MI
+        MI_loss = -self.MI_estimator(x, z)
         ## adding MI regularizer
         loss += self.alpha * MI_loss
 
@@ -450,11 +451,12 @@ class infoMaxVAE(AbstractModel, pl.LightningModule):
     def training_step(self, batch, batch_idx, optimizer_idx=0, *args, **kwargs):
         img, labels = batch
         self.curr_device = img.device
-        self.loss_dict = self.step(img)
-
         if optimizer_idx == 0:
+            self.loss_dict = self.step(img)
             return self.loss_dict['loss']
         elif optimizer_idx == 1:
+            self.loss_dict['MI_loss'] = -self.MI_estimator(img, self.z)
+
             # detach and add to to list
             temp_dict = {}
             for k, v in self.loss_dict.items():
