@@ -32,7 +32,7 @@ from ._types_ import *
 
 
 class twoStageVAE(AbstractModel, pl.LightningModule):
-    def __init__(self, zdim_1=3, zdim_2=100, input_channels=3, input_size=64, alpha=1, beta=1, gamma=100,
+    def __init__(self, zdim_1=100, zdim_2=3, input_channels=3, input_size=64, alpha=1, beta=1, gamma=100,
                  filepath=None):
         super().__init__(filepath=filepath)
         """
@@ -49,7 +49,7 @@ class twoStageVAE(AbstractModel, pl.LightningModule):
         self.input_channels = input_channels
         self.input_size = input_size
         # temp variable that saved the list of last step losses of the model
-        self.list_loss = []
+        self.history = []
         self.loss_dict = {}
 
         self.MI_estimator_1 = MLP_MI_estimator(input_dim=input_size * input_size * input_channels, zdim=zdim_1)
@@ -77,7 +77,8 @@ class twoStageVAE(AbstractModel, pl.LightningModule):
 
     def encode(self, x):
         x_1 = self.encoder(x)
-        x_2 = x_1.detach().clone()
+        # copy data for the VAE_
+        x_2 = x_1.clone()
         return x_1, x_2
 
     def inference(self, x_1, x_2):
@@ -129,35 +130,30 @@ class twoStageVAE(AbstractModel, pl.LightningModule):
 
         ## adding MI regularizer
         loss = (loss_1 - self.alpha * MI_1) + self.gamma * (loss_2 - self.alpha * MI_2)
-        return {'loss': loss, 'MI_1': -MI_1, 'MI_2': -MI_2, 'recon_loss_1': loss_recon_1, 'KLD_1': loss_kl_1,
+        return {'loss': loss, 'MI_loss_1': -MI_1, 'MI_loss_2': -MI_2, 'recon_loss_1': loss_recon_1, 'KLD_1': loss_kl_1,
                 'recon_loss_2': loss_recon_2, "KLD_2": loss_kl_2}
 
     def training_step(self, batch, batch_idx, optimizer_idx=0, *args, **kwargs):
+        img, labels = batch
+        self.curr_device = img.device
+        # VAE 1 only step once
+        self.loss_dict = self.step(img)
         if optimizer_idx == 0:
-            img, labels = batch
-            self.curr_device = img.device
-            # VAE 1 only step once
-            self.loss_dict = self.step(img)
+            return self.loss_dict['loss']
+        elif optimizer_idx == 1:
+            # MI_estimator 1
+            return self.loss_dict['MI_loss_1']
+        elif optimizer_idx == 2:
             # detach and add to to list
             temp_dict = {}
             for k, v in self.loss_dict.items():
                 temp_dict[k] = v.clone().data.cpu()
-            self.list_loss.append(temp_dict)
+            self.history.append(temp_dict)
 
-            return self.loss_dict['loss']
-        elif optimizer_idx == 1:
-            # MI_estimator 1
-            return self.loss_dict['MI_1']
-        elif optimizer_idx == 2:
-            return self.loss_dict['MI_2']
+            return self.loss_dict['MI_loss_2']
 
     def backward(self, loss: Tensor, optimizer: Optimizer, optimizer_idx: int, *args, **kwargs) -> None:
-        # if optimizer_idx == 0:
         loss.backward(retain_graph=True)
-        optimizer.step()
-        optimizer.zero_grad()
-        # else:
-        #     loss.backward()
 
     def configure_optimizers(self, params):
 
@@ -171,13 +167,14 @@ class twoStageVAE(AbstractModel, pl.LightningModule):
             lr=params['lr'], betas=(0.9, 0.999),
             weight_decay=params['weight_decay'])
 
-        optimizer_MI = optim.Adam(self.MI_estimator_1.parameters(),
+        optimizer_MI = optim.Adam([{'params': self.MI_estimator_1.parameters()},
+                                   {'params': self.MI_estimator_2.parameters()}, ],
                                   lr=params['lr'], betas=(0.9, 0.999),
                                   weight_decay=params['weight_decay'])
 
-        optimizer_MI_2 = optim.Adam(self.MI_estimator_2.parameters(),
-                                    lr=params['lr'], betas=(0.9, 0.999),
-                                    weight_decay=params['weight_decay'])
+        # optimizer_MI_2 = optim.Adam(self.MI_estimator_2.parameters(),
+        #                             lr=params['lr'], betas=(0.9, 0.999),
+        #                             weight_decay=params['weight_decay'])
 
         scheduler_VAE_1 = optim.lr_scheduler.ExponentialLR(optimizer_VAE_1, gamma=params['scheduler_gamma'])
         # scheduler_VAE_2 = optim.lr_scheduler.ExponentialLR(optimizer_VAE_2, gamma=params['scheduler_gamma'])
@@ -302,7 +299,7 @@ class betaVAE(AbstractModel, pl.LightningModule):
         self.beta = beta
         self.input_channels = input_channels
         self.input_size = input_size
-        self.list_loss = []
+        self.history = []
         ##### Encoding layers #####
         self.encoder = Encoder(out_size=256, input_channel=input_channels)
 
@@ -412,7 +409,7 @@ class infoMaxVAE(AbstractModel, pl.LightningModule):
         self.MI_estimator = MLP_MI_estimator(input_dim=input_size * input_size * input_channels, zdim=zdim)
         self.VAE = betaVAE(zdim, input_channels, input_size, beta=beta)
         # temp variable that saved the list of last step losses of the model
-        self.list_loss = []
+        self.history = []
         self.loss_dict = {}
 
     def encode(self, x):
@@ -444,45 +441,37 @@ class infoMaxVAE(AbstractModel, pl.LightningModule):
         loss_recon = F.mse_loss(torch.sigmoid(x_recon), x)
         loss, loss_kl = scalar_loss(x, loss_recon, mu_z, logvar_z, self.beta)
         MI = self.MI_estimator(x, z)
+        MI_loss = -MI
         ## adding MI regularizer
-        loss -= self.alpha * MI
-        return {'loss': loss, 'MI_loss': -MI, 'recon_loss': loss_recon, 'KLD': loss_kl}
+        loss += self.alpha * MI_loss
+
+        return {'loss': loss, 'MI_loss': MI_loss, 'recon_loss': loss_recon, 'KLD': loss_kl}
 
     def training_step(self, batch, batch_idx, optimizer_idx=0, *args, **kwargs):
-        if optimizer_idx == 0:
-            img, labels = batch
-            self.curr_device = img.device
+        img, labels = batch
+        self.curr_device = img.device
+        self.loss_dict = self.step(img)
 
-            # VAE 1 only step once
-            self.loss_dict = self.step(img)
+        if optimizer_idx == 0:
+            return self.loss_dict['loss']
+        elif optimizer_idx == 1:
             # detach and add to to list
             temp_dict = {}
             for k, v in self.loss_dict.items():
                 temp_dict[k] = v.clone().data.cpu()
-            self.list_loss.append(temp_dict)
-
-            return self.loss_dict['loss']
-        elif optimizer_idx == 1:
-            # MI_estimator 1
+            self.history.append(temp_dict)
             return self.loss_dict['MI_loss']
 
     def backward(self, loss: Tensor, optimizer: Optimizer, optimizer_idx: int, *args, **kwargs) -> None:
-        # TODO: explain
         if optimizer_idx == 0:
             loss.backward(retain_graph=True)
-            optimizer.step()
-            optimizer.zero_grad()
         else:
             loss.backward()
 
     def configure_optimizers(self, params):
-        optimizer_VAE = optim.Adam(
-            [
-                {'params': self.VAE.parameters()},
-                {'params': self.MI_estimator.parameters()},
-            ],
-            lr=params['lr'], betas=(0.9, 0.999),
-            weight_decay=params['weight_decay'])
+        optimizer_VAE = optim.Adam([{'params': self.VAE.parameters()}],
+                                   lr=params['lr'], betas=(0.9, 0.999),
+                                   weight_decay=params['weight_decay'])
         optimizer_MI = optim.Adam(self.MI_estimator.parameters(),
                                   lr=params['lr'] * 100, betas=(0.9, 0.999),
                                   weight_decay=params['weight_decay'])
@@ -492,7 +481,7 @@ class infoMaxVAE(AbstractModel, pl.LightningModule):
 
         return (
             {'optimizer': optimizer_VAE, 'lr_scheduler': scheduler_VAE},
-            {'optimizer': optimizer_MI, 'lr_scheduler': scheduler_MI}
+            {'optimizer': optimizer_MI, 'lr_scheduler': scheduler_MI},
         )
 
 

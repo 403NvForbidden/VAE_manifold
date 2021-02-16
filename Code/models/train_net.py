@@ -790,8 +790,13 @@ class VAEXperiment(pl.LightningModule):
             os.mkdir(log_path)
 
     def parameter_histogram(self):
-        for n, p in self.model.state_dict().items(): #.named_parameters():
+        for n, p in self.model.state_dict().items():  # .named_parameters():
             self.logger.experiment.add_histogram(n, p, self.global_step)
+
+    def plot_computation_graph(self):
+        sample_img = torch.rand(1, self.model.input_channels, self.model.input_size, self.model.input_size).to(
+            self.curr_device)
+        self.logger.experiment.add_graph(self.model, sample_img)
 
     '''
         extracted method for stepping image data with model
@@ -808,7 +813,7 @@ class VAEXperiment(pl.LightningModule):
         self.model.backward(loss, optimizer, optimizer_idx)
 
     def on_after_backward(self) -> None:
-        if self.global_step % 25 == 0:
+        if self.global_step % 10 == 0:
             self.parameter_histogram()
 
     def training_epoch_end(self, outputs: list):
@@ -816,20 +821,15 @@ class VAEXperiment(pl.LightningModule):
         :param outputs: [{loss_name, val}]
         """
         # map reduce the sum of each loss_name, values must be positive
-        outputs = self.model.list_loss if len(self.model.list_loss) != 0 else outputs
-        # if isinstance(outputs[0], list): outputs = outputs[-1]
-        result = dict(functools.reduce(operator.add, map(collections.Counter, outputs)))
-        # add each of
-        for k, v in result.items(): self.logger.experiment.add_scalar(k, v, self.current_epoch)
-        ### reset
-        self.model.loss_dict = []
-
-        if self.current_epoch == 1:
-            sample_img = torch.rand(1, self.model.input_channels, self.model.input_size, self.model.input_size).to(
-                self.curr_device)
-            self.logger.experiment.add_graph(self.model, sample_img)
-
-        # self.parameter_histogram()
+        outputs = self.model.history if len(self.model.history) != 0 else outputs
+        # sum_loss = dict(functools.reduce(operator.add, map(collections.Counter, outputs)))
+        sum_loss = pd.DataFrame.from_records(outputs).mean().to_dict()
+        for k, v in sum_loss.items():
+            self.logger.experiment.add_scalar(k, v, self.current_epoch)
+        ### reset record history
+        self.model.history = []
+        ### plot dynamic computation graph
+        if self.current_epoch == 0: self.plot_computation_graph()
 
     def validation_step(self, batch, batch_idx, optimizer_idx=0):
         """
