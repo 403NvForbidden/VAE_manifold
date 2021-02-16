@@ -31,6 +31,21 @@ from torch.autograd import Variable
 from ._types_ import *
 
 
+def weight_initialization(modules):
+    ### weight initialization
+    for m in modules:
+        if isinstance(m, nn.Conv2d) or isinstance(m, nn.ConvTranspose2d):
+            # Gain adapted for LeakyReLU activation function
+            xavier_normal_(m.weight, gain=math.sqrt(2. / (1 + 0.01)))
+            m.bias.data.fill_(0.01)
+        elif isinstance(m, nn.BatchNorm2d):
+            nn.init.constant_(m.weight, 1)
+            nn.init.constant_(m.bias, 0)
+        elif isinstance(m, nn.Linear):
+            xavier_normal_(m.weight, gain=math.sqrt(2. / (1 + 0.01)))
+            m.bias.data.fill_(0.01)
+
+
 class twoStageVAE(AbstractModel, pl.LightningModule):
     def __init__(self, zdim_1=100, zdim_2=3, input_channels=3, input_size=64, alpha=1, beta=1, gamma=100,
                  filepath=None):
@@ -48,6 +63,8 @@ class twoStageVAE(AbstractModel, pl.LightningModule):
         self.gamma = gamma
         self.input_channels = input_channels
         self.input_size = input_size
+        self.z1 = None
+        self.z2 = None
         # temp variable that saved the list of last step losses of the model
         self.history = []
         self.loss_dict = {}
@@ -73,7 +90,7 @@ class twoStageVAE(AbstractModel, pl.LightningModule):
         self.decoder_2 = Decoder(zdim=zdim_2, input_channel=input_channels)
 
         # run weight initialization TODO: make this abstract class
-        self.initialization()
+        weight_initialization(self.modules())
 
     def encode(self, x):
         x_1 = self.encoder(x)
@@ -107,6 +124,8 @@ class twoStageVAE(AbstractModel, pl.LightningModule):
 
     def step(self, img) -> dict:
         x_recon_hi, mu_z_1, logvar_z_1, z_1, x_recon_lo, mu_z_2, logvar_z_2, z_2 = self.forward(img)
+        self.z1 = z_1
+        self.z2 = z_2
         return self.objective_func(img, x_recon_hi, mu_z_1, logvar_z_1, z_1, x_recon_lo, mu_z_2, logvar_z_2, z_2)
 
     def objective_func(self, x, x_recon_hi, mu_z_1, logvar_z_1, z_1, x_recon_lo, mu_z_2, logvar_z_2, z_2, *args,
@@ -137,11 +156,11 @@ class twoStageVAE(AbstractModel, pl.LightningModule):
         img, labels = batch
         self.curr_device = img.device
         # VAE 1 only step once
-        self.loss_dict = self.step(img)
         if optimizer_idx == 0:
+            self.loss_dict = self.step(img)
             return self.loss_dict['loss']
         elif optimizer_idx == 1:
-            # MI_estimator 1
+            self.loss_dict['MI_loss_1'] = -self.MI_estimator_1(img, self.z1)
             return self.loss_dict['MI_loss_1']
         elif optimizer_idx == 2:
             # detach and add to to list
@@ -150,6 +169,7 @@ class twoStageVAE(AbstractModel, pl.LightningModule):
                 temp_dict[k] = v.clone().data.cpu()
             self.history.append(temp_dict)
 
+            self.loss_dict['MI_loss_2'] = -self.MI_estimator_2(img, self.z2)
             return self.loss_dict['MI_loss_2']
 
     def backward(self, loss: Tensor, optimizer: Optimizer, optimizer_idx: int, *args, **kwargs) -> None:
@@ -167,14 +187,13 @@ class twoStageVAE(AbstractModel, pl.LightningModule):
             lr=params['lr'], betas=(0.9, 0.999),
             weight_decay=params['weight_decay'])
 
-        optimizer_MI = optim.Adam([{'params': self.MI_estimator_1.parameters()},
-                                   {'params': self.MI_estimator_2.parameters()}, ],
+        optimizer_MI = optim.Adam([{'params': self.MI_estimator_1.parameters()}],
                                   lr=params['lr'], betas=(0.9, 0.999),
                                   weight_decay=params['weight_decay'])
 
-        # optimizer_MI_2 = optim.Adam(self.MI_estimator_2.parameters(),
-        #                             lr=params['lr'], betas=(0.9, 0.999),
-        #                             weight_decay=params['weight_decay'])
+        optimizer_MI_2 = optim.Adam(self.MI_estimator_2.parameters(),
+                                    lr=params['lr'], betas=(0.9, 0.999),
+                                    weight_decay=params['weight_decay'])
 
         scheduler_VAE_1 = optim.lr_scheduler.ExponentialLR(optimizer_VAE_1, gamma=params['scheduler_gamma'])
         # scheduler_VAE_2 = optim.lr_scheduler.ExponentialLR(optimizer_VAE_2, gamma=params['scheduler_gamma'])
@@ -313,17 +332,7 @@ class betaVAE(AbstractModel, pl.LightningModule):
         self.decoder = Decoder(zdim=zdim, input_channel=input_channels)
 
         # run weight initialization TODO: make this abstract class
-        self.initialization()
-
-    def initialization(self):
-        for m in self.modules():
-            if isinstance(m, nn.Conv2d) or isinstance(m, nn.ConvTranspose2d):
-                xavier_normal_(m.weight,
-                               gain=math.sqrt(2. / (1 + 0.01)))  # Gain adapted for LeakyReLU activation function
-                m.bias.data.fill_(0.01)
-            elif isinstance(m, nn.BatchNorm2d):
-                nn.init.constant_(m.weight, 1)
-                nn.init.constant_(m.bias, 0)
+        weight_initialization(self.modules())
 
     def encode(self, x):
         return self.encoder(x)
@@ -412,6 +421,7 @@ class infoMaxVAE(AbstractModel, pl.LightningModule):
         # temp variable that saved the list of last step losses of the model
         self.history = []
         self.loss_dict = {}
+        weight_initialization(self.modules())
 
     def encode(self, x):
         return self.VAE.encoder(x)
