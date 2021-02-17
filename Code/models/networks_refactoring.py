@@ -56,8 +56,8 @@ class twoStageVAE(AbstractModel, pl.LightningModule):
             beta (float) : weight coefficient for DL divergence, when beta=1 is Valina VAE
             Modulate the complexity of the model with parameter 'base_enc' and 'base_dec'
         """
-        self.zdim_1 = zdim_1
-        self.zdim_2 = zdim_2
+        self.zdim_aux = zdim_1
+        self.zdim = zdim_2
         self.beta = beta
         self.alpha = alpha
         self.gamma = gamma
@@ -79,8 +79,8 @@ class twoStageVAE(AbstractModel, pl.LightningModule):
         # )
 
         # inference mean and std
-        self.mu_logvar_gen_1 = nn.Linear(256, self.zdim_1 * 2)  # 256 -> 6
-        self.mu_logvar_gen_2 = nn.Linear(256, self.zdim_2 * 2)
+        self.mu_logvar_gen_1 = nn.Linear(256, self.zdim_aux * 2)  # 256 -> 6
+        self.mu_logvar_gen_2 = nn.Linear(256, self.zdim * 2)
 
         # to constrain logvar in a reasonable range
         self.stabilize_exp = nn.Hardtanh(min_val=-6., max_val=2.)  # linear between min and max
@@ -92,33 +92,39 @@ class twoStageVAE(AbstractModel, pl.LightningModule):
         # run weight initialization TODO: make this abstract class
         weight_initialization(self.modules())
 
-    def encode(self, x):
-        x_1 = self.encoder(x)
-        # copy data for the VAE_
-        x_2 = x_1.clone()
-        return x_1, x_2
+    def encode(self, img):
+        return self.encoder(img)
 
-    def inference(self, x_1, x_2):
-        mu_logvar_1 = self.mu_logvar_gen_1(x_1)
-        mu_z_1, logvar_z_1 = mu_logvar_1.view(-1, self.zdim_1, 2).unbind(-1)
+    def inferece_aux(self, x):
+        mu_logvar_1 = self.mu_logvar_gen_1(x)
+        mu_z_1, logvar_z_1 = mu_logvar_1.view(-1, self.zdim_aux, 2).unbind(-1)
         logvar_z_1 = self.stabilize_exp(logvar_z_1)
         z_1 = reparameterize(mu_z_1, logvar_z_1, self.training)
+        return z_1, mu_z_1, logvar_z_1
 
+    def inference(self, x):
         # for lower VAE
-        mu_logvar_2 = self.mu_logvar_gen_2(x_2)
-        mu_z_2, logvar_z_2 = mu_logvar_2.view(-1, self.zdim_2, 2).unbind(-1)
+        mu_logvar_2 = self.mu_logvar_gen_2(x)
+        mu_z_2, logvar_z_2 = mu_logvar_2.view(-1, self.zdim, 2).unbind(-1)
         logvar_z_2 = self.stabilize_exp(logvar_z_2)
         z_2 = reparameterize(mu_z_2, logvar_z_2, self.training)
+        return z_2, mu_z_2, logvar_z_2
 
-        return z_1, mu_z_1, logvar_z_1, z_2, mu_z_2, logvar_z_2
+    def decode_aux(self, z_aux):
+        return self.decoder_1(z_aux)
 
-    def decode(self, z_1, z_2):
-        return self.decoder_1(z_1), self.decoder_2(z_2)
+    def decode(self, z):
+        return self.decoder_2(z)
 
     def forward(self, img, **kwargs):
-        x_1, x_2 = self.encode(img)
-        z_1, mu_z_1, logvar_z_1, z_2, mu_z_2, logvar_z_2 = self.inference(x_1, x_2)
-        x_recon_hi, x_recon_lo = self.decode(z_1, z_2)
+        x_1 = self.encode(img)
+        x_2 = x_1.clone()  # copy for VAE2
+
+        z_2, mu_z_2, logvar_z_2 = self.inference(x_2)
+        z_1, mu_z_1, logvar_z_1 = self.inferece_aux(x_1)
+
+        x_recon_lo = self.decode(z_2)
+        x_recon_hi = self.decode_aux(z_1)
 
         return x_recon_hi, mu_z_1, logvar_z_1, z_1.squeeze(), x_recon_lo, mu_z_2, logvar_z_2, z_2.squeeze()
 

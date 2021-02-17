@@ -153,7 +153,6 @@ def compute_perf_metrics(data_source, params_preferences):
                 os.mkdir(save_path)
             except FileExistsError as e:
                 pass
-
         print('#######################################')
         print('###### Computing Mutual Information')
         print('#######################################')

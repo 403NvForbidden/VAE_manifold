@@ -17,6 +17,7 @@ to predict class identity from the latent codes.
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from tqdm import tqdm
 
 import torch
 import torchvision
@@ -29,12 +30,11 @@ from torch import cuda
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms, utils
 from sklearn.model_selection import StratifiedShuffleSplit
-
 import warnings
 
 warnings.filterwarnings('ignore')
 
-
+device = torch.device('cpu' if not cuda.is_available() else 'cuda')
 class Classifier_Net(nn.Module):
     '''
     Small NN of fixed capacity that predict class identity from the latent codes
@@ -75,17 +75,16 @@ def train_net(model, epochs, trainloader, num_class=6, imbalance_weight_horvath=
             weights = [0.085, 0.085, 0.085, 0.25, 0.61, 1.]
         elif num_class == 12:  # Chaffer
             weights = [0.27, 0.031, 0.5, 1., 0.031, 0.41, 0.51, 0.51, 0.27, 0.27, 0.64, 0.28]
-        class_weights = torch.FloatTensor(weights).cuda()
+        class_weights = torch.FloatTensor(weights).to(device)
         criterion = nn.CrossEntropyLoss(weight=class_weights)
 
     history_loss = []
 
-    for epoch in range(epochs):
-
+    for epoch in tqdm(range(epochs)):
         running_loss = 0.0
         for i, data in enumerate(trainloader, 0):
             # get the inputs; data is a list of [inputs, labels]
-            inputs, labels = data[0].float().cuda(), data[1].cuda()
+            inputs, labels = data[0].float().to(device), data[1].to(device)
 
             # zero the parameter gradients
             optimizer.zero_grad()
@@ -98,12 +97,6 @@ def train_net(model, epochs, trainloader, num_class=6, imbalance_weight_horvath=
 
             running_loss += loss.item()
             history_loss.append(loss.item())
-            if i % 10 == 9:  # print every 2000 mini-batches
-                # print('[%d, %5d] loss: %.3f' %
-                #      (epoch + 1, i + 1, running_loss / 2000))
-                running_loss = 0.0
-        if epochs % 5 == 0:
-            print("============>", epochs)
 
 
 def perf_eval(model, testloader):
@@ -120,7 +113,7 @@ def perf_eval(model, testloader):
     total = 0
     with torch.no_grad():
         for data in testloader:
-            inputs, labels = data[0].float().cuda(), data[1].cuda()
+            inputs, labels = data[0].float().to(device), data[1].to(device)
             outputs = model(inputs)
             _, predicted = torch.max(outputs.data, 1)
             total += labels.size(0)
@@ -145,7 +138,7 @@ def perf_eval_perclass(model, testloader):
     per_class_acc = []
     with torch.no_grad():
         for data in testloader:
-            inputs, labels = data[0].float().cuda(), data[1].cuda()
+            inputs, labels = data[0].float().to(device), data[1].to(device)
             outputs = model(inputs)
             _, predicted = torch.max(outputs, 1)
             c = (predicted == labels).squeeze()
@@ -251,10 +244,10 @@ def classifier_performance(path_to_csv, low_dim_names=['x_coord', 'y_coord', 'z_
 
         ##Make a half / half train test split that have the same percentage of classes as original dataset
         labels = latentCode_frame['GT_label'].values
-        train_test_split = StratifiedShuffleSplit(n_splits=num_iteration, test_size=0.5,
+        train_test_split = StratifiedShuffleSplit(n_splits=num_iteration, test_size=0.2,
                                                   random_state=12)  # Change n_splits if want to have several run
 
-        model_1 = Classifier_Net(zdim=len(low_dim_names), num_of_class=num_class).cuda()
+        model_1 = Classifier_Net(zdim=len(low_dim_names), num_of_class=num_class).to(device)
 
         train_acc = []
         test_acc = []
@@ -268,9 +261,9 @@ def classifier_performance(path_to_csv, low_dim_names=['x_coord', 'y_coord', 'z_
 
             # Built train and test dataset/dataloader
             tr_dataset = Dataset_from_csv(dataset_train, 'GT_label', low_dim_names=low_dim_names)
-            tr_dataloader = DataLoader(tr_dataset, batch_size=128, shuffle=True)
+            tr_dataloader = DataLoader(tr_dataset, batch_size=256, shuffle=True)
             te_dataset = Dataset_from_csv(dataset_test, 'GT_label', low_dim_names=low_dim_names)
-            te_dataloader = DataLoader(te_dataset, batch_size=128, shuffle=True)
+            te_dataloader = DataLoader(te_dataset, batch_size=256, shuffle=True)
 
             # train on train_dataloader
             train_net(model_1, 20, tr_dataloader, num_class=num_class, imbalance_weight_horvath=imbalanced_data)
@@ -296,10 +289,10 @@ def classifier_performance(path_to_csv, low_dim_names=['x_coord', 'y_coord', 'z_
 
         ##Make a half / half train test split that have the same percentage of classes as original dataset
         labels = latentCode_frame['GT_label'].values
-        train_test_split = StratifiedShuffleSplit(n_splits=num_iteration, test_size=0.5,
+        train_test_split = StratifiedShuffleSplit(n_splits=num_iteration, test_size=0.2,
                                                   random_state=12)  # Change n_splits if want to have several run
 
-        model_2 = Classifier_Net(zdim=len(low_dim_names)).float().cuda()
+        model_2 = Classifier_Net(zdim=len(low_dim_names)).float().to(device)
 
         train_acc = []
         test_acc = []
@@ -313,9 +306,9 @@ def classifier_performance(path_to_csv, low_dim_names=['x_coord', 'y_coord', 'z_
 
             # Built train and test dataset/dataloader
             tr_dataset = Dataset_from_csv(dataset_train, 'GT_label', low_dim_names=low_dim_names)
-            tr_dataloader = DataLoader(tr_dataset, batch_size=128, shuffle=True)
+            tr_dataloader = DataLoader(tr_dataset, batch_size=256, shuffle=True)
             te_dataset = Dataset_from_csv(dataset_test, 'GT_label', low_dim_names=low_dim_names)
-            te_dataloader = DataLoader(te_dataset, batch_size=128, shuffle=True)
+            te_dataloader = DataLoader(te_dataset, batch_size=256, shuffle=True)
 
             # train on train_dataloader
             train_net(model_2, 20, tr_dataloader)
@@ -349,10 +342,10 @@ def classifier_performance(path_to_csv, low_dim_names=['x_coord', 'y_coord', 'z_
 
         ##Make a half / half train test split that have the same percentage of classes as original dataset
         labels = latentCode_frame['GT_label'].values
-        train_test_split = StratifiedShuffleSplit(n_splits=num_iteration, test_size=0.5,
+        train_test_split = StratifiedShuffleSplit(n_splits=num_iteration, test_size=0.2,
                                                   random_state=12)  # Change n_splits if want to have several run
 
-        model_3 = Classifier_Net(zdim=len(low_dim_names), num_of_class=3).float().cuda()
+        model_3 = Classifier_Net(zdim=len(low_dim_names), num_of_class=3).float().to(device)
 
         train_acc = []
         test_acc = []
@@ -366,9 +359,9 @@ def classifier_performance(path_to_csv, low_dim_names=['x_coord', 'y_coord', 'z_
 
             # Built train and test dataset/dataloader
             tr_dataset = Dataset_from_csv(dataset_train, 'GT_label', low_dim_names=low_dim_names)
-            tr_dataloader = DataLoader(tr_dataset, batch_size=128, shuffle=True)
+            tr_dataloader = DataLoader(tr_dataset, batch_size=256, shuffle=True)
             te_dataset = Dataset_from_csv(dataset_test, 'GT_label', low_dim_names=low_dim_names)
-            te_dataloader = DataLoader(te_dataset, batch_size=128, shuffle=True)
+            te_dataloader = DataLoader(te_dataset, batch_size=256, shuffle=True)
 
             # train on train_dataloader
             train_net(model_3, 20, tr_dataloader)

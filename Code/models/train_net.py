@@ -26,6 +26,7 @@ import numpy as np
 from timeit import default_timer as timer
 from tqdm import tqdm
 import os
+import warnings
 import itertools
 
 import torch
@@ -38,7 +39,7 @@ from torchvision.utils import save_image, make_grid
 from tensorboardX import SummaryWriter
 import matplotlib.pyplot as plt
 
-from util.helpers import plot_latent_space, show, EarlyStopping, save_brute
+from util.helpers import plot_latent_space, show, EarlyStopping, save_brute, make_path
 from .nn_modules import infoNCE_bound
 
 from scipy.optimize import linear_sum_assignment as linear_assignment
@@ -785,9 +786,10 @@ class VAEXperiment(pl.LightningModule):
         self.curr_device = None
         self.log_path = log_path
         # create log path
-        if not os.path.isdir(log_path):
-            print(f'creating path:=======>{log_path}')
-            os.mkdir(log_path)
+        # if not os.path.isdir(log_path):
+        #     print(f'creating path:=======>{log_path}')
+        #     os.mkdir(log_path)
+        make_path(log_path)
 
     def parameter_histogram(self):
         for n, p in self.model.state_dict().items():  # .named_parameters():
@@ -898,7 +900,8 @@ class VAEXperiment(pl.LightningModule):
         try:
             self.load_state_dict(torch.load(ckpt_path)['state_dict'])
         except:
-            raise Exception("CANNOT load weights")
+            # raise Exception()
+            warnings.warn("CANNOT load weights")
 
 
 ###################################################

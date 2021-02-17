@@ -18,12 +18,17 @@ import math
 from torch import nn
 from torch.nn import functional as F
 from torch.nn.init import xavier_normal_
+from torch import cuda
 from util.data_processing import get_inference_dataset
 import torch.optim as optim
 import pandas as pd
 import numpy as np
 import pickle as pkl
 import matplotlib.pyplot as plt
+from tqdm import tqdm
+import skimage.measure
+from scipy.stats import entropy
+device = torch.device('cpu' if not cuda.is_available() else 'cuda')
 
 
 ##################################################################
@@ -36,7 +41,7 @@ import matplotlib.pyplot as plt
 ### -> For computational burden limitation we opted for a Separable critic
 ### -> Still accurate for InfoNCE loss and Interpolate alpha loss that we'll use
 class MINE(nn.Module):
-    def __init__(self,input_dim,zdim=3):
+    def __init__(self, input_dim, zdim=3):
         super(MINE, self).__init__()
 
         self.input_dim = input_dim
@@ -58,20 +63,19 @@ class MINE(nn.Module):
             nn.Linear(256, 32),
         )
 
-
     def forward(self, x, z):
-        x = x.view(-1,self.input_dim)
-        z = z.view(-1,self.zdim)
-        x_g = self.MLP_g(x) #Batchsize x 32
-        y_h = self.MLP_h(z) #Batchsize x 32
-        scores = torch.matmul(y_h,torch.transpose(x_g,0,1))
+        x = x.view(-1, self.input_dim)
+        z = z.view(-1, self.zdim)
+        x_g = self.MLP_g(x)  # Batchsize x 32
+        y_h = self.MLP_h(z)  # Batchsize x 32
+        scores = torch.matmul(y_h, torch.transpose(x_g, 0, 1))
 
-        return scores #Each element i,j is a scalar in R. f(xi,proj_j)
+        return scores  # Each element i,j is a scalar in R. f(xi,proj_j)
 
 
-#Small MLP to compute the baseline
+# Small MLP to compute the baseline
 class baseline_MLP(nn.Module):
-    def __init__(self,input_dim):
+    def __init__(self, input_dim):
         super(baseline_MLP, self).__init__()
 
         self.input_dim = input_dim
@@ -85,10 +89,10 @@ class baseline_MLP(nn.Module):
         )
 
     def forward(self, x):
-        x = x.view(-1,self.input_dim)
-        res = self.MLP(x) #Batchsize x 32
+        x = x.view(-1, self.input_dim)
+        res = self.MLP(x)  # Batchsize x 32
 
-        #Output a scalar which is the log-baseline : log a(y)  for interpolated bound
+        # Output a scalar which is the log-baseline : log a(y)  for interpolated bound
         return res
 
 
@@ -99,11 +103,12 @@ class baseline_MLP(nn.Module):
 # Compute the Noise Constrastive Estimation (NCE) loss
 def infoNCE_bound(scores):
     '''Bound from Van Den Oord and al. (2018)'''
-    nll = torch.mean(torch.diag(scores) - torch.logsumexp(scores,dim=1))
-    k =scores.size()[0]
+    nll = torch.mean(torch.diag(scores) - torch.logsumexp(scores, dim=1))
+    k = scores.size()[0]
     mi = np.log(k) + nll
 
     return mi
+
 
 #####################################
 ##### NWJ Lower Bound ###############
@@ -111,11 +116,12 @@ def infoNCE_bound(scores):
 
 def tuba_lower_bound(scores, log_baseline=None):
     if log_baseline is not None:
-        scores -= log_baseline[:,None]
-    batch_size = torch.tensor(scores.size()[0],dtype=torch.float32)
-    joint_term= torch.mean(torch.diag(scores))
-    marg_term=torch.exp(reduce_logmeanexp_nodiag(scores))
+        scores -= log_baseline[:, None]
+    batch_size = torch.tensor(scores.size()[0], dtype=torch.float32)
+    joint_term = torch.mean(torch.diag(scores))
+    marg_term = torch.exp(reduce_logmeanexp_nodiag(scores))
     return 1. + joint_term - marg_term
+
 
 def nwj_bound(scores):
     return tuba_lower_bound(scores - 1.)
@@ -125,7 +131,7 @@ def nwj_bound(scores):
 ##### interpolated Lower Bound ######
 #####################################
 
-#Compute interporlate lower bound of MI
+# Compute interporlate lower bound of MI
 def interp_bound(scores, baseline, alpha_logit):
     '''
     New lower bound on mutual information proposed by Ben Poole and al.
@@ -139,14 +145,15 @@ def interp_bound(scores, baseline, alpha_logit):
     nce_baseline = compute_log_loomean(scores)
 
     interpolated_baseline = log_interpolate(nce_baseline,
-        baseline[:,None].repeat(1,batch_size), alpha_logit) #Interpolate NCE baseline with a learnt baseline
+                                            baseline[:, None].repeat(1, batch_size),
+                                            alpha_logit)  # Interpolate NCE baseline with a learnt baseline
 
-    #Marginal distribution term
-    critic_marg = scores - torch.diag(interpolated_baseline)[:,None]  #None is equivalent to newaxis
+    # Marginal distribution term
+    critic_marg = scores - torch.diag(interpolated_baseline)[:, None]  # None is equivalent to newaxis
     marg_term = torch.exp(reduce_logmeanexp_nodiag(critic_marg))
 
-    #Joint distribution term
-    critic_joint = torch.diag(scores)[:,None] - interpolated_baseline
+    # Joint distribution term
+    critic_joint = torch.diag(scores)[:, None] - interpolated_baseline
     joint_term = (torch.sum(critic_joint) - torch.sum(torch.diag(critic_joint))) / (batch_size * (batch_size - 1.))
     return 1 + joint_term - marg_term
 
@@ -155,35 +162,38 @@ def log_interpolate(log_a, log_b, alpha_logit):
     '''Numerically stable implmentation of log(alpha * a + (1-alpha) *b)
     Compute the log baseline for the interpolated bound
     baseline is a(y)'''
-    log_alpha = -F.softplus(torch.tensor(-alpha_logit).cuda())
-    log_1_minus_alpha = -F.softplus(torch.tensor(alpha_logit).cuda())
-    y = torch.logsumexp( torch.stack((log_alpha + log_a, log_1_minus_alpha + log_b)), dim=0)
+    log_alpha = -F.softplus(torch.tensor(-alpha_logit).to(device))
+    log_1_minus_alpha = -F.softplus(torch.tensor(alpha_logit).to(device))
+    y = torch.logsumexp(torch.stack((log_alpha + log_a, log_1_minus_alpha + log_b)), dim=0)
     return y
+
 
 def compute_log_loomean(scores):
     '''Compute the log leave one out mean of the exponentiated scores'''
-    max_scores, _ = torch.max(scores, dim=1,keepdim=True)
-    lse_minus_max = torch.logsumexp(scores-max_scores,dim=1,keepdim=True)
+    max_scores, _ = torch.max(scores, dim=1, keepdim=True)
+    lse_minus_max = torch.logsumexp(scores - max_scores, dim=1, keepdim=True)
     d = lse_minus_max + (max_scores - scores)
     d_not_ok = torch.eq(d, 0.)
     d_ok = ~d_not_ok
-    safe_d = torch.where(d_ok, d, torch.ones_like(d).cuda()) #Replace zeros by 1 in d
+    safe_d = torch.where(d_ok, d, torch.ones_like(d).to(device))  # Replace zeros by 1 in d
 
-    loo_lse = scores + (safe_d + torch.log(-torch.expm1(-safe_d))) #Stable implementation of sotfplus_inverse
+    loo_lse = scores + (safe_d + torch.log(-torch.expm1(-safe_d)))  # Stable implementation of sotfplus_inverse
     loo_lme = loo_lse - np.log(scores.size()[1] - 1.)
     return loo_lme
 
+
 def reduce_logmeanexp_nodiag(x, axis=None):
     batch_size = x.size()[0]
-    logsumexp = torch.logsumexp(x - torch.diag(np.inf * torch.ones(batch_size).cuda()),dim=[0,1])
+    logsumexp = torch.logsumexp(x - torch.diag(np.inf * torch.ones(batch_size).to(device)), dim=[0, 1])
     num_elem = batch_size * (batch_size - 1.)
-    return logsumexp - torch.log(torch.tensor(num_elem).cuda())
+    return logsumexp - torch.log(torch.tensor(num_elem).to(device))
 
 
 #####################################
 ##### Train Critic and Baseline #####
 #####################################
-def train_MINE(MINE,path_to_csv,low_dim_names,epochs,infer_dataloader,bound_type='infoNCE',baseline=None,alpha_logit=0.,train_GPU=True):
+def train_MINE(MINE, path_to_csv, low_dim_names, epochs, infer_dataloader, bound_type='infoNCE', baseline=None,
+               alpha_logit=0.):
     '''
     Need a CSV that link every input (single cell images) to its latent code
     infer_dataloader loads file_name unique ID alongside the batch, that enables to
@@ -207,60 +217,63 @@ def train_MINE(MINE,path_to_csv,low_dim_names,epochs,infer_dataloader,bound_type
     #######################################
     alpha_logit = alpha_logit
 
-    if isinstance(path_to_csv,str):
+    if isinstance(path_to_csv, str):
         Metadata_csv = pd.read_csv(path_to_csv)
     else:
         Metadata_csv = path_to_csv
 
-    optimizer = optim.Adam(MINE.parameters(),lr=0.0005)
-    if bound_type=='interpolated':
-        assert baseline!=None, "please provide a valid NN to represent the baseline a(y)"
-        optimizer = optim.Adam(list(MINE.parameters())+list(baseline.parameters()),lr=0.0005)
+    optimizer = optim.Adam(MINE.parameters(), lr=0.0005)
+    if bound_type == 'interpolated':
+        assert baseline != None, "please provide a valid NN to represent the baseline a(y)"
+        optimizer = optim.Adam(list(MINE.parameters()) + list(baseline.parameters()), lr=0.0005)
 
     decayRate = 0.2
-    #lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer=optimizer, step_size=80, gamma=decayRate)
+    # lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer=optimizer, step_size=80, gamma=decayRate)
 
     history_MI = []
 
-
-    for epoch in range(epochs):
+    for epoch in tqdm(range(epochs)):
         miss_cell_counter = 0
         MI_epoch = 0
         for i, (data, labels, file_names) in enumerate(infer_dataloader):
 
             list_ids = [file_name for file_name in file_names]
 
-            #Retrieve the corresponding latent code in csv_file
-            #reindex return nan if corresponding ID doesn't exist in projection
+            # Retrieve the corresponding latent code in csv_file
+            # reindex return nan if corresponding ID doesn't exist in projection
             batch_info = Metadata_csv.set_index('Unique_ID').reindex(list_ids).reset_index(inplace=False)
-            #Manage the possibility of missing projection code (happens with UMAP sometimes)
-            if batch_info[low_dim_names[0]].isna().any(): #At least 1 projection code is missing
+            # Manage the possibility of missing projection code (happens with UMAP sometimes)
+            if batch_info[low_dim_names[0]].isna().any():  # At least 1 projection code is missing
                 inds = np.where(batch_info[low_dim_names[0]].isna())[0]
                 miss_cell_counter += len(inds)
-                #Supress those data point in both low and high dim data
-                batch_info.dropna(subset=[low_dim_names[0]],inplace=True)
-                data = data[[not(i in inds) for i in np.arange(data.size(0))]]
+                # Supress those data point in both low and high dim data
+                batch_info.dropna(subset=[low_dim_names[0]], inplace=True)
+                data = data[[not (i in inds) for i in np.arange(data.size(0))]]
 
-            if train_GPU:
-                # make sure this lives on the GPU
-                data = data.cuda()
 
-            batch_latentCode = [list(code) for code in zip(batch_info[low_dim_names[0]],batch_info[low_dim_names[1]],batch_info[low_dim_names[2]])]
-            batch_latentCode = torch.from_numpy(np.array(batch_latentCode)).float().cuda()
 
+
+            batch_latentCode = [list(code) for code in zip(batch_info[low_dim_names[0]], batch_info[low_dim_names[1]],
+                                                           batch_info[low_dim_names[2]])]
+            batch_latentCode = torch.from_numpy(np.array(batch_latentCode)).float().to(device)
+
+            # compute the entropy for individual images before copy to GPU
+            MI_img_batch = skimage.measure.shannon_entropy(data)
+
+            data = data.to(device)
             MI_loss = None
-            if bound_type=='infoNCE': #Constant Baseline
-                scores = MINE(data,batch_latentCode)
+            if bound_type == 'infoNCE':  # Constant Baseline
+                scores = MINE(data, batch_latentCode)
                 MI_xz = infoNCE_bound(scores)
                 MI_loss = -MI_xz
-            elif bound_type=='NWJ': #Constant Baseline
-                scores=MINE(data,batch_latentCode)
+            elif bound_type == 'NWJ':  # Constant Baseline
+                scores = MINE(data, batch_latentCode)
                 MI_xz = nwj_bound(scores)
-                MI_loss= -MI_xz
-            elif bound_type=='interpolated': #Learnt Baseline
-                scores = MINE(data,batch_latentCode)
+                MI_loss = -MI_xz
+            elif bound_type == 'interpolated':  # Learnt Baseline
+                scores = MINE(data, batch_latentCode)
                 log_baseline = torch.squeeze(baseline(batch_latentCode))
-                alpha_logit = alpha_logit # sigmoid(-5) = 0.01, that correspond to an alpha of 0.01
+                alpha_logit = alpha_logit  # sigmoid(-5) = 0.01, that correspond to an alpha of 0.01
                 MI_xz = interp_bound(scores, log_baseline, alpha_logit)
                 MI_loss = -MI_xz
             else:
@@ -270,21 +283,20 @@ def train_MINE(MINE,path_to_csv,low_dim_names,epochs,infer_dataloader,bound_type
             MI_loss.backward()
             optimizer.step()
 
-            MI_epoch += MI_xz
+            MI_epoch += np.divide(MI_xz.detach().cpu().numpy(), MI_img_batch)
 
             if i % 2 == 0:
                 print('Train Epoch: {} [{}/{} ({:.0f}%)]\tMI: {:.6f}'.format(
                     epoch, i * len(data), len(infer_dataloader.dataset),
                            100. * i / len(infer_dataloader),
-                           MI_xz.item() ),end='\r')
+                    MI_xz.item()), end='\r')
 
         MI_epoch /= len(infer_dataloader)
-        history_MI.append(MI_epoch.detach().cpu().numpy())
-        #lr_scheduler.step()
+        history_MI.append(MI_epoch)
+        # lr_scheduler.step()
 
         if epoch == 0:
             print(f'{miss_cell_counter} single cells were not find in the data projection!!!')
-
 
         if epoch % 50 == 0:
             print('==========> Epoch: {} ==========> MI: {:.4f}'.format(epoch, MI_epoch))
@@ -293,8 +305,8 @@ def train_MINE(MINE,path_to_csv,low_dim_names,epochs,infer_dataloader,bound_type
     return np.asarray(history_MI)
 
 
-
-def compute_MI(data_csv,low_dim_names=['x_coord','y_coord','z_coord'],path_to_raw_data='DataSets/Synthetic_Data_1',save_path=None,batch_size=512,alpha_logit=-5.,bound_type='infoNCE',epochs=300):
+def compute_MI(data_csv, low_dim_names=['x_coord', 'y_coord', 'z_coord'], path_to_raw_data='DataSets/Synthetic_Data_1',
+               save_path=None, batch_size=512, alpha_logit=-5., bound_type='infoNCE', epochs=300):
     '''Compute MI (MINE framework) between input data and latent representation.
     Projection coordinates need to be store in the csv file under the columns 'low_dim_names'
     Raw data (image) are loaded by batch from 'path_to_raw_data'
@@ -311,34 +323,35 @@ def compute_MI(data_csv,low_dim_names=['x_coord','y_coord','z_coord'],path_to_ra
     '''
 
     batch_size = batch_size
-    input_size = 64 #CHANGE DEPENDING THE DATASET ############
+    input_size = 64  # CHANGE DEPENDING THE DATASET ############
     epochs = epochs
-    _, infer_dataloader = get_inference_dataset(path_to_raw_data,batch_size,input_size,shuffle=True,droplast=True)
+    _, infer_dataloader = get_inference_dataset(path_to_raw_data, batch_size, input_size, shuffle=True, droplast=True)
 
-    MINEnet = MINE(input_size*input_size*3,zdim=len(low_dim_names)) #CHANGE DEPENDING ON DATASET ###########
-    MINEnet.cuda()
+    MINEnet = MINE(input_size * input_size * 3, zdim=len(low_dim_names))  # CHANGE DEPENDING ON DATASET ###########
+    MINEnet.to(device)
 
-    baseline=None
-    if bound_type=='interpolated':
-        baseline=baseline_MLP(3) #a(y), take y as input
-        baseline.cuda()
+    baseline = None
+    if bound_type == 'interpolated':
+        baseline = baseline_MLP(3)  # a(y), take y as input
+        baseline.to(device)
 
-    MI_history = train_MINE(MINEnet,data_csv,low_dim_names,epochs,infer_dataloader,bound_type,baseline,alpha_logit,train_GPU=True)
+    MI_history = train_MINE(MINEnet, data_csv, low_dim_names, epochs, infer_dataloader, bound_type, baseline,
+                            alpha_logit)
 
     if save_path != None:
-        MI_pkl_path = save_path+f'/{len(low_dim_names)}_MI_training_history.pkl'
+        MI_pkl_path = save_path + f'/{len(low_dim_names)}_MI_training_history.pkl'
         with open(MI_pkl_path, 'wb') as f:
             pkl.dump(MI_history, f, protocol=pkl.HIGHEST_PROTOCOL)
 
     MI_Score = np.mean(MI_history[-50:])
 
     plt.plot(MI_history)
-    plt.hlines(MI_Score,0,len(MI_history))
-    plt.text(10,MI_Score+np.max(MI_history)/50,str(np.round(MI_Score,2)))
+    plt.hlines(MI_Score, 0, len(MI_history))
+    plt.text(10, MI_Score + np.max(MI_history) / 50, str(np.round(MI_Score, 2)))
     plt.title(f"Mutual information estimation with bound '{bound_type}'")
 
     if save_path != None:
-        plt.savefig(save_path+f'/{len(low_dim_names)}_MI_score_plot.png')
+        plt.savefig(save_path + f'/{len(low_dim_names)}_MI_score_plot.png')
     plt.show()
 
     return MI_Score

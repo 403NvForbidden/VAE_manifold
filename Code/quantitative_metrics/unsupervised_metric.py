@@ -32,7 +32,7 @@ import itertools
 import plotly.express as px
 import plotly.graph_objects as go
 import plotly.offline
-
+device = torch.device('cpu' if not cuda.is_available() else 'cuda')
 
 def unsup_metric_and_local_Q(metadata_csv, low_dim_names=['x_coord', 'y_coord', 'z_coord'], raw_data_included=False,
                              feature_size=64 * 64 * 3, path_to_raw_data='DataSets/Synthetic_Data_1', saving_path=None,
@@ -78,7 +78,7 @@ def unsup_metric_and_local_Q(metadata_csv, low_dim_names=['x_coord', 'y_coord', 
         for i, (data, labels, file_names) in enumerate(dataloader):
             # Extract unique cell id from file_names
             id_list.append([file_name for file_name in file_names])
-            data = data.cuda()
+            data = data.to(device)
             with torch.no_grad():
                 raw_data = data.view(data.size(0), -1)  # B x 64x64x3
                 list_of_tensors.append(raw_data.data.cpu().numpy())
