@@ -36,7 +36,7 @@ device = torch.device('cpu' if not cuda.is_available() else 'cuda')
 
 def unsup_metric_and_local_Q(metadata_csv, low_dim_names=['x_coord', 'y_coord', 'z_coord'], raw_data_included=False,
                              feature_size=64 * 64 * 3, path_to_raw_data='DataSets/Synthetic_Data_1', saving_path=None,
-                             kt=300, ks=500, only_local_Q=False):
+                             kt=300, ks=500, only_local_Q=False, logger=None):
     """
     From a csv file containg low dimensional projection of single cell data, compute unsupervised metric
     (continuity, trustworthiness and LCMC), as well as return a local quality score per sample.
@@ -188,7 +188,9 @@ def unsup_metric_and_local_Q(metadata_csv, low_dim_names=['x_coord', 'y_coord', 
                                        'lcmc_AUC': lcmc_AUC, 'aggregate_AUC': aggregate_AUC})
         # Save the unsupervised_score to a CSV file
         unsup_score_df.to_csv(f'{saving_path}/{low_dim_names[0]}_unsupervised_score.csv')
-        lcmc_curves_plot(trust, trust_AUC, cont, cont_AUC, lcmc, lcmc_AUC, saving_path=saving_path + f'/{low_dim_names[0]}_')
+        fig = lcmc_curves_plot(trust, trust_AUC, cont, cont_AUC, lcmc, lcmc_AUC, saving_path=saving_path + f'/{low_dim_names[0]}_')
+        if logger:
+            logger.experiment.add_figure(tag="Unsuperivsed metriecs", figure=fig, close=True)
 
     return trust_AUC, cont_AUC, lcmc_AUC, light_df
 
@@ -241,6 +243,7 @@ def lcmc_curves_plot(trust, trust_AUC, cont, cont_AUC, lcmc, lcmc_AUC, saving_pa
     if saving_path != None:
         plt.savefig(saving_path + 'unsup_score_plot.png')
     plt.close()
+    return fig
 
 
 def save_representation_plot(model_dataframe, saving_path, low_dim_names=['x_coord', 'y_coord', 'z_coord']):

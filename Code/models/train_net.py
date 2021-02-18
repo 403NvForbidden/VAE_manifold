@@ -896,9 +896,9 @@ class VAEXperiment(pl.LightningModule):
         :return:
         """
         if not ckpt_path: return  # no weight path
-        print(ckpt_path)
         try:
             self.load_state_dict(torch.load(ckpt_path)['state_dict'])
+            print(f"{ckpt_path} Loaded!!!!!")
         except:
             # raise Exception()
             warnings.warn("CANNOT load weights")

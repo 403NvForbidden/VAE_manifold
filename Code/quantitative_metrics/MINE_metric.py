@@ -232,7 +232,7 @@ def train_MINE(MINE, path_to_csv, low_dim_names, epochs, infer_dataloader, bound
 
     history_MI = []
 
-    for epoch in tqdm(range(epochs)):
+    for epoch in range(epochs):
         miss_cell_counter = 0
         MI_epoch = 0
         for i, (data, labels, file_names) in enumerate(infer_dataloader):
@@ -286,27 +286,23 @@ def train_MINE(MINE, path_to_csv, low_dim_names, epochs, infer_dataloader, bound
             MI_epoch += np.divide(MI_xz.detach().cpu().numpy(), MI_img_batch)
 
             if i % 2 == 0:
-                print('Train Epoch: {} [{}/{} ({:.0f}%)]\tMI: {:.6f}'.format(
+                print('Train Epoch: {} [{}/{} ({:.0f}%)]\tMI: {:.4f} \t Image MI: {:.4f}'.format(
                     epoch, i * len(data), len(infer_dataloader.dataset),
                            100. * i / len(infer_dataloader),
-                    MI_xz.item()), end='\r')
+                    MI_xz.item(), MI_img_batch),  end='\r')
 
         MI_epoch /= len(infer_dataloader)
         history_MI.append(MI_epoch)
         # lr_scheduler.step()
 
-        if epoch == 0:
-            print(f'{miss_cell_counter} single cells were not find in the data projection!!!')
-
-        if epoch % 50 == 0:
-            print('==========> Epoch: {} ==========> MI: {:.4f}'.format(epoch, MI_epoch))
+        if epoch == 0: print(f'{miss_cell_counter} single cells were not find in the data projection!!!')
 
     print('Finished Training')
     return np.asarray(history_MI)
 
 
 def compute_MI(data_csv, low_dim_names=['x_coord', 'y_coord', 'z_coord'], path_to_raw_data='DataSets/Synthetic_Data_1',
-               save_path=None, batch_size=512, alpha_logit=-5., bound_type='infoNCE', epochs=300):
+               save_path=None, batch_size=512, alpha_logit=-5., bound_type='infoNCE', epochs=300, logger=None):
     '''Compute MI (MINE framework) between input data and latent representation.
     Projection coordinates need to be store in the csv file under the columns 'low_dim_names'
     Raw data (image) are loaded by batch from 'path_to_raw_data'
@@ -345,13 +341,17 @@ def compute_MI(data_csv, low_dim_names=['x_coord', 'y_coord', 'z_coord'], path_t
 
     MI_Score = np.mean(MI_history[-50:])
 
-    plt.plot(MI_history)
-    plt.hlines(MI_Score, 0, len(MI_history))
-    plt.text(10, MI_Score + np.max(MI_history) / 50, str(np.round(MI_Score, 2)))
-    plt.title(f"Mutual information estimation with bound '{bound_type}'")
 
+
+    fig, ax = plt.subplots()
+    ax.plot(MI_history)
+    ax.axhline(y=MI_Score, color='r', ls='--', label=str(np.round(MI_Score, 2)))
+    ax.legend()
+    ax.set_xlabel('num epochs')
+    ax.set_ylabel('Mutual Information')
+    ax.set_title(f"Mutual information estimation with bound '{bound_type}'")
     if save_path != None:
         plt.savefig(save_path + f'/{len(low_dim_names)}_MI_score_plot.png')
-    plt.show()
+    if logger: logger.experiment.add_figure(tag="MI metriecs", figure=fig, close=True)
 
     return MI_Score

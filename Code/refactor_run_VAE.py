@@ -25,8 +25,7 @@ from timeit import default_timer as timer
 # specific argument for this model
 args.add_argument('--model', default='betaVAE')
 args.add_argument('--beta', type=float, default=10)
-args.add_argument('--pretrained', dest='weight_path', type=str,
-                  default='..//outputs/betaVAE_2021-02-17-19:54/')
+args.add_argument('--pretrained', dest='weight_path', type=str, default='')
 args = args.parse_args()
 # TODO: overwrite the parameters
 
@@ -38,13 +37,13 @@ if args.train and args.weight_path == '':
     save_model_path = os.path.join(args.output_path,
                                    args.model + "_" + str(datetime.datetime.now().strftime("%Y-%m-%d-%H:%M")))
 else:
-    save_model_path = ('/').join(args.weight_path.split('/')[:-1])
+    save_model_path = ('/').join(args.weight_path.split('/')[:-2])
 
 ##########################################################
 # %% Train
 ##########################################################
 train_loader, valid_loader = get_train_val_dataloader(dataset_path, input_size=args.input_size,
-                                                      batchsize=args.batch_size, test_split=0.1)
+                                                      batchsize=args.batch_size, test_split=0.05)
 
 model = betaVAE(zdim=args.hidden_dim, input_channels=args.input_channel, input_size=args.input_size, beta=args.beta)
 Experiment = VAEXperiment(model, {
@@ -59,11 +58,12 @@ logger = pl_loggers.TensorBoardLogger(f'{save_model_path}/logs/', name=args.mode
 
 # TODO: add the meaning of each arguments of Trainer
 checkpoint_callback = ModelCheckpoint(
-    monitor='loss',
+    # monitor='loss',
     dirpath=os.path.join(save_model_path, "logs"),
-    filename='ckpt-{epoch:02d}',
-    save_top_k=3,
-    mode='min',
+    # filename='ckpt-{epoch:02d}',
+    save_last=True,
+    # save_top_k=1,
+    # mode='min',
 )
 if args.train and args.weight_path == '':
     trainer = pl.Trainer(logger=logger, max_epochs=args.epochs, auto_scale_batch_size='binsearch', auto_lr_find=True,
@@ -95,13 +95,14 @@ except:
     label_list = metadata_csv.GT_label.astype(str).to_list()
     imgs = get_raw_data(infer_dataloader, metadata_csv)
     logger.experiment.add_embedding(embeddings, label_list, label_img=imgs)
-    logger.close()
 
     ## plotly embedding projector
     figplotly = plot_from_csv(metadata_csv, low_dim_names=['z0', 'z1', 'z2'], dim=3, as_str=True)
     plotly.offline.plot(figplotly, filename=os.path.join(save_model_path, 'Representation.html'), auto_open=False)
 
-### Run performance matrics
+###############################
+# %% Run performance matrics ###
+###############################
 params_preferences = {
     'feature_size': args.input_size ** 2 * args.input_channel,
     'path_to_raw_data': dataset_path,
@@ -111,27 +112,28 @@ params_preferences = {
     'global_saving_path': save_model_path + '/',  # Different for each model, this one is update during optimization
 
     ### Unsupervised metrics
-    'save_unsupervised_metric': False,
+    'save_unsupervised_metric': True,
     'only_local_Q': False,
-    'kt': 300,
-    'ks': 500,
+    'kt': 100,
+    'ks': 300,
 
     ### Mutual Information
     'save_mine_metric': True,
     'batch_size': 256,
     'bound_type': 'interpolated',
     'alpha_logit': -4.6,  # result in alpha = 0.01
-    'epochs': 20,
+    'epochs': 10,
 
     ### Classifier accuracy
-    'save_classifier_metric': False,
+    'save_classifier_metric': True,
     'num_iteration': 3,
 
     ### BackBone Metric
-    'save_backbone_metric': False,
+    'save_backbone_metric': True,
 
     ### Disentanglement Metric
-    'save_disentanglement_metric': False,
+    'save_disentanglement_metric': True,
     'features': dataset_lookUp[args.dataset]['feat'],
 }
-compute_perf_metrics(metadata_csv, params_preferences)
+compute_perf_metrics(metadata_csv, params_preferences, logger)
+logger.close()

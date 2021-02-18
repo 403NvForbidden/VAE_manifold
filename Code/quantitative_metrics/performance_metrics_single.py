@@ -49,7 +49,7 @@ from quantitative_metrics.classifier_metric import classifier_performance
 from quantitative_metrics.backbone_metric import dist_preservation_err
 
 
-def compute_perf_metrics(data_source, params_preferences):
+def compute_perf_metrics(data_source, params_preferences, logger=None):
     '''
     From a csv or a pandas DataFrame containing the projection (latent code) of
     the dataset, compute and save different performance metrics, that can be used
@@ -86,11 +86,11 @@ def compute_perf_metrics(data_source, params_preferences):
                                                                                kt=params_preferences['kt'],
                                                                                ks=params_preferences['ks'],
                                                                                only_local_Q=params_preferences[
-                                                                                   'only_local_Q'])
+                                                                                   'only_local_Q'], logger=logger)
 
             # MetaData_df = light_df
 
-            save_representation_plot(light_df, save_path, low_dim_names=params_preferences['low_dim_names'])
+            # save_representation_plot(light_df, save_path, low_dim_names=params_preferences['low_dim_names'])
 
             print(f'Trustworthiness AUC : {trust_AUC}')
             print(f'Continuity AUC : {cont_AUC}')
@@ -108,12 +108,12 @@ def compute_perf_metrics(data_source, params_preferences):
             print('#######################################')
             print('###### Computing Mutual Information')
             print('#######################################')
-
             MI_score = compute_MI(MetaData_df, low_dim_names=params_preferences['low_dim_names'],
                                   path_to_raw_data=params_preferences['path_to_raw_data'], save_path=save_path,
                                   batch_size=params_preferences['batch_size'],
                                   alpha_logit=params_preferences['alpha_logit'],
-                                  bound_type=params_preferences['bound_type'], epochs=params_preferences['epochs'])
+                                  bound_type=params_preferences['bound_type'], epochs=params_preferences['epochs'],
+                                  logger=logger)
 
             MI_score_df = pd.DataFrame({'MI_score': MI_score}, index=[0])
             if save_path != '': MI_score_df.to_csv(f'{save_path}/MI_score.csv', index=False)
