@@ -403,7 +403,7 @@ class infoMaxVAE(AbstractModel, pl.LightningModule):
             {'optimizer': optimizer_MI, 'lr_scheduler': scheduler_MI},
         )
 
-
+'''
 class VaDE(AbstractModel, pl.LightningModule):
     def __init__(self, zdim=3, ydim=7, input_channels=3,loss='BCEWithLogitsLoss', filepath=None):
         super().__init__(filepath=filepath)
@@ -503,7 +503,7 @@ class VaDE(AbstractModel, pl.LightningModule):
         loss = torch.mean(BCE_withlogits + KL_loss)
 
         return loss, torch.mean(BCE_withlogits), torch.mean(KL_loss), gamma
-
+'''
 
 class Skip_VAE(nn.Module):
 
