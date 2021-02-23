@@ -14,6 +14,7 @@ import plotly.offline
 from models.networks_refactoring import twoStageVAE
 from models.train_net import VAEXperiment
 from quantitative_metrics.performance_metrics_single import compute_perf_metrics
+from quantitative_metrics.unsupervised_metric import save_representation_plot
 from util.config import args, dataset_lookUp, device
 from util.data_processing import get_train_val_dataloader, get_inference_dataset
 from torchsummary import summary
@@ -22,14 +23,15 @@ from torchsummary import summary
 # %% config of the experimental parameters
 ##########################################################
 # specific argument for this model
-from util.helpers import metadata_latent_space_single, plot_from_csv, get_raw_data
+from util.helpers import metadata_latent_space, plot_from_csv, get_raw_data, double_reconstruciton
 
 args.add_argument('--model', default='twoStageVAE')
 args.add_argument('--zdim1', dest="hidden_dim_aux", type=float, default=100)
-args.add_argument('--alpha', type=float, default=3)
-args.add_argument('--beta', type=float, default=5)
+args.add_argument('--alpha', type=float, default=10)
+args.add_argument('--beta', type=float, default=1)
 args.add_argument('--gamma', type=float, default=10)
-args.add_argument('--pretrained', dest='weight_path', type=str, default='../outputs/twoStageVAE_2021-02-17-23:51/logs/last.ckpt')
+args.add_argument('--pretrained', dest='weight_path', type=str,
+                  default='')
 args = args.parse_args()
 # TODO: overwrite the parameters
 
@@ -86,15 +88,16 @@ if args.train and args.weight_path == '':
 ## step 1 ##
 ## transform the imgs in the dataset to latent dimensions
 # prepare the inference dataset
-infer_data, infer_dataloader = get_inference_dataset(dataset_path, batchsize=args.batch_size, input_size=args.input_size)
+infer_data, infer_dataloader = get_inference_dataset(dataset_path, batchsize=args.batch_size,
+                                                     input_size=args.input_size)
 
 try:
     metadata_csv = pd.read_csv(os.path.join(save_model_path, 'embeded_data.csv'), index_col=False)
 except:
     ## running for the first time
-    metadata_csv = metadata_latent_space_single(model, dataloader=infer_dataloader, device=device,
-                                                GT_csv_path=GT_path, save_csv=True, with_rawdata=False,
-                                                csv_path=os.path.join(save_model_path, 'embeded_data.csv'))
+    metadata_csv = metadata_latent_space(model, dataloader=infer_dataloader, device=device,
+                                         GT_csv_path=GT_path, save_csv=True, with_rawdata=False,
+                                         csv_path=os.path.join(save_model_path, 'embeded_data.csv'))
     ###########################
     ### embedding projector ###
     #####################v#####
@@ -108,6 +111,8 @@ except:
     figplotly = plot_from_csv(metadata_csv, low_dim_names=['z0', 'z1', 'z2'], dim=3, as_str=True)
     plotly.offline.plot(figplotly, filename=os.path.join(save_model_path, 'Representation.html'), auto_open=False)
 
+    double_reconstruciton(infer_dataloader, model, save_model_path, device, num_img=12, logger=logger)
+
 ###############################
 # %% Run performance matrics ###
 ###############################
@@ -120,7 +125,7 @@ params_preferences = {
     'global_saving_path': save_model_path + '/',  # Different for each model, this one is update during optimization
 
     ### Unsupervised metrics
-    'save_unsupervised_metric': False,
+    'save_unsupervised_metric': True,
     'only_local_Q': False,
     'kt': 300,
     'ks': 500,
@@ -133,11 +138,11 @@ params_preferences = {
     'epochs': 10,
 
     ### Classifier accuracy
-    'save_classifier_metric': False,
+    'save_classifier_metric': True,
     'num_iteration': 3,
 
     ### BackBone Metric
-    'save_backbone_metric': False,
+    'save_backbone_metric': True,
 
     ### Disentanglement Metric
     'save_disentanglement_metric': True,

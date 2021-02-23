@@ -16,7 +16,7 @@ from models.train_net import VAEXperiment
 from quantitative_metrics.performance_metrics_single import compute_perf_metrics
 from util.config import args, dataset_lookUp, device
 from util.data_processing import get_train_val_dataloader, get_inference_dataset
-from util.helpers import metadata_latent_space_single, plot_from_csv, get_raw_data
+from util.helpers import metadata_latent_space, plot_from_csv, get_raw_data, single_reconstruciton
 from timeit import default_timer as timer
 
 ##########################################################
@@ -25,7 +25,8 @@ from timeit import default_timer as timer
 # specific argument for this model
 args.add_argument('--model', default='betaVAE')
 args.add_argument('--beta', type=float, default=10)
-args.add_argument('--pretrained', dest='weight_path', type=str, default='')
+args.add_argument('--pretrained', dest='weight_path', type=str,
+                  default='../outputs/betaVAE_2021-02-18-02:15/logs/last.ckpt')
 args = args.parse_args()
 # TODO: overwrite the parameters
 
@@ -84,21 +85,24 @@ try:
     metadata_csv = pd.read_csv(os.path.join(save_model_path, 'embeded_data.csv'), index_col=False)
 except:
     ## running for the first time
-    metadata_csv = metadata_latent_space_single(model, dataloader=infer_dataloader, device=device,
-                                                GT_csv_path=GT_path, save_csv=True, with_rawdata=False,
-                                                csv_path=os.path.join(save_model_path, 'embeded_data.csv'))
+    metadata_csv = metadata_latent_space(model, dataloader=infer_dataloader, device=device,
+                                         GT_csv_path=GT_path, save_csv=True, with_rawdata=False,
+                                         csv_path=os.path.join(save_model_path, 'embeded_data.csv'))
     ###########################
     ### embedding projector ###
     #####################v#####
-    ## compute for tensorboard embedding projector
+    ### compute for tensorboard embedding projector
     embeddings = metadata_csv[[col for col in metadata_csv.columns if 'z' in col]].values
     label_list = metadata_csv.GT_label.astype(str).to_list()
     imgs = get_raw_data(infer_dataloader, metadata_csv)
     logger.experiment.add_embedding(embeddings, label_list, label_img=imgs)
 
-    ## plotly embedding projector
+    ### plotly embedding projector
     figplotly = plot_from_csv(metadata_csv, low_dim_names=['z0', 'z1', 'z2'], dim=3, as_str=True)
     plotly.offline.plot(figplotly, filename=os.path.join(save_model_path, 'Representation.html'), auto_open=False)
+
+    ### Recon and Generation #####
+    single_reconstruciton(infer_dataloader, model, save_model_path, device, num_img=12, logger=logger)
 
 ###############################
 # %% Run performance matrics ###
@@ -112,28 +116,29 @@ params_preferences = {
     'global_saving_path': save_model_path + '/',  # Different for each model, this one is update during optimization
 
     ### Unsupervised metrics
-    'save_unsupervised_metric': True,
+    'save_unsupervised_metric': False,
     'only_local_Q': False,
     'kt': 100,
     'ks': 300,
 
     ### Mutual Information
-    'save_mine_metric': True,
+    'save_mine_metric': False,
     'batch_size': 256,
     'bound_type': 'interpolated',
     'alpha_logit': -4.6,  # result in alpha = 0.01
     'epochs': 10,
 
     ### Classifier accuracy
-    'save_classifier_metric': True,
+    'save_classifier_metric': False,
     'num_iteration': 3,
 
     ### BackBone Metric
-    'save_backbone_metric': True,
+    'save_backbone_metric': False,
 
     ### Disentanglement Metric
-    'save_disentanglement_metric': True,
+    'save_disentanglement_metric': False,
     'features': dataset_lookUp[args.dataset]['feat'],
 }
 compute_perf_metrics(metadata_csv, params_preferences, logger)
+# finally close the logger
 logger.close()

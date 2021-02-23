@@ -10,7 +10,7 @@ from torch import cuda
 args = argparse.ArgumentParser()
 args.add_argument('--dataset', default='BBBC', choices=['BBBC, MNIST, 2dSprite'])
 args.add_argument('--in', dest="input_path", default='../DataSets/')
-args.add_argument('--out', dest="output_path", default='../outputs/')
+args.add_argument('--out', dest="output_path", default='/mnt/Linux_Storage/outputs/')
 args.add_argument('--input_size', type=int, default=64)
 args.add_argument('--input_channel', type=int, default=3)
 args.add_argument('-z', dest='hidden_dim', type=int, default=3)
@@ -23,7 +23,7 @@ args.add_argument('--dropout', type=float, default=0.5)
 args.add_argument('--weight_decay', type=float, default=5e-3)
 args.add_argument('--early_stopping', type=int, default=30)
 args.add_argument('--scheduler_gamma', type=float, default=.6)
-args.add_argument('--train', type=bool, default=False)
+args.add_argument('--train', type=bool, default=True)
 
 device = torch.device('cpu' if not cuda.is_available() else 'cuda')
 dataset_lookUp = {

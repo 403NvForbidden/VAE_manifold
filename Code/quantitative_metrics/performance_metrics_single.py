@@ -88,9 +88,7 @@ def compute_perf_metrics(data_source, params_preferences, logger=None):
                                                                                only_local_Q=params_preferences[
                                                                                    'only_local_Q'], logger=logger)
 
-            # MetaData_df = light_df
-
-            # save_representation_plot(light_df, save_path, low_dim_names=params_preferences['low_dim_names'])
+            save_representation_plot(light_df, save_path, low_dim_names=params_preferences['low_dim_names'])
 
             print(f'Trustworthiness AUC : {trust_AUC}')
             print(f'Continuity AUC : {cont_AUC}')
@@ -173,7 +171,6 @@ def compute_perf_metrics(data_source, params_preferences, logger=None):
                 print(f'Accuracy m3 : {mean_acc_m3}')
 
             else:
-
                 print('Metric 1...')
                 if params_preferences['dataset_tag'] == 2:  # Horvath dataset, imbalanced and 6 class
                     _, test_accuracies_m1, _ = classifier_performance(MetaData_df,

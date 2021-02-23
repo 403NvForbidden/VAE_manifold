@@ -28,6 +28,7 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 import skimage.measure
 from scipy.stats import entropy
+
 device = torch.device('cpu' if not cuda.is_available() else 'cuda')
 
 
@@ -188,6 +189,16 @@ def reduce_logmeanexp_nodiag(x, axis=None):
     num_elem = batch_size * (batch_size - 1.)
     return logsumexp - torch.log(torch.tensor(num_elem).to(device))
 
+def discretised_entropy_latent(latent, bin_size=10000):
+    """
+    :param latent: batch * 3
+    :param bin_size: num of intervals ### select large bin_size as a closer approach to the true entropy https://doi.org/10.1063/1.4995123
+    :return: the average entropy of discretised latent space
+    """
+    bins = np.linspace(np.min(latent), np.max(latent), bin_size)
+    digitized = np.digitize(np.array(latent), bins) # Return the indices of the bins to which each value belongs to.
+    _, counts = np.unique(digitized, return_counts=True) # compute the coun
+    return entropy(counts, base=2)
 
 #####################################
 ##### Train Critic and Baseline #####
@@ -250,16 +261,17 @@ def train_MINE(MINE, path_to_csv, low_dim_names, epochs, infer_dataloader, bound
                 batch_info.dropna(subset=[low_dim_names[0]], inplace=True)
                 data = data[[not (i in inds) for i in np.arange(data.size(0))]]
 
+            batch_latentCode = np.array([list(code) for code in zip(batch_info[low_dim_names[0]], batch_info[low_dim_names[1]],
+                                                           batch_info[low_dim_names[2]])])
 
+            entropy_latent_batch = discretised_entropy_latent(batch_latentCode)
 
+            ### compute the entropy for individual images before copy to GPU
+            # convert to data to gray scale first
+            gray_scale_data = torch.mean(data, axis=1)
+            entropy_img_batch = skimage.measure.shannon_entropy(gray_scale_data)
 
-            batch_latentCode = [list(code) for code in zip(batch_info[low_dim_names[0]], batch_info[low_dim_names[1]],
-                                                           batch_info[low_dim_names[2]])]
-            batch_latentCode = torch.from_numpy(np.array(batch_latentCode)).float().to(device)
-
-            # compute the entropy for individual images before copy to GPU
-            MI_img_batch = skimage.measure.shannon_entropy(data)
-
+            batch_latentCode = torch.from_numpy(batch_latentCode).float().to(device)
             data = data.to(device)
             MI_loss = None
             if bound_type == 'infoNCE':  # Constant Baseline
@@ -283,13 +295,13 @@ def train_MINE(MINE, path_to_csv, low_dim_names, epochs, infer_dataloader, bound
             MI_loss.backward()
             optimizer.step()
 
-            MI_epoch += np.divide(MI_xz.detach().cpu().numpy(), MI_img_batch)
+            MI_epoch += np.divide(2 * MI_xz.detach().cpu().numpy(), entropy_img_batch + entropy_latent_batch)
 
             if i % 2 == 0:
-                print('Train Epoch: {} [{}/{} ({:.0f}%)]\tMI: {:.4f} \t Image MI: {:.4f}'.format(
+                print('Train Epoch: {} [{}/{} ({:.0f}%)]\tMI: {:.4f} \t Image entropy: {:.4f} \t Latent entropy: {:.4f}'.format(
                     epoch, i * len(data), len(infer_dataloader.dataset),
                            100. * i / len(infer_dataloader),
-                    MI_xz.item(), MI_img_batch),  end='\r')
+                    MI_xz.item(), entropy_img_batch, entropy_latent_batch), end='\r')
 
         MI_epoch /= len(infer_dataloader)
         history_MI.append(MI_epoch)
@@ -340,8 +352,6 @@ def compute_MI(data_csv, low_dim_names=['x_coord', 'y_coord', 'z_coord'], path_t
             pkl.dump(MI_history, f, protocol=pkl.HIGHEST_PROTOCOL)
 
     MI_Score = np.mean(MI_history[-50:])
-
-
 
     fig, ax = plt.subplots()
     ax.plot(MI_history)

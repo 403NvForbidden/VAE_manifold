@@ -40,7 +40,7 @@ from models.infoMAX_VAE import CNN_128_VAE
 from util.data_processing import get_train_val_dataloader, imshow_tensor, get_inference_dataset
 from models.train_net import train_VAE_model, train_2stage_VAE_model, train_vaDE_model
 from util.helpers import plot_train_result, save_checkpoint, load_checkpoint, save_brute, load_brute, plot_from_csv, \
-    metadata_latent_space, save_reconstruction, plot_train_result_GMM, metadata_latent_space_single
+    metadata_latent_space, save_reconstruction, plot_train_result_GMM, metadata_latent_space
 from torch.autograd import Variable
 from torchvision.utils import save_image, make_grid
 from PIL import Image

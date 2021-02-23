@@ -14,6 +14,7 @@ From it Trustworthiness, Continuity and LCMC metrics are extracted.
 
 The contribution of each single point can also be computed to obtain a local quality score.
 """
+import os
 
 import coranking
 from coranking.metrics import trustworthiness, continuity, LCMC
@@ -32,7 +33,9 @@ import itertools
 import plotly.express as px
 import plotly.graph_objects as go
 import plotly.offline
+
 device = torch.device('cpu' if not cuda.is_available() else 'cuda')
+
 
 def unsup_metric_and_local_Q(metadata_csv, low_dim_names=['x_coord', 'y_coord', 'z_coord'], raw_data_included=False,
                              feature_size=64 * 64 * 3, path_to_raw_data='DataSets/Synthetic_Data_1', saving_path=None,
@@ -131,7 +134,6 @@ def unsup_metric_and_local_Q(metadata_csv, low_dim_names=['x_coord', 'y_coord', 
     Q = Q[1:, 1:]  # remove rankings which correspond to themselves
 
     if saving_path != None:
-        # part_name = metadata_csv.split('_')
         coranking_matrix_plot(Q, saving_path=saving_path, name=low_dim_names[0])
         name_pkl = f'{saving_path}/{low_dim_names[0]}_coranking_matrix.pkl'
         with open(name_pkl, 'wb') as f:
@@ -163,7 +165,7 @@ def unsup_metric_and_local_Q(metadata_csv, low_dim_names=['x_coord', 'y_coord', 
     light_df = MetaData_csv[low_dim_names + ['Unique_ID', 'GT_label',
                                              'local_Q_score']]  # ,'GT_Shape','GT_dist_toInit_state','GT_initial_state']]
     if saving_path != None:
-        light_df.to_csv(f'{saving_path}/{low_dim_names[0]}_light_metadata.csv')
+        light_df.to_csv(f'{saving_path}/{low_dim_names[0]}_light_metadata.csv', index=False)
 
     if only_local_Q:
         return None, None, None, light_df
@@ -187,12 +189,14 @@ def unsup_metric_and_local_Q(metadata_csv, low_dim_names=['x_coord', 'y_coord', 
                                        'trust_AUC': trust_AUC, 'cont_AUC': cont_AUC,
                                        'lcmc_AUC': lcmc_AUC, 'aggregate_AUC': aggregate_AUC})
         # Save the unsupervised_score to a CSV file
-        unsup_score_df.to_csv(f'{saving_path}/{low_dim_names[0]}_unsupervised_score.csv')
-        fig = lcmc_curves_plot(trust, trust_AUC, cont, cont_AUC, lcmc, lcmc_AUC, saving_path=saving_path + f'/{low_dim_names[0]}_')
+        unsup_score_df.to_csv(f'{saving_path}/{low_dim_names[0]}_unsupervised_score.csv', index=False)
+        fig = lcmc_curves_plot(trust, trust_AUC, cont, cont_AUC, lcmc, lcmc_AUC,
+                               saving_path=saving_path + f'/{low_dim_names[0]}_')
         if logger:
             logger.experiment.add_figure(tag="Unsuperivsed metriecs", figure=fig, close=True)
 
     return trust_AUC, cont_AUC, lcmc_AUC, light_df
+
 
 def unsupervised_score(coranking_matrix):
     """Compute different unsupervised performance metrics
@@ -258,15 +262,17 @@ def save_representation_plot(model_dataframe, saving_path, low_dim_names=['x_coo
     model with the same colorbar scale, to be able to compare different model qualitatively,
     but no Plot 1.
     """
+    if isinstance(model_dataframe, str):
+        model_dataframe = pd.read_csv(model_dataframe, index_col=False)
 
-    # GT cluster colored plot
-    model_dataframe['GT_label'] = model_dataframe['GT_label'].astype(str)
-    fig = px.scatter_3d(model_dataframe, x=low_dim_names[0], y=low_dim_names[1], z=low_dim_names[2], color='GT_label')
-    if saving_path != None:
-        plotly.offline.plot(fig, filename=saving_path + f'/{low_dim_names[0]}_GT_label.html', auto_open=False)
+    # # GT cluster colored plot
+    # model_dataframe['GT_label'] = model_dataframe['GT_label'].astype(str)
+    # fig = px.scatter_3d(model_dataframe, x=low_dim_names[0], y=low_dim_names[1], z=low_dim_names[2], color='GT_label')
+    # if saving_path != None:
+    #     plotly.offline.plot(fig, filename=saving_path+f'/GT_label.html', auto_open=False)
 
     # Local Q score colored plot
-    fig = px.scatter_3d(model_dataframe, x=low_dim_names[0], y=low_dim_names[1], z=low_dim_names[2],
-                        color='local_Q_score')
+    fig = px.scatter_3d(model_dataframe, x=low_dim_names[0], y=low_dim_names[1], z=low_dim_names[2], #size_max=20, size='local_Q_score',
+                        color='local_Q_score', opacity=0.5)
     if saving_path != None:
-        plotly.offline.plot(fig, filename=saving_path + f'/{low_dim_names[0]}_GT_local_score.html', auto_open=False)
+        plotly.offline.plot(fig, filename=os.path.join(saving_path, 'GT_local_score.html'), auto_open=False)

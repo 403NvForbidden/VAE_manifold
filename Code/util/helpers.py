@@ -94,8 +94,6 @@ def meta_MNIST(model, dataloader, device='cpu'):
     return fig_3d_1
 
 
-
-
 def get_raw_data(dataloader, MetaData_csv):
     list_of_tensors, id_list = [], []
 
@@ -123,9 +121,8 @@ def get_raw_data(dataloader, MetaData_csv):
     return torch.from_numpy(imgs.reshape(imgs.shape[0], data.shape[1], data.shape[2], data.shape[3])).float()
 
 
-
-def metadata_latent_space_single(model, dataloader, device, GT_csv_path, save_csv=False, with_rawdata=False,
-                                 csv_path='no_name_specified.csv'):
+def metadata_latent_space(model, dataloader, device, GT_csv_path, save_csv=False, with_rawdata=False,
+                          csv_path='no_name_specified.csv'):
     '''
     Once a VAE model is trained, take its predictions (3D latent code) and store it in a csv
     file alongside the ground truth information. Useful for plots and downstream analyses.
@@ -219,12 +216,12 @@ def metadata_latent_space_single(model, dataloader, device, GT_csv_path, save_cs
 ##############################################
 ######## Visualization
 ##############################################
-def single_reconstruciton(loader, model, save_path, device, num_img=12):
-    data, label, _ = next(iter(loader))
+def single_reconstruciton(loader, model, save_path, device, num_img=12, gen=True, logger=None):
+    data, _, _ = next(iter(loader))
     data = Variable(data[:num_img], requires_grad=False).to(device)
+    model.to(device)
 
     ### reconstruction
-    label = Variable(label.float()).to(device)
     x_recon_1, _, _, z_1 = model(data)
 
     img_grid = make_grid(
@@ -233,150 +230,76 @@ def single_reconstruciton(loader, model, save_path, device, num_img=12):
         nrow=num_img, padding=12,
         pad_value=1)
 
-    pre, ext = os.path.splitext(save_path)
-
+    if logger:
+        logger.experiment.add_image("Image reconstruction", img_grid)
     plt.figure(figsize=(10, 5))
     plt.imshow(img_grid.detach().cpu().permute(1, 2, 0))
     plt.axis('off')
-    plt.title(f'Example data and its reconstruction')
-    plt.savefig(pre + 'reconstructions.png')
+    plt.title(f'Reconstruction Samples')
+    plt.savefig(os.path.join(save_path, 'reconSamples.png'))
 
-    samples_1 = Variable(torch.randn(num_img, model.zdim, 1, 1), requires_grad=False).to(device)
-    recon_1 = model.decode(samples_1)
-    img_grid = make_grid(torch.sigmoid(recon_1[:, :3, :, :]),
-                         nrow=num_img, padding=12, pad_value=1)
+    if gen:
+        ### TODO: larger grid
+        samples_1 = Variable(torch.randn(num_img, model.zdim, 1, 1), requires_grad=False).to(device)
+        recon_1 = model.decode(samples_1)
+        img_grid = make_grid(torch.sigmoid(recon_1[:, :3, :, :]),
+                             nrow=num_img, padding=12, pad_value=1)
+
+        if logger:
+            logger.experiment.add_image("Image generation", img_grid)
 
     plt.figure(figsize=(10, 5))
     plt.imshow(img_grid.detach().cpu().permute(1, 2, 0))
     plt.axis('off')
     plt.title(f'Random generated samples')
-    plt.savefig(pre + 'generatedSamples.png')
+    plt.savefig(os.path.join(save_path, 'generatedSamples.png'))
 
 
-def save_reconstruction(loader, VAE_1, VAE_2, save_path, device, num_img=8, double_embed=False, gen=False):
-    """ Show (and save) reconstruction produced by a trained VAE model of 4 random
-    samples, alongside 8 newly generated samples, sampled from the prior dataset3_class_distribution
+def double_reconstruciton(loader, model, save_path, device, num_img=12, gen=True, logger=None):
+    print("Plotting")
 
-    Params :
-        - loader (DataLoader) : Dataloader that iterates the dataset by batch
-        - VAE (nn.Module) :  trained Pytorch VAE model that will produce latent codes of dataset
-        - save_path (str) : path where to save figures
-        - device (str) : 'cpu' or 'cuda'
-        - generation: generation process
-        :param num_img:
-    """
-
-    data, label, _ = next(iter(loader))
+    data, _, _ = next(iter(loader))
     data = Variable(data[:num_img], requires_grad=False).to(device)
-    label = label[:num_img].to(device)
-
-    if VAE_2.conditional:
-        y_onehot = torch.zeros((len(label), 7))
-        y_onehot[torch.arange(len(label)), label] = 1
-        label = Variable(y_onehot.float()).to(device)
-        # label_channel = torch.reshape(label, [num_img, 1, 1, 1])
-        # ones = torch.ones((num_img, 1, data.shape[2], data.shape[2]))
-        # # (m*1*1*1) * (m*1*64*64)
-        # label_channel = Variable(label_channel * ones)# .to(device)
-        # # concatenate to additional channel
-        # data = torch.cat([data, label_channel], axis=1).to(device)
+    model.to(device)
 
     ### reconstruction
-    label = Variable(label.float()).to(device)
-    if VAE_1.conditional:
-        x_recon_1, _, _, z_1 = VAE_1((data, label))
-    else:
-        x_recon_1, _, _, z_1 = VAE_1(label)
+    x_recon_hi, _, _, _, x_recon_lo, _, _, _ = model(data)
 
-    if double_embed:
-        if VAE_2.conditional:
-            x_recon_2, _, _, _ = VAE_2((z_1, label))
-        else:
-            x_recon_2, _, _, _ = VAE_2(z_1)
-    else:
-        if VAE_2.conditional:
-            x_recon_2, _, _, _ = VAE_2((data, label))
-        else:
-            x_recon_2, _, _, _ = VAE_2(data)
-
-    img_grid = make_grid(
-        torch.cat(
-            (data[:, :3, :, :], torch.sigmoid(x_recon_1[:, :3, :, :]), torch.sigmoid(x_recon_2[:num_img, :3, :, :]))),
+    img_grid_recon = make_grid(
+        torch.cat((data[:, :3, :, :], torch.sigmoid(x_recon_hi[:, :3, :, :]), torch.sigmoid(x_recon_lo[:, :3, :, :]))),
         nrow=num_img, padding=12,
-        pad_value=1)
-
-    pre, ext = os.path.splitext(save_path)
-
+        pad_value=1
+    )
+    if logger:
+        logger.experiment.add_image("Image reconstruction", img_grid_recon)
     plt.figure(figsize=(10, 5))
-    plt.imshow(img_grid.detach().cpu().permute(1, 2, 0))
+    plt.imshow(img_grid_recon.detach().cpu().permute(1, 2, 0))
     plt.axis('off')
-    plt.title(f'Example data and its reconstruction')
-    plt.savefig(pre + 'reconstructions.png')
+    plt.title(f'Reconstruction samples')
+    plt.savefig(os.path.join(save_path, 'reconstruction.png'))
 
-    ### generation
     if gen:
-        if VAE_2.conditional:
-            samples_1 = Variable(torch.randn(num_img, VAE_1.zdim + 7, 1, 1), requires_grad=False).to(device)
-            samples_2 = Variable(torch.randn(num_img, VAE_2.zdim + 7, 1, 1), requires_grad=False).to(device)
-        else:
-            samples_1 = Variable(torch.randn(num_img, VAE_1.zdim, 1, 1), requires_grad=False).to(device)
-            samples_2 = Variable(torch.randn(num_img, VAE_2.zdim, 1, 1), requires_grad=False).to(device)
+        ### TODO: larger grid
+        samples_aux = Variable(torch.randn(num_img, model.zdim_aux, 1, 1), requires_grad=False).to(device)
+        samples = Variable(torch.randn(num_img, model.zdim, 1, 1), requires_grad=False).to(device)
 
-        recon_1 = VAE_1.decode(samples_1)
-        recon_2 = VAE_2.decode(samples_2)
-        img_grid = make_grid(torch.cat((torch.sigmoid(recon_1[:, :3, :, :]), torch.sigmoid(recon_2[:, :3, :, :]))),
-                             nrow=num_img, padding=12, pad_value=1)
+        gen_hi = model.decode_aux(samples_aux)
+        gen_lo = model.decode(samples)
+        img_grid_gen = make_grid(
+            torch.cat((torch.sigmoid(gen_hi[:, :3, :, :]), torch.sigmoid(gen_lo[:, :3, :, :]))),
+            nrow=num_img,
+            padding=12,
+            pad_value=1
+        )
 
+        if logger:
+            logger.experiment.add_image("High fidelity generation (top), and Low fidelity generation (bot)",
+                                        img_grid_gen)
         plt.figure(figsize=(10, 5))
-        plt.imshow(img_grid.detach().cpu().permute(1, 2, 0))
+        plt.imshow(img_grid_gen.detach().cpu().permute(1, 2, 0))
         plt.axis('off')
         plt.title(f'Random generated samples')
-        plt.savefig(pre + 'generatedSamples.png')
-
-
-def conditional_gen(loader, VAE_1, VAE_2, save_path, device, num_img=8):
-    torch.manual_seed(0)
-    samples_1 = Variable(torch.randn(8, VAE_1.zdim, 1, 1), requires_grad=False).to(device)
-    samples_2 = Variable(torch.randn(8, VAE_2.zdim, 1, 1), requires_grad=False).to(device)
-
-    # designated label
-    label = torch.tensor([6, 6, 6, 6, 6, 6, 6])
-
-    metadata_csv = pd.read_csv("../outputs/2stage_cVAE_2020-10-08-20:38_30/_metedata.csv")
-    for i in range(num_img):
-        metadata_csv = metadata_csv.append(pd.Series(), ignore_index=True)
-        if i != 7:
-            metadata_csv.loc[-1, ['GT_label']] = 6
-        else:
-            metadata_csv.loc[-1, ['GT_label']] = 8
-        metadata_csv.loc[-1, ['VAE_x_coord', 'VAE_y_coord', 'VAE_z_coord']] = samples_2[i].squeeze().cpu().numpy()
-
-    metadata_csv = metadata_csv.dropna(axis=0, how='all')
-
-    # y_onehot = torch.zeros((len(label), 7))
-    # y_onehot[torch.arange(len(label)), label] = 1
-    # y_onehot = torch.cat((y_onehot, torch.zeros((1, 7))))[..., None, None] # no label
-    # label = Variable(y_onehot.float()).to(device)
-    # samples_1 = torch.cat((samples_1, label), axis=1)
-    # samples_2 = torch.cat((samples_2, label), axis=1)
-
-    figplotly = plot_from_csv(metadata_csv, dim=3, num_class=8)
-
-    html_save = f'../outputs/2stage_cVAE_2020-10-08-20:38_30/cGen.html'
-    plotly.offline.plot(figplotly, filename=html_save, auto_open=True)
-
-    # recon_1 = VAE_1.decode(samples_1)
-    # recon_2 = VAE_2.decode(samples_2)
-    # img_grid = make_grid(torch.cat((torch.sigmoid(recon_1[:, :3, :, :]), torch.sigmoid(recon_2[:, :3, :, :]))),
-    #                      nrow=num_img, padding=12, pad_value=1)
-    #
-    # plt.figure(figsize=(10, 5))
-    # plt.imshow(img_grid.detach().cpu().permute(1, 2, 0))
-    # plt.axis('off')
-    # plt.title(f'Random generated samples')
-    # plt.show()
-
-    # plt.savefig(pre + 'generatedSamples.png')
+        plt.savefig(os.path.join(save_path, 'generatedSamples.png'))
 
 
 def plot_from_csv(path_to_csv, low_dim_names=['VAE_x_coord', 'VAE_y_coord', 'VAE_z_coord'], dim=3, num_class=7,
@@ -449,54 +372,6 @@ def plot_from_csv(path_to_csv, low_dim_names=['VAE_x_coord', 'VAE_y_coord', 'VAE
         return fig_2d_1
 
 
-def plot_train_result_infoMax(history, best_epoch=None, save_path=None):
-    print(">>>>>>>>>PLOTING INFOz")
-    # columns=['VAE_loss', 'kl_1', 'kl_2', 'recon_1', 'recon_2', 'MI_1', 'MI_2', 'VAE_loss_val', 'kl_val_1', 'kl_val_2',
-    #                  'recon_val_1', 'recon_val_2', 'MI_val_1', 'MI_val_2']
-    fig = plt.figure(figsize=(15, 15))
-    gs = GridSpec(3, 2, figure=fig)
-    ax1 = fig.add_subplot(gs[0, :])  # full top row: global VAE loss
-    ax2 = fig.add_subplot(gs[1, :])  # top row on 4x4 grid: reconstruction
-    ax3 = fig.add_subplot(gs[2, 0])  # top left on a 4x4 grid: KL divergence
-    ax4 = fig.add_subplot(gs[2, 1])  # bottom right on a 4x4 grid: MI
-
-    #  plot the overall loss
-    ax1.plot(history['VAE_loss'], color='dodgerblue', label='train')
-    ax1.plot(history['VAE_loss_val'], linestyle='--', color='dodgerblue', label='test')
-    ax1.set_title('Global VAE Loss')
-
-    if best_epoch != None:
-        ax1.axvline(best_epoch, linestyle='--', color='r', label='Early stopping')
-
-    ax2.set_title('Reconstruction Loss')
-    ax2.plot(history['recon_1'], color='dodgerblue', label='VAE_1')
-    ax2.plot(history['recon_2'], color='lightsalmon', label='VAE_2')
-    ax2.plot(history['recon_val_1'], linestyle='--', color='dodgerblue', label='VAE_1_val')
-    ax2.plot(history['recon_val_2'], linestyle='--', color='lightsalmon', label='VAE_2_val')
-
-    ax3.set_title('Fit to Prior')
-    ax3.plot(history['kl_1'], color='dodgerblue', label='train')
-    ax3.plot(history['kl_2'], color='lightsalmon', label='train')
-    ax3.plot(history['kl_val_1'], linestyle='--', color='dodgerblue', label='test')
-    ax3.plot(history['kl_val_2'], linestyle='--', color='lightsalmon', label='test')
-
-    ax4.set_title('MI')
-    ax4.plot(history['MI_1'], color='dodgerblue', label='MI1')
-    ax4.plot(history['MI_2'], color='lightsalmon', label='MI2')
-    ax4.plot(history['MI_val_1'], linestyle='--', color='dodgerblue', label='MI1_val')
-    ax4.plot(history['MI_val_2'], linestyle='--', color='lightsalmon', label='MI2_val')
-
-    ax1.legend();
-    ax2.legend();
-    ax3.legend();
-    ax4.legend()
-
-    if save_path != None:
-        plt.savefig(save_path + 'los_evolution.png')
-
-    return fig
-
-
 def plot_train_result(history, best_epoch=None, save_path=None):
     """Display training and validation loss evolution over epochs
 
@@ -543,109 +418,6 @@ def plot_train_result(history, best_epoch=None, save_path=None):
     ax1.legend()
     ax2.legend()
     ax3.legend()
-
-    if save_path != None:
-        plt.savefig(save_path + 'los_evolution.png')
-
-    return fig
-
-
-def plot_train_result_GMM(history, save_path=None):
-    """Display training and validation loss evolution over epochs
-
-    Params
-    -------
-    history : DataFrame
-        Panda DataFrame containing train and valid losses
-    best_epoch : int
-        If early stopping is used, display the last saved model
-    save_path : string
-        Path to save the figure
-    infoMax : boolean
-        If True, an additional loss composant (Mutual Information) is plotted
-
-    Return a matplotlib Figure
-    --------
-    """
-    # ['train_loss', 'train_kl_loss', 'train_recon_loss', 'val_loss', 'val_kl_loss', 'val_recon_loss', 'clutering_acc']
-
-    print(">>>>>>>>>PLOTING VaDE")
-    fig = plt.figure(figsize=(15, 15))
-    gs = GridSpec(2, 2, figure=fig)
-    ax1 = fig.add_subplot(gs[0, 0])  # full top row: global VAE loss
-    ax2 = fig.add_subplot(gs[0, 1])  # top row on 4x4 grid: reconstruction
-    ax3 = fig.add_subplot(gs[1, 0])  # top left on a 4x4 grid: KL divergence
-    ax4 = fig.add_subplot(gs[1, 1])  # bottom right on a 4x4 grid: MI
-
-    #  plot the overall loss
-    ax1.plot(history['train_loss'], color='dodgerblue', label='train')
-    ax1.plot(history['val_loss'], linestyle='--', color='dodgerblue', label='val')
-    ax1.set_title('Overall Loss')
-
-    ax2.set_title('CLuster accuracy')
-    ax2.plot(history['clutering_acc'], color='dodgerblue', label='GMM clustering')
-
-    ax3.set_title('KL loss')
-    ax3.plot(history['train_kl_loss'], color='dodgerblue', label='train')
-    ax3.plot(history['val_kl_loss'], linestyle='--', color='dodgerblue', label='val')
-
-    ax4.set_title('reconstruction loss')
-    ax4.plot(history['train_recon_loss'], color='lightsalmon', label='train')
-    ax4.plot(history['val_recon_loss'], linestyle='--', color='lightsalmon', label='val')
-
-    ax1.legend()
-    ax2.legend()
-    ax3.legend()
-    ax4.legend()
-
-    if save_path != None:
-        plt.savefig(save_path + 'los_evolution.png')
-
-    return fig
-
-
-def plot_singleVAE_result(history, save_path=None):
-    """Display training and validation loss evolution over epochs
-
-    Params
-    -------
-    history : DataFrame
-        Panda DataFrame containing train and valid losses
-    best_epoch : int
-        If early stopping is used, display the last saved model
-    save_path : string
-        Path to save the figure
-    infoMax : boolean
-        If True, an additional loss composant (Mutual Information) is plotted
-
-    Return a matplotlib Figure
-    --------
-    """
-
-    # ['global_VAE_loss', 'kl_loss', 'recon_loss', 'global_VAE_loss_val', 'kl_loss_val', 'recon_loss_val']
-    print(">>>>>>>>>PLOTING Single VAE")
-    fig = plt.figure(figsize=(15, 15))
-    gs = GridSpec(2, 2, figure=fig)
-    ax1 = fig.add_subplot(gs[0, :])
-    ax3 = fig.add_subplot(gs[1, 0])
-    ax4 = fig.add_subplot(gs[1, 1])
-
-    #  plot the overall loss
-    ax1.plot(history['global_VAE_loss'], color='dodgerblue', label='train')
-    ax1.plot(history['global_VAE_loss_val'], linestyle='--', color='dodgerblue', label='val')
-    ax1.set_title('Overall Loss')
-
-    ax3.set_title('KL loss')
-    ax3.plot(history['kl_loss'], color='dodgerblue', label='train')
-    ax3.plot(history['kl_loss_val'], linestyle='--', color='dodgerblue', label='val')
-
-    ax4.set_title('reconstruction loss')
-    ax4.plot(history['recon_loss'], color='lightsalmon', label='train')
-    ax4.plot(history['recon_loss_val'], linestyle='--', color='lightsalmon', label='val')
-
-    ax1.legend()
-    ax3.legend()
-    ax4.legend()
 
     if save_path != None:
         plt.savefig(save_path + 'los_evolution.png')
