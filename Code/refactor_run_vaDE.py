@@ -11,8 +11,8 @@ from pytorch_lightning import loggers as pl_loggers
 from pytorch_lightning.callbacks import ModelCheckpoint
 import plotly.offline
 
-from models.networks_refactoring import betaVAE, infoMaxVAE
-from models.train_net import VAEXperiment
+from models.networks_refactoring import betaVAE, infoMaxVAE, VaDE
+from models.train_net import VAEXperiment, pretrain_vaDE_model
 from quantitative_metrics.performance_metrics_single import compute_perf_metrics
 from util.config import args, dataset_lookUp, device
 from util.data_processing import get_train_val_dataloader, get_inference_dataset
@@ -22,11 +22,9 @@ from util.helpers import metadata_latent_space, plot_from_csv, get_raw_data, sin
 # %% config of the experimental parameters
 ##########################################################
 # specific argument for this model
-args.add_argument('--model', default='infoMaxVAE')
-args.add_argument('--alpha', type=float, default=1)
-args.add_argument('--beta', type=float, default=10)
+args.add_argument('--model', default='vaDE')
 args.add_argument('--pretrained', dest='weight_path', type=str,
-                  default='../outputs/infoMaxVAE_2021-02-18-01:21/logs/last.ckpt')
+                  default='')
 args = args.parse_args()
 # TODO: overwrite the parameters
 
@@ -36,7 +34,7 @@ GT_path = os.path.join(args.input_path, dataset_lookUp[args.dataset]['meta'])
 # if in training model, create new folder,otherwise use a existing parent directory of the pretrained weights
 if args.train and args.weight_path == '':
     save_model_path = os.path.join(args.output_path,
-                                   args.model + "_" + str(datetime.datetime.now().strftime("%Y-%m-%d-%H:%M")))
+                                   args.model)# + "_" + str(datetime.datetime.now().strftime("%Y-%m-%d-%H:%M")))
 else:
     save_model_path = ('/').join(args.weight_path.split('/')[:-2])
 
@@ -44,14 +42,13 @@ else:
 # %% Train
 ##########################################################
 ### pretrain model
-
-
 train_loader, valid_loader = get_train_val_dataloader(dataset_path, input_size=args.input_size,
                                                       batchsize=args.batch_size, test_split=0.05)
 
-model = infoMaxVAE(zdim=args.hidden_dim, input_channels=args.input_channel, input_size=args.input_size,
-                   alpha=args.alpha,
-                   beta=args.beta)
+# Note that y dim is predefined by pretrain
+model = VaDE(zdim=args.hidden_dim, ydim=6, input_channels=args.input_channel, input_size=args.input_size)
+pretrain_vaDE_model(model, train_loader, pre_epoch=5, save_path=save_model_path, device=device)
+
 Experiment = VAEXperiment(model, {
     "lr": args.learning_rate,
     "weight_decay": args.weight_decay,

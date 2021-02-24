@@ -47,6 +47,7 @@ train_loader, valid_loader = get_train_val_dataloader(dataset_path, input_size=a
                                                       batchsize=args.batch_size, test_split=0.05)
 
 model = betaVAE(zdim=args.hidden_dim, input_channels=args.input_channel, input_size=args.input_size, beta=args.beta)
+
 Experiment = VAEXperiment(model, {
     "lr": args.learning_rate,
     "weight_decay": args.weight_decay,

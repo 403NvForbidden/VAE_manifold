@@ -241,24 +241,29 @@ class betaVAE(AbstractModel, pl.LightningModule):
         # run weight initialization TODO: make this abstract class
         weight_initialization(self.modules())
 
-    def encode(self, x):
-        return self.encoder(x)
+    ### @override
+    def encode(self, img):
+        return self.encoder(img)
 
-    def inference(self, x):
-        mu_logvar = self.mu_logvar_gen(x)
+    ### @override
+    def inference(self, mu_logvar):
+        mu_logvar = self.mu_logvar_gen(mu_logvar)
         mu_z, logvar_z = mu_logvar.view(-1, self.zdim, 2).unbind(-1)
         logvar_z = self.stabilize_exp(logvar_z)
         return reparameterize(mu_z, logvar_z, self.training), mu_z, logvar_z
 
+    ### @override
     def decode(self, z):
         return self.decoder(z)
 
+    ### @override
     def training_step(self, batch, batch_idx, optimizer_idx=0, *args, **kwargs) -> dict:
         img, labels = batch
         self.curr_device = img.device
         # only forward once
         return self.step(img)
 
+    ### @override
     def forward(self, img, **kwargs):
         # (32, 3, 64, 64) or (3, 100)
         x = self.encode(img)
@@ -271,9 +276,11 @@ class betaVAE(AbstractModel, pl.LightningModule):
         loss = self.objective_func(img, x_recon, mu_z, logvar_z)
         return loss
 
+    ### @override
     def backward(self, loss: Tensor, optimizer: Optimizer, optimizer_idx: int, *args, **kwargs) -> None:
         loss.backward()
 
+    ### @override
     def objective_func(self, x, x_recon, mu_z, logvar_z, *args,
                        **kwargs) -> dict:
         """
@@ -298,6 +305,7 @@ class betaVAE(AbstractModel, pl.LightningModule):
         # TODO: sample function
         # TODO: tensorboard add image follow this tutorial: https://learnopencv.com/tensorboard-with-pytorch-lightning/
 
+    ### @override
     def configure_optimizers(self, params: dict) -> dict:
         optimizer = optim.Adam(self.parameters(),
                                lr=params['lr'], betas=(0.9, 0.999),
@@ -403,6 +411,260 @@ class infoMaxVAE(AbstractModel, pl.LightningModule):
             {'optimizer': optimizer_MI, 'lr_scheduler': scheduler_MI},
         )
 
+
+class VaDE(AbstractModel, pl.LightningModule):
+    def __init__(self, zdim=3, ydim=7, input_channels=3, input_size=64, filepath=None):
+        super().__init__(filepath=filepath)
+        """
+        https://github.com/eelxpeng/UnsupervisedDeepLearning-Pytorch/blob/master/udlp/clustering/vade.py
+        param :
+            zdim (int) : dimension of the latent space
+            Modulate the complexity of the model with parameter 'base_enc' and 'base_dec'
+        """
+        self.zdim = zdim
+        self.ydim = ydim
+        self.input_channels = input_channels
+        self.input_size = input_size
+        self.history = []
+
+        ### initialise GMM parameters
+        # theta p
+        self.pi_ = nn.Parameter(torch.FloatTensor(ydim, ).fill_(1) / ydim, requires_grad=True)
+        self.mu_c = nn.Parameter(torch.FloatTensor(zdim, ydim).fill_(0), requires_grad=True)
+        # lambda p
+        self.log_sigma2_c = nn.Parameter(torch.FloatTensor(zdim, ydim).fill_(0), requires_grad=True)
+
+        ###########################
+        ##### Encoding layers #####
+        ###########################
+        self.encoder = Encoder(out_size=256, input_channel=input_channels)
+
+        self.mu_l = nn.Linear(256, zdim)
+        self.logvar_l = nn.Linear(256, zdim)
+
+        # to constrain logvar in a reasonable range
+        self.stabilize_exp = nn.Hardtanh(min_val=-6., max_val=2.)  # linear between min and max
+
+        ###########################
+        ##### Decoding layers #####
+        ###########################
+        self.decoder = Decoder(zdim=zdim, input_channel=input_channels)
+
+        ### weight initialization
+        weight_initialization(self.modules())
+
+    @property
+    def cluster_weights(self):
+        return torch.softmax(self.pi_, dim=0)
+
+    ### @override
+    def encode(self, img):
+        return self.encoder(img)
+
+    ### @override
+    def inference(self, mu_logvar):
+        mu_z, logvar_z = self.mu_l(mu_logvar), self.logvar_l(mu_logvar)
+
+        logvar_z = self.stabilize_exp(logvar_z)
+        return reparameterize(mu_z, logvar_z), mu_z, logvar_z
+
+    ### @override
+    def decode(self, z):
+        return self.decoder(z)
+
+    ### @override
+    def training_step(self, batch, batch_idx, optimizer_idx=0, *args, **kwargs) -> dict:
+        img, labels = batch
+        self.curr_device = img.device
+        # only forward once
+        return self.step(img)
+
+    ### @override
+    def forward(self, x):
+        ### encode
+        z, mu_z, logvar_z = self.inference(self.encode(x))
+        ### decode
+        x_recon = self.decode(z)
+        return x_recon, mu_z, logvar_z, z.squeeze()
+
+    def step(self, img) -> dict:
+        x_recon, mu_z, logvar_z, z = self.forward(img)
+        loss = self.objective_func(img, x_recon, z, mu_z, logvar_z)
+        return loss
+
+    ### @override
+    def backward(self, loss: Tensor, optimizer: Optimizer, optimizer_idx: int, *args, **kwargs) -> None:
+        loss.backward()
+
+    ### @override
+    def objective_func(self, x, recon_x, z, z_mean, z_log_var):
+        Z = z.unsqueeze(2).expand(z.size()[0], z.size()[1], self.ydim)  # NxDxK
+        z_mean_t = z_mean.unsqueeze(2).expand(z_mean.size()[0], z_mean.size()[1], self.ydim)
+        z_log_var_t = z_log_var.unsqueeze(2).expand(z_log_var.size()[0], z_log_var.size()[1], self.ydim)
+        u_tensor3 = self.mu_c.unsqueeze(0).expand(z.size()[0], self.mu_c.size()[0], self.mu_c.size()[1])  # NxDxK
+        lambda_tensor3 = self.log_sigma2_c.unsqueeze(0).expand(z.size()[0], self.log_sigma2_c.size()[0],
+                                                               self.log_sigma2_c.size()[1])
+        theta_tensor2 = self.pi_.unsqueeze(0).expand(z.size()[0], self.ydim)  # NxK
+
+        p_c_z = torch.exp(torch.log(theta_tensor2) - torch.sum(0.5 * torch.log(2 * math.pi * lambda_tensor3) + \
+                                                               (Z - u_tensor3) ** 2 / (2 * lambda_tensor3),
+                                                               dim=1)) + 1e-9  # NxK
+        gamma = p_c_z / torch.sum(p_c_z, dim=1, keepdim=True)  # NxK
+
+        # adding min for loss to prevent log(0)
+        BCE_withlogits = -torch.sum(x * torch.log(torch.clamp(torch.sigmoid(recon_x), min=1e-10)) +
+                                    (1 - x) * torch.log(torch.clamp(1 - torch.sigmoid(recon_x), min=1e-10)), 1).sum(
+            1).sum(1)
+        # BCE_withlogits = F.binary_cross_entropy_with_logits(recon_x, x)
+
+        logpzc = torch.sum(0.5 * gamma * torch.sum(self.zdim * math.log(2 * math.pi) + torch.log(lambda_tensor3) + \
+                                                   torch.exp(z_log_var_t) / lambda_tensor3 + \
+                                                   (z_mean_t - u_tensor3) ** 2 / lambda_tensor3, dim=1),
+                           dim=-1)
+        qentropy = -0.5 * torch.sum(1 + z_log_var + self.zdim * math.log(2 * math.pi), -1)
+        logpc = -torch.sum(torch.log(theta_tensor2) * gamma, -1)
+        logqcx = torch.sum(torch.log(gamma) * gamma, -1)
+
+        KL_loss = logpzc + qentropy + logpc + logqcx
+        # Normalise by same number of elements as in reconstruction
+        loss = torch.mean(BCE_withlogits + KL_loss)
+
+        return {'loss': loss, 'recon_loss': torch.mean(BCE_withlogits), 'KLD': torch.mean(KL_loss), 'gamma': gamma}
+
+    ### @override
+    def configure_optimizers(self, params: dict) -> dict:
+        optimizer = optim.Adam(self.parameters(),
+                               lr=params['lr'], betas=(0.9, 0.999),
+                               weight_decay=params['weight_decay'])
+        scheduler = optim.lr_scheduler.ExponentialLR(optimizer,
+                                                     gamma=params['scheduler_gamma'])
+
+        return {'optimizer': optimizer, 'lr_scheduler': scheduler}
+
+
+'''
+class VaDE(nn.Module):
+    def __init__(self, zdim=3, ydim=7, input_channels=3, base_enc=32, base_dec=32,
+                 loss='BCEWithLogitsLoss'):
+        super(VaDE, self).__init__()
+        """
+        param :
+            zdim (int) : dimension of the latent space
+            beta (float) : weight coefficient for DL divergence, when beta=1 is Valina VAE
+
+            Modulate the complexity of the model with parameter 'base_enc' and 'base_dec'
+        """
+        self.zdim = zdim
+        self.ydim = ydim
+        self.loss = loss
+        self.input_channels = input_channels
+        self.base_dec = base_dec
+
+        ### initialise GMM parameters
+        # theta p
+        self.pi_ = nn.Parameter(torch.FloatTensor(ydim, ).fill_(1) / ydim, requires_grad=True)
+        # self.mu_c = nn.Parameter(torch.randn(zdim, ydim), requires_grad=True)
+        self.mu_c = nn.Parameter(torch.FloatTensor(zdim, ydim).fill_(0), requires_grad=True)
+        # lambda p
+        # self.log_sigma2_c = nn.Parameter(torch.randn(zdim, ydim), requires_grad=True)
+        self.log_sigma2_c = nn.Parameter(torch.FloatTensor(zdim, ydim).fill_(0), requires_grad=True)
+
+        ###########################
+        ##### Encoding layers #####
+        ###########################
+        self.conv_enc = nn.Sequential(
+            Conv(self.input_channels, base_enc, 4, stride=2, padding=1),  # stride 2, resolution is splitted by half
+            Conv(base_enc, base_enc * 2, 4, stride=2, padding=1),  # 16x16
+            Conv(base_enc * 2, base_enc * 4, 4, stride=2, padding=1),  # 8x8
+            Conv(base_enc * 4, base_enc * 8, 4, stride=2, padding=1),  # 4x4
+            Conv(base_enc * 8, base_enc * 16, 4, stride=2, padding=1),  # 2x2
+            # Conv(base_enc * 16, base_enc * 16, 4, stride=2, padding=1),  # 2
+        )
+        self.linear_enc = nn.Sequential(
+            Linear_block(pow(2, input_channels - 1) * base_dec * 16, 1024),  # 2048 -> 1024
+            Linear_block(1024, 256),
+            # nn.Linear(256, self.zdim * 2)
+        )
+        self.mu_l = nn.Linear(256, zdim)
+        self.logvar_l = nn.Linear(256, zdim)
+
+        # to constrain logvar in a reasonable range
+        self.stabilize_exp = nn.Hardtanh(min_val=-6., max_val=2.)  # linear between min and max
+
+        ###########################
+        ##### Decoding layers #####
+        ###########################
+        self.decoder = Decoder(zdim, input_channel=input_channels)
+
+        ### weight initialization
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d) or isinstance(m, nn.ConvTranspose2d):
+                xavier_normal_(m.weight,
+                               gain=math.sqrt(2. / (1 + 0.01)))  # Gain adapted for LeakyReLU activation function
+                m.bias.data.fill_(0.01)
+            elif isinstance(m, nn.BatchNorm2d):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
+
+    @property
+    def cluster_weights(self):
+        return torch.softmax(self.pi_, dim=0)
+
+    def encode(self, img):
+        batch_size = img.size(0)
+        # encode
+        x = self.conv_enc(img)
+        x = x.view((batch_size, -1))
+        mu_logvar = self.linear_enc(x)
+        return mu_logvar
+
+    def inference(self, mu_logvar):
+        mu_z, logvar_z = self.mu_l(mu_logvar), self.logvar_l(mu_logvar)
+
+        logvar_z = self.stabilize_exp(logvar_z)
+        return reparameterize(mu_z, logvar_z), mu_z, logvar_z
+
+    def forward(self, x):
+        ### encode
+        z, mu_z, logvar_z = self.inference(self.encode(x))
+        ### decode
+        x_recon = self.decoder(z)
+        return x_recon, mu_z, logvar_z, z
+
+    def loss_function(self, x, recon_x, z, z_mean, z_log_var):
+        Z = z.unsqueeze(2).expand(z.size()[0], z.size()[1], self.ydim)  # NxDxK
+        z_mean_t = z_mean.unsqueeze(2).expand(z_mean.size()[0], z_mean.size()[1], self.ydim)
+        z_log_var_t = z_log_var.unsqueeze(2).expand(z_log_var.size()[0], z_log_var.size()[1], self.ydim)
+        u_tensor3 = self.mu_c.unsqueeze(0).expand(z.size()[0], self.mu_c.size()[0], self.mu_c.size()[1])  # NxDxK
+        lambda_tensor3 = self.log_sigma2_c.unsqueeze(0).expand(z.size()[0], self.log_sigma2_c.size()[0],
+                                                               self.log_sigma2_c.size()[1])
+        theta_tensor2 = self.pi_.unsqueeze(0).expand(z.size()[0], self.ydim)  # NxK
+
+        p_c_z = torch.exp(torch.log(theta_tensor2) - torch.sum(0.5 * torch.log(2 * math.pi * lambda_tensor3) + \
+                                                               (Z - u_tensor3) ** 2 / (2 * lambda_tensor3),
+                                                               dim=1)) + 1e-9  # NxK
+        gamma = p_c_z / torch.sum(p_c_z, dim=1, keepdim=True)  # NxK
+
+        # adding min for loss to prevent log(0)
+        BCE_withlogits = -torch.sum(x * torch.log(torch.clamp(torch.sigmoid(recon_x), min=1e-10)) +
+                                    (1 - x) * torch.log(torch.clamp(1 - torch.sigmoid(recon_x), min=1e-10)), 1).sum(
+            1).sum(1)
+        # BCE_withlogits = F.binary_cross_entropy_with_logits(recon_x, x)
+
+        logpzc = torch.sum(0.5 * gamma * torch.sum(self.zdim * math.log(2 * math.pi) + torch.log(lambda_tensor3) + \
+                                                   torch.exp(z_log_var_t) / lambda_tensor3 + \
+                                                   (z_mean_t - u_tensor3) ** 2 / lambda_tensor3, dim=1),
+                           dim=-1)
+        qentropy = -0.5 * torch.sum(1 + z_log_var + self.zdim * math.log(2 * math.pi), -1)
+        logpc = -torch.sum(torch.log(theta_tensor2) * gamma, -1)
+        logqcx = torch.sum(torch.log(gamma) * gamma, -1)
+
+        KL_loss = logpzc + qentropy + logpc + logqcx
+        # Normalise by same number of elements as in reconstruction
+        loss = torch.mean(BCE_withlogits + KL_loss)
+
+        return loss, torch.mean(BCE_withlogits), torch.mean(KL_loss), gamma
+'''
 '''
 class VaDE(AbstractModel, pl.LightningModule):
     def __init__(self, zdim=3, ydim=7, input_channels=3,loss='BCEWithLogitsLoss', filepath=None):
@@ -504,6 +766,7 @@ class VaDE(AbstractModel, pl.LightningModule):
 
         return loss, torch.mean(BCE_withlogits), torch.mean(KL_loss), gamma
 '''
+
 
 class Skip_VAE(nn.Module):
 

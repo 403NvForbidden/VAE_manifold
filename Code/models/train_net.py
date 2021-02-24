@@ -101,6 +101,7 @@ def pretrain_vaDE_model(model, dataloader, pre_epoch=30, save_path='', device='c
 
     Loss = nn.MSELoss()
     opti = optim.Adam(model.parameters(), lr=0.0005, betas=(0.9, 0.999))
+    model.to(device)
 
     print('Pretraining......')
     epoch_bar = tqdm(range(pre_epoch))
@@ -168,7 +169,7 @@ def train_vaDE_epoch(model, data_loader, optimizer, epoch, device):
     for batch_idx, (x, _) in enumerate(data_loader):
         x = x.to(device)
         recon_x, mu, logvar, z = model(x)
-        loss, loss_recon, loss_kl, _ = model.loss_function(x, recon_x, z, mu, logvar)
+        loss, loss_recon, loss_kl, _ = model.objective_func(x, recon_x, z, mu, logvar)
 
         optimizer.zero_grad()
         loss.backward()
@@ -204,7 +205,7 @@ def test_vaDE_epoch(model, val_loader, epoch, device):
 
             recon_x, mu, logvar, z = model.forward(x)
 
-            loss, loss_recon, loss_kl, gamma = model.loss_function(x, recon_x, z, mu, logvar)
+            loss, loss_recon, loss_kl, gamma = model.objective_func(x, recon_x, z, mu, logvar)
 
             # prediction
             gamma = gamma.data.cpu().numpy()
@@ -793,7 +794,11 @@ class VAEXperiment(pl.LightningModule):
 
     def parameter_histogram(self):
         for n, p in self.model.state_dict().items():  # .named_parameters():
-            self.logger.experiment.add_histogram(n, p, self.global_step)
+            # try:
+            #     self.logger.experiment.add_histogram(n, p, self.global_step)
+            # except:
+            print(f"{n} cannot be added to histogram ")
+            print(p)
 
     def plot_computation_graph(self):
         sample_img = torch.rand(1, self.model.input_channels, self.model.input_size, self.model.input_size).to(
@@ -812,10 +817,11 @@ class VAEXperiment(pl.LightningModule):
         return self.model.training_step(batch, batch_idx, optimizer_idx)
 
     def backward(self, loss: Tensor, optimizer: Optimizer, optimizer_idx: int, *args, **kwargs) -> None:
+        self.parameter_histogram()
         self.model.backward(loss, optimizer, optimizer_idx)
 
     def on_after_backward(self) -> None:
-        if self.global_step % 100 == 0:
+        if self.global_step % 10 == 0:
             self.parameter_histogram()
 
     def training_epoch_end(self, outputs: list):
