@@ -135,22 +135,26 @@ def compute_perf_metrics(data_source, params_preferences, logger=None):
             if params_preferences['dataset_tag'] == 1:
                 print('Metric 1...')
                 # Metric 1 : Acc on all test single cells except uniform cluster 7
-                _, test_accuracies_m1, _ = classifier_performance(MetaData_df,
-                                                                  low_dim_names=params_preferences['low_dim_names'],
-                                                                  Metrics=[True, False, False],
-                                                                  num_iteration=params_preferences['num_iteration'])
+                test_accuracies_m1 = classifier_performance(MetaData_df,
+                                                                   low_dim_names=params_preferences['low_dim_names'],
+                                                                   Metrics=[True, False, False],
+                                                                   num_iteration=params_preferences['num_iteration'],
+                                                                   logger=logger)
+
                 print('Metric 2...')
                 # Metric 2 : Acc on all strong phenotypical change test single cells except uniform cluster 7
-                _, test_accuracies_m2, _ = classifier_performance(MetaData_df,
-                                                                  low_dim_names=params_preferences['low_dim_names'],
-                                                                  Metrics=[False, True, False],
-                                                                  num_iteration=params_preferences['num_iteration'])
+                test_accuracies_m2 = classifier_performance(MetaData_df,
+                                                                   low_dim_names=params_preferences['low_dim_names'],
+                                                                   Metrics=[False, True, False],
+                                                                   num_iteration=params_preferences['num_iteration'],
+                                                                   logger=logger)
                 print('Metric 3...')
                 # Metric 3 : Acc on all strong phenotypical change + META_CLUSTER (1&2, 3&4 and 5&6 grouped) test single cells except uniform cluster 7
-                _, test_accuracies_m3, _ = classifier_performance(MetaData_df,
-                                                                  low_dim_names=params_preferences['low_dim_names'],
-                                                                  Metrics=[False, False, True],
-                                                                  num_iteration=params_preferences['num_iteration'])
+                test_accuracies_m3 = classifier_performance(MetaData_df,
+                                                                   low_dim_names=params_preferences['low_dim_names'],
+                                                                   Metrics=[False, False, True],
+                                                                   num_iteration=params_preferences['num_iteration'],
+                                                                   logger=logger)
 
                 mean_acc_m1 = np.mean(test_accuracies_m1)
                 std_acc_m1 = np.std(test_accuracies_m1)

@@ -17,6 +17,7 @@ to predict class identity from the latent codes.
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from sklearn.metrics import confusion_matrix
 from tqdm import tqdm
 
 import torch
@@ -32,9 +33,13 @@ from torchvision import transforms, utils
 from sklearn.model_selection import StratifiedShuffleSplit
 import warnings
 
+from util.helpers import plot_confusion_matrix_from_data
+
 warnings.filterwarnings('ignore')
 
 device = torch.device('cpu' if not cuda.is_available() else 'cuda')
+
+
 class Classifier_Net(nn.Module):
     '''
     Small NN of fixed capacity that predict class identity from the latent codes
@@ -80,7 +85,7 @@ def train_net(model, epochs, trainloader, num_class=6, imbalance_weight_horvath=
 
     history_loss = []
 
-    for epoch in tqdm(range(epochs)):
+    for _ in tqdm(range(epochs)):
         running_loss = 0.0
         for i, data in enumerate(trainloader, 0):
             # get the inputs; data is a list of [inputs, labels]
@@ -111,6 +116,8 @@ def perf_eval(model, testloader):
     '''
     correct = 0
     total = 0
+    predicted_list = []
+    labels_list = []
     with torch.no_grad():
         for data in testloader:
             inputs, labels = data[0].float().to(device), data[1].to(device)
@@ -118,9 +125,11 @@ def perf_eval(model, testloader):
             _, predicted = torch.max(outputs.data, 1)
             total += labels.size(0)
             correct += (predicted == labels).sum().item()
+            predicted_list += predicted.detach().cpu().tolist()
+            labels_list += labels.detach().cpu().tolist()
 
     # print('Accuracy of the network on the test set: %d %%' % (100 * correct / total))
-    return 100 * correct / total
+    return 100 * correct / total, predicted_list, labels_list
 
 
 def perf_eval_perclass(model, testloader):
@@ -195,7 +204,7 @@ class Dataset_from_csv(Dataset):
 
 
 def classifier_performance(path_to_csv, low_dim_names=['x_coord', 'y_coord', 'z_coord'], Metrics=[True, False, False],
-                           num_iteration=5, num_class=6, class_to_ignore=7, imbalanced_data=False):
+                           num_iteration=5, num_class=6, class_to_ignore=7, imbalanced_data=False, logger=None):
     '''
     Given a CSV-file containing a 3D latent code to evaluate, built a simple
     (200 unit single hidden layer) NN classifier. Test accuracy can be used as
@@ -252,6 +261,8 @@ def classifier_performance(path_to_csv, low_dim_names=['x_coord', 'y_coord', 'z_
         train_acc = []
         test_acc = []
         perclass_te_acc = []
+        test_predicted = []
+        test_labels = []
         # For statistical relevance, make several train-test split
         for train_index, test_index in train_test_split.split(np.zeros((len(latentCode_frame), 3)), labels):
             dataset_train = latentCode_frame.iloc[train_index]
@@ -269,12 +280,16 @@ def classifier_performance(path_to_csv, low_dim_names=['x_coord', 'y_coord', 'z_
             train_net(model_1, 20, tr_dataloader, num_class=num_class, imbalance_weight_horvath=imbalanced_data)
 
             # train and test accuracy
-            train_acc.append(perf_eval(model_1, tr_dataloader))
-            test_acc.append(perf_eval(model_1, te_dataloader))
+            # train_result, _, _ = perf_eval(model_1, tr_dataloader)
+            # train_acc.append(train_result)
+            test_result, predicted, labels = perf_eval(model_1, te_dataloader)
+            test_acc.append(test_result)
 
-            perclass_te_acc.append(perf_eval_perclass(model_1, te_dataloader))
+        fig = plot_confusion_matrix_from_data(np.array(labels), np.array(predicted), cmap='PuRd')
+        if logger:
+            logger.experiment.add_figure(tag="Metrics 1", figure=fig, close=True)
 
-        return train_acc, test_acc, perclass_te_acc
+        return None, test_acc, None  # the last time
 
     #################################
     ####### Metric two ##############
@@ -313,13 +328,15 @@ def classifier_performance(path_to_csv, low_dim_names=['x_coord', 'y_coord', 'z_
             # train on train_dataloader
             train_net(model_2, 20, tr_dataloader)
             print("finished train")
-            # train and test accuracy
-            train_acc.append(perf_eval(model_2, tr_dataloader))
-            test_acc.append(perf_eval(model_2, te_dataloader))
 
-            perclass_te_acc.append(perf_eval_perclass(model_2, te_dataloader))
+            test_result, predicted, labels = perf_eval(model_2, te_dataloader)
+            test_acc.append(test_result)
 
-        return train_acc, test_acc, perclass_te_acc
+        fig = plot_confusion_matrix_from_data(np.array(labels), np.array(predicted), cmap='PuRd')
+        if logger:
+            logger.experiment.add_figure(tag="Metrics 2", figure=fig, close=True)
+
+        return None, test_acc, None  # the last time
 
     #################################
     ####### Metric three ##############
@@ -366,13 +383,14 @@ def classifier_performance(path_to_csv, low_dim_names=['x_coord', 'y_coord', 'z_
             # train on train_dataloader
             train_net(model_3, 20, tr_dataloader)
 
-            # train and test accuracy
-            train_acc.append(perf_eval(model_3, tr_dataloader))
-            test_acc.append(perf_eval(model_3, te_dataloader))
+            test_result, predicted, labels = perf_eval(model_3, te_dataloader)
+            test_acc.append(test_result)
 
-            perclass_te_acc.append(perf_eval_perclass(model_3, te_dataloader))
+        fig = plot_confusion_matrix_from_data(np.array(labels), np.array(predicted), cmap='PuRd')
+        if logger:
+            logger.experiment.add_figure(tag="Metrics 3", figure=fig, close=True)
 
-        return train_acc, test_acc, perclass_te_acc
+        return None, test_acc, None  # the last time
 
 ############################################
 ##### Old Functions

@@ -95,23 +95,26 @@ def scalar_loss(data, loss_recon, mu_z, logvar_z, beta):
 ##### train vaDE
 #########################################
 def pretrain_vaDE_model(model, dataloader, pre_epoch=30, save_path='', device='cpu'):
-    if os.path.exists(save_path + 'pretrain_model.pk'):
-        model.load_state_dict(torch.load(save_path + 'pretrain_model.pk'))
+    print(os.path.join(save_path, 'pretrain_model.pk'))
+    if os.path.exists(os.path.join(save_path, 'pretrain_model.pk')):
+        model.load_state_dict(torch.load(os.path.join(save_path, 'pretrain_model.pk')))
         return
 
     Loss = nn.MSELoss()
     opti = optim.Adam(model.parameters(), lr=0.0005, betas=(0.9, 0.999))
     model.to(device)
 
-    print('Pretraining......')
+    print(f'Pretraining......on {device}')
     epoch_bar = tqdm(range(pre_epoch))
     for _ in epoch_bar:
         L = 0
         for x, y in dataloader:
             x = x.to(device)
 
-            z, _ = model.encode(x)
-            x_recon = model.decoder(z)
+            mu_logvar = model.encode(x)
+            z = model.mu_l(mu_logvar)
+            x_recon = model.decode(z)
+
             loss = Loss(x, torch.sigmoid(x_recon))
 
             L += loss.detach().cpu().numpy()
@@ -130,9 +133,10 @@ def pretrain_vaDE_model(model, dataloader, pre_epoch=30, save_path='', device='c
         for x, y in dataloader:
             x = x.to(device)
 
-            mu_z, logvar_z = model.encode(x)
+            mu_logvar = model.encode(x)
+            z = model.mu_l(mu_logvar)
             # assert F.mse_loss(mu_z, logvar_z) == 0
-            Z.append(mu_z)
+            Z.append(z)
             Y.append(y)
 
     # convert to tensor
@@ -148,7 +152,8 @@ def pretrain_vaDE_model(model, dataloader, pre_epoch=30, save_path='', device='c
     plt.plot(n_components, aic, label='AIC')
     plt.legend(loc='best')
     plt.xlabel('n_components')
-    plt.show()
+    plt.savefig(os.path.join(save_path, 'BIC_AIC.png'))
+
 
     gmm = GaussianMixture(n_components=model.ydim, covariance_type='diag')
     pre = gmm.fit_predict(Z)
@@ -158,7 +163,7 @@ def pretrain_vaDE_model(model, dataloader, pre_epoch=30, save_path='', device='c
     model.mu_c.data = torch.from_numpy(gmm.means_.T).cuda().float()
     model.log_sigma2_c.data = torch.from_numpy(gmm.covariances_.T).cuda().float()
 
-    torch.save(model.state_dict(), save_path + 'pretrain_model.pk')
+    torch.save(model.state_dict(), os.path.join(save_path, 'pretrain_model.pk'))
 
 
 def train_vaDE_epoch(model, data_loader, optimizer, epoch, device):
@@ -794,11 +799,7 @@ class VAEXperiment(pl.LightningModule):
 
     def parameter_histogram(self):
         for n, p in self.model.state_dict().items():  # .named_parameters():
-            # try:
-            #     self.logger.experiment.add_histogram(n, p, self.global_step)
-            # except:
-            print(f"{n} cannot be added to histogram ")
-            print(p)
+            self.logger.experiment.add_histogram(n, p, self.global_step)
 
     def plot_computation_graph(self):
         sample_img = torch.rand(1, self.model.input_channels, self.model.input_size, self.model.input_size).to(
@@ -817,11 +818,10 @@ class VAEXperiment(pl.LightningModule):
         return self.model.training_step(batch, batch_idx, optimizer_idx)
 
     def backward(self, loss: Tensor, optimizer: Optimizer, optimizer_idx: int, *args, **kwargs) -> None:
-        self.parameter_histogram()
         self.model.backward(loss, optimizer, optimizer_idx)
 
     def on_after_backward(self) -> None:
-        if self.global_step % 10 == 0:
+        if self.global_step % 100 == 0:
             self.parameter_histogram()
 
     def training_epoch_end(self, outputs: list):

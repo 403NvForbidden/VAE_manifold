@@ -466,7 +466,7 @@ class VaDE(AbstractModel, pl.LightningModule):
         mu_z, logvar_z = self.mu_l(mu_logvar), self.logvar_l(mu_logvar)
 
         logvar_z = self.stabilize_exp(logvar_z)
-        return reparameterize(mu_z, logvar_z), mu_z, logvar_z
+        return reparameterize(mu_z, logvar_z, self.training), mu_z, logvar_z
 
     ### @override
     def decode(self, z):

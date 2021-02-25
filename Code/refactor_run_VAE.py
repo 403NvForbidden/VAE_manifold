@@ -130,7 +130,7 @@ params_preferences = {
     'epochs': 10,
 
     ### Classifier accuracy
-    'save_classifier_metric': False,
+    'save_classifier_metric': True,
     'num_iteration': 3,
 
     ### BackBone Metric
