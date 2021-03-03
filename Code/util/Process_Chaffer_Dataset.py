@@ -29,11 +29,11 @@ import os
 import matplotlib.pyplot as plt
 import shutil
 
+root = '/mnt/Linux_Storage/VAE-Manifold/Raw Datasets/Data_Chaffer/real_world_chaffer'
 #single cell png files
-single_cell_image_folder = 'DataSets/real_world_chaffer/per_channel_subset_sCells/'
-
+single_cell_image_folder = os.path.join(root, 'per_channel_subset_sCells/')
 #CSV file with ground truth (GT_label, Unique_ID and CP info)
-GT_csv_read = 'DataSets/real_world_chaffer/200809_Chaffer ground truth clusters_SUBSET_Only_Embedding_Calculations.csv'
+GT_csv_read = os.path.join(root, '200809_Chaffer ground truth clusters_SUBSET_Only_Embedding_Calculations.csv')
 GT_csv_save = 'DataSets/real_world_chaffer/MetaData3_Chaffer_GT_link_CP.csv'
 #SAVE ONLY COLUMN OF INTEREST
 GT_csv = pd.read_csv(GT_csv_read)

@@ -10,21 +10,26 @@ import pytorch_lightning as pl
 from pytorch_lightning import loggers as pl_loggers
 from pytorch_lightning.callbacks import ModelCheckpoint
 import plotly.offline
+from skimage.transform import resize, rotate, rescale
+import torchvision
+import numpy as np
 
-from models.networks_refactoring import betaVAE, infoMaxVAE, VaDE
+from models.networks_refactoring import betaVAE, VaDE
 from models.train_net import VAEXperiment, pretrain_vaDE_model
 from quantitative_metrics.performance_metrics_single import compute_perf_metrics
 from util.config import args, dataset_lookUp, device
-from util.data_processing import get_train_val_dataloader, get_inference_dataset
+from util.data_processing import get_train_val_dataloader, get_inference_dataset, imshow_tensor
 from util.helpers import metadata_latent_space, plot_from_csv, get_raw_data, single_reconstruciton
+from timeit import default_timer as timer
 
 ##########################################################
 # %% config of the experimental parameters
 ##########################################################
 # specific argument for this model
-args.add_argument('--model', default='vaDE')
+args.add_argument('--model', default='testFelixVAE_C4')
+args.add_argument('--beta', type=float, default=1)
 args.add_argument('--pretrained', dest='weight_path', type=str,
-                  default='/mnt/Linux_Storage/outputs/vaDE/logs/last.ckpt')
+                  default='/mnt/Linux_Storage/outputs/testFelixVAE_C4/logs/last.ckpt')
 args = args.parse_args()
 # TODO: overwrite the parameters
 
@@ -34,28 +39,25 @@ GT_path = os.path.join(args.input_path, dataset_lookUp[args.dataset]['meta'])
 # if in training model, create new folder,otherwise use a existing parent directory of the pretrained weights
 if args.train and args.weight_path == '':
     save_model_path = os.path.join(args.output_path,
-                                   args.model)# + "_" + str(datetime.datetime.now().strftime("%Y-%m-%d-%H:%M")))
+                                   args.model)  # + "_" + str(datetime.datetime.now().strftime("%Y-%m-%d-%H:%M")))
 else:
     save_model_path = ('/').join(args.weight_path.split('/')[:-2])
 
 ##########################################################
 # %% Train
 ##########################################################
-### pretrain model
 train_loader, valid_loader = get_train_val_dataloader(dataset_path, input_size=args.input_size,
                                                       batchsize=args.batch_size, test_split=0.05)
 
-# Note that y dim is predefined by pretrain
-model = VaDE(zdim=args.hidden_dim, ydim=6, input_channels=args.input_channel, input_size=args.input_size)
+model = betaVAE(zdim=args.hidden_dim, input_channels=args.input_channel, input_size=args.input_size, beta=args.beta)
 
 Experiment = VAEXperiment(model, {
     "lr": args.learning_rate,
     "weight_decay": args.weight_decay,
     "scheduler_gamma": args.scheduler_gamma
 }, log_path=save_model_path)
-Experiment.load_weights(args.weight_path)
 
-pretrain_vaDE_model(model, train_loader, pre_epoch=30, save_path=save_model_path, device=device)
+Experiment.load_weights(args.weight_path)
 
 # define the logger to log training output, the default is using tensorBoard
 logger = pl_loggers.TensorBoardLogger(f'{save_model_path}/logs/', name=args.model)
@@ -71,9 +73,8 @@ checkpoint_callback = ModelCheckpoint(
 )
 if args.train and args.weight_path == '':
     trainer = pl.Trainer(logger=logger, max_epochs=args.epochs, auto_scale_batch_size='binsearch', auto_lr_find=True,
-                         gpus=(1 if device.type == 'cuda' else 0),  # checkpoint_callback=False,
-                         check_val_every_n_epoch=2, profiler='simple', callbacks=[checkpoint_callback])
-
+                         gpus=(1 if device.type == 'cuda' else 0),  # checkpoint_callback=[checkpoint_callback],
+                         profiler='simple', callbacks=[checkpoint_callback])
     trainer.fit(Experiment, train_loader, valid_loader)
 
 ##########################################################
@@ -99,15 +100,21 @@ except:
     embeddings = metadata_csv[[col for col in metadata_csv.columns if 'z' in col]].values
     label_list = metadata_csv.GT_label.astype(str).to_list()
     imgs = get_raw_data(infer_dataloader, metadata_csv)
-    logger.experiment.add_embedding(embeddings, label_list, label_img=imgs)
+    # resize these images
+    if imgs.shape[-1] == 256:
+        imgs = torch.Tensor(
+            [np.transpose(resize(img.permute(1, 2, 0), (64, 64), preserve_range=False, anti_aliasing=True)) for img in
+             imgs])
+    logger.experiment.add_embedding(embeddings, label_list, label_img=imgs[:, :3, :, :])
 
     ### plotly embedding projector
-    figplotly = plot_from_csv(metadata_csv, low_dim_names=['z0', 'z1', 'z2'], dim=3, as_str=True)
+    figplotly = plot_from_csv(metadata_csv, low_dim_names=['z0', 'z1', 'z2'], GT_col='GT_dataset', dim=3, as_str=True)
     plotly.offline.plot(figplotly, filename=os.path.join(save_model_path, 'Representation.html'), auto_open=False)
 
     ### Recon and Generation #####
     single_reconstruciton(infer_dataloader, model, save_model_path, device, num_img=12, logger=logger)
 
+'''
 ###############################
 # %% Run performance matrics ###
 ###############################
@@ -122,8 +129,8 @@ params_preferences = {
     ### Unsupervised metrics
     'save_unsupervised_metric': False,
     'only_local_Q': False,
-    'kt': 300,
-    'ks': 500,
+    'kt': 100,
+    'ks': 300,
 
     ### Mutual Information
     'save_mine_metric': False,
@@ -133,11 +140,11 @@ params_preferences = {
     'epochs': 10,
 
     ### Classifier accuracy
-    'save_classifier_metric': True,
+    'save_classifier_metric': False,
     'num_iteration': 3,
 
     ### BackBone Metric
-    'save_backbone_metric': False,
+    'save_backbone_metric': True,
 
     ### Disentanglement Metric
     'save_disentanglement_metric': False,
@@ -145,4 +152,5 @@ params_preferences = {
 }
 compute_perf_metrics(metadata_csv, params_preferences, logger)
 # finally close the logger
+'''
 logger.close()

@@ -16,6 +16,8 @@ will only be used as visual colored labels once the model is trained.
 ###############################
 ####### Imports ###############
 ###############################
+import warnings
+
 import torch
 from torchvision import datasets, transforms
 from torch.utils.data import DataLoader, SubsetRandomSampler
@@ -23,7 +25,7 @@ from torch.utils.data import DataLoader, SubsetRandomSampler
 from skimage import io
 from skimage.util import img_as_float, pad
 from PIL import Image
-from skimage.transform import resize, rotate
+from skimage.transform import resize, rotate, rescale
 from sklearn.model_selection import train_test_split
 
 import matplotlib.pyplot as plt
@@ -221,6 +223,9 @@ class zPad_or_Rescale(object):
 
         fixed_size = (self.input_size, self.input_size)
 
+        if len(img_arr.shape) == 2:
+            img_arr = img_arr[..., np.newaxis]
+
         if ((h > fixed_size[0]) or (w > fixed_size[1])):
             # Resize
             img_resized = resize(img_arr, fixed_size, preserve_range=False, anti_aliasing=True)
@@ -231,7 +236,7 @@ class zPad_or_Rescale(object):
             diff_w = fixed_size[1] - w
             img_resized = pad(img_arr, ((int(np.round(diff_h / 2.)), diff_h - int(np.round(diff_h / 2.))),
                                         (int(np.round(diff_w / 2.)), diff_w - int(np.round(diff_w / 2.))), (0, 0)))
-        assert img_resized[:, :, 0].shape == fixed_size, "Error in padding / rescaling"
+            assert img_resized[:, :, 0].shape == fixed_size, "Error in padding / rescaling"
 
         return img_resized
 
@@ -255,6 +260,9 @@ class zPad_or_Rescale_inference(object):
         w = img_arr.shape[1]
 
         fixed_size = (self.input_size, self.input_size)
+
+        if len(img_arr.shape) == 2:
+            img_arr = img_arr[..., np.newaxis]
 
         if ((h > fixed_size[0]) or (w > fixed_size[1])):
             # Resize
@@ -373,5 +381,6 @@ def imshow_tensor(tensor_img, ax=None):
     inSize = image.shape[0]
     plt.title(f'Single_cell image resized to ({inSize}x{inSize})')
     # plt.axis('off')
+    plt.show()
 
     return ax, image

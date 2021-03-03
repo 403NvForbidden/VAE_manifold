@@ -31,8 +31,10 @@ import matplotlib.pyplot as plt
 from skimage import io
 
 ### Path to CellProfiler Outputs
-path_to_CP = '../Data_Horvath/Horvath_Synth_Complex_Dataset/CellProfiler_Outputs/'
-CP_Quantitative_CSV = path_to_CP+'Quantitative_Outputs/200602_Horvath_Complex_AnalysisSplitCellBodies.csv'
+root = '/mnt/Linux_Storage/VAE-Manifold/Raw Datasets/Data_Horvath'
+path_to_CP = os.path.join(root, 'Horvath_Synth_Complex_Dataset/CellProfiler_Outputs/')
+
+CP_Quantitative_CSV = os.path.join(path_to_CP, 'Quantitative_Outputs/200602_Horvath_Complex_AnalysisSplitCellBodies.csv')
 
 # Extraction of useful information from CellProfiler MetaData
 fields = ['ImageNumber','ObjectNumber','Metadata_Plate','Metadata_Well','AreaShape_Center_X','AreaShape_Center_Y']
@@ -42,11 +44,9 @@ fields = ['ImageNumber','ObjectNumber','Metadata_Plate','Metadata_Well','AreaSha
 CP_df = pd.read_csv(CP_Quantitative_CSV,usecols=fields)
 
 # %% Control that info match with an example image
-img_test = '../Data_Horvath/db11 - synthetic_peter_2 - Copy/synthPlate001/anal1/synthPlate001_wA02.png'
+img_test = os.path.join(root, 'db11 - synthetic_peter_2 - Copy/synthPlate001/anal1/synthPlate001_wA02.png')
 img = io.imread(img_test)
-
 fig, ax = plt.subplots(1,1,figsize=(10, 10))
-ax.imshow(img)
 
 site1 = CP_df['Metadata_Plate']==1
 Well1 = CP_df['Metadata_Well']=='A02'
@@ -54,6 +54,8 @@ Well1 = CP_df['Metadata_Well']=='A02'
 x = CP_df[site1 & Well1]['AreaShape_Center_X']
 y = CP_df[site1 & Well1]['AreaShape_Center_Y']
 ax.scatter(x.values,y.values,s=60,c='red',marker='X')
+ax.imshow(img)
+
 # Everything look ok !!
 
 ### Path to Peter Horvath Ground truth File

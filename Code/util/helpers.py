@@ -36,6 +36,7 @@ import torch.nn.functional as F
 from torch import cuda
 from torchvision.utils import save_image, make_grid
 
+
 def make_path(path):
     if not path == '' or not os.path.isdir(path):
         try:
@@ -301,7 +302,7 @@ def double_reconstruciton(loader, model, save_path, device, num_img=12, gen=True
         plt.savefig(os.path.join(save_path, 'generatedSamples.png'))
 
 
-def plot_from_csv(path_to_csv, low_dim_names=['VAE_x_coord', 'VAE_y_coord', 'VAE_z_coord'], dim=3, num_class=7,
+def plot_from_csv(path_to_csv, low_dim_names=['VAE_x_coord', 'VAE_y_coord', 'VAE_z_coord'], GT_col='GT_label', dim=3,
                   column=None, as_str=False):
     """
     Plot on a plotly figure the latent space produced by any methods, already stored in a csv file.
@@ -331,13 +332,15 @@ def plot_from_csv(path_to_csv, low_dim_names=['VAE_x_coord', 'VAE_y_coord', 'VAE
         if column == None:
             ##### Fig 1 : Plot each single cell in latent space with GT cluster labels
             traces = []
-            for i in range(num_class):  # [2, 3, 4]:  # range(3,5): # TODO: change it back to original form
-                scatter = go.Scatter3d(x=MetaData_csv[MetaData_csv['GT_label'] == i + 1][low_dim_names[0]].values,
-                                       y=MetaData_csv[MetaData_csv['GT_label'] == i + 1][low_dim_names[1]].values,
-                                       z=MetaData_csv[MetaData_csv['GT_label'] == i + 1][low_dim_names[2]].values,
+            for i in np.unique(
+                    MetaData_csv[GT_col]):  # [2, 3, 4]:  # range(3,5): # TODO: change it back to original form
+                selected_rows = MetaData_csv[MetaData_csv[GT_col] == i]
+                scatter = go.Scatter3d(x=selected_rows[low_dim_names[0]].values,
+                                       y=selected_rows[low_dim_names[1]].values,
+                                       z=selected_rows[low_dim_names[2]].values,
                                        mode='markers',
                                        marker=dict(size=3, opacity=1),
-                                       name=f'Cluster {i + 1}')
+                                       name=f'Cluster {i}')
                 traces.append(scatter)
             layout = dict(title='Latent Representation, colored by GT clustered')
             fig_3d_1 = go.Figure(data=traces, layout=layout)
@@ -357,12 +360,13 @@ def plot_from_csv(path_to_csv, low_dim_names=['VAE_x_coord', 'VAE_y_coord', 'VAE
 
         traces = []
         MS = MetaData_csv
-        for i in range(num_class):
-            scatter = go.Scatter(x=MS[MetaData_csv['GT_label'] == i + 1][low_dim_names[0]].values,
-                                 y=MS[MetaData_csv['GT_label'] == i + 1][low_dim_names[1]].values,
+        for i in np.unique(
+                    MetaData_csv['GT_dataset']):
+            scatter = go.Scatter(x=MS[MetaData_csv[GT_col] == i][low_dim_names[0]].values,
+                                 y=MS[MetaData_csv[GT_col] == i][low_dim_names[1]].values,
                                  mode='markers',
                                  marker=dict(size=3, opacity=0.8),
-                                 name=f'Cluster {i + 1}')
+                                 name=f'Cluster {i}')
             traces.append(scatter)
         layout = dict(title='Latent Representation, colored by GT clustered')
         fig_2d_1 = go.Figure(data=traces, layout=layout)
@@ -976,7 +980,7 @@ def plot_confusion_matrix_from_data(y_test, predictions, columns=None, annot=Tru
     # show_null_values = 2
     df_cm = DataFrame(confm, index=columns, columns=columns)
     return pretty_plot_confusion_matrix(df_cm, fz=fz, cmap=cmap, figsize=figsize, show_null_values=show_null_values,
-                                 pred_val_axis=pred_val_axis)
+                                        pred_val_axis=pred_val_axis)
 
 
 #

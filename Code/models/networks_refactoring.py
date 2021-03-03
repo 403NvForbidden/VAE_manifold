@@ -19,7 +19,7 @@ from torch.nn import functional as F
 from torch.nn import Parameter
 from torch.nn.init import xavier_normal_
 from models.nn_modules import Conv, ConvUpsampling, Skip_Conv_down, Skip_DeConv_up, Linear_block, \
-    Encoder, Decoder, MLP_MI_estimator
+    Encoder, Decoder, MLP_MI_estimator, Encoder_256, Decoder_256
 import numpy as np
 from models.train_net import reparameterize, kl_divergence, scalar_loss
 from sklearn.mixture import GaussianMixture
@@ -437,7 +437,10 @@ class VaDE(AbstractModel, pl.LightningModule):
         ###########################
         ##### Encoding layers #####
         ###########################
-        self.encoder = Encoder(out_size=256, input_channel=input_channels)
+
+        self.encoder = Encoder_256(out_size=256, input_channel=input_channels) \
+            if input_channels == 4 else \
+            Encoder(out_size=256, input_channel=input_channels)
 
         self.mu_l = nn.Linear(256, zdim)
         self.logvar_l = nn.Linear(256, zdim)
@@ -448,7 +451,9 @@ class VaDE(AbstractModel, pl.LightningModule):
         ###########################
         ##### Decoding layers #####
         ###########################
-        self.decoder = Decoder(zdim=zdim, input_channel=input_channels)
+        self.decoder = Decoder_256(zdim=zdim, input_channel=input_channels) \
+            if input_channels == 4 else \
+            Decoder(zdim=zdim, input_channel=input_channels)
 
         ### weight initialization
         weight_initialization(self.modules())

@@ -23,10 +23,10 @@ from timeit import default_timer as timer
 # %% config of the experimental parameters
 ##########################################################
 # specific argument for this model
-args.add_argument('--model', default='betaVAE')
-args.add_argument('--beta', type=float, default=10)
+args.add_argument('--model', default='TEST_betaVAE')
+args.add_argument('--beta', type=float, default=1)
 args.add_argument('--pretrained', dest='weight_path', type=str,
-                  default='../outputs/betaVAE_2021-02-18-02:15/logs/last.ckpt')
+                  default='/mnt/Linux_Storage/outputs/TEST_betaVAE_2021-03-03-21:03/logs/last.ckpt')
 args = args.parse_args()
 # TODO: overwrite the parameters
 

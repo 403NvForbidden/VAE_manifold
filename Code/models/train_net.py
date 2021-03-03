@@ -821,7 +821,7 @@ class VAEXperiment(pl.LightningModule):
         self.model.backward(loss, optimizer, optimizer_idx)
 
     def on_after_backward(self) -> None:
-        if self.global_step % 100 == 0:
+        if self.global_step % 200 == 0:
             self.parameter_histogram()
 
     def training_epoch_end(self, outputs: list):
