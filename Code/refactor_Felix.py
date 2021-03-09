@@ -14,8 +14,8 @@ from skimage.transform import resize, rotate, rescale
 import torchvision
 import numpy as np
 
-from models.networks_refactoring import betaVAE, VaDE
-from models.train_net import VAEXperiment, pretrain_vaDE_model
+from models.networks_refactoring import betaVAE, VaDE, EnhancedVAE
+from models.train_net import VAEXperiment, pretrain_vaDE_model, pretrain_vaDE_model_SSIM
 from quantitative_metrics.performance_metrics_single import compute_perf_metrics
 from util.config import args, dataset_lookUp, device
 from util.data_processing import get_train_val_dataloader, get_inference_dataset, imshow_tensor
@@ -26,10 +26,10 @@ from timeit import default_timer as timer
 # %% config of the experimental parameters
 ##########################################################
 # specific argument for this model
-args.add_argument('--model', default='testFelixVAE_C4')
+args.add_argument('--model', default='testFelix_betaVAE_FC_MSE_c1c2_1')
 args.add_argument('--beta', type=float, default=1)
 args.add_argument('--pretrained', dest='weight_path', type=str,
-                  default='/mnt/Linux_Storage/outputs/testFelixVAE_C4/logs/last.ckpt')
+                  default='')
 args = args.parse_args()
 # TODO: overwrite the parameters
 
@@ -49,13 +49,18 @@ else:
 train_loader, valid_loader = get_train_val_dataloader(dataset_path, input_size=args.input_size,
                                                       batchsize=args.batch_size, test_split=0.05)
 
-model = betaVAE(zdim=args.hidden_dim, input_channels=args.input_channel, input_size=args.input_size, beta=args.beta)
+model = EnhancedVAE(zdim=args.hidden_dim, input_channels=args.input_channel, input_size=args.input_size, beta=args.beta)
+# model = VaDE(zdim=args.hidden_dim, ydim=4, input_channels=args.input_channel, input_size=args.input_size)
 
 Experiment = VAEXperiment(model, {
     "lr": args.learning_rate,
     "weight_decay": args.weight_decay,
     "scheduler_gamma": args.scheduler_gamma
 }, log_path=save_model_path)
+
+### pretrain
+# pretrain_vaDE_model_SSIM(model, train_loader, pre_epoch=10, save_path=save_model_path, device=device)
+
 
 Experiment.load_weights(args.weight_path)
 
@@ -107,12 +112,12 @@ except:
              imgs])
     logger.experiment.add_embedding(embeddings, label_list, label_img=imgs[:, :3, :, :])
 
-    ### plotly embedding projector
-    figplotly = plot_from_csv(metadata_csv, low_dim_names=['z0', 'z1', 'z2'], GT_col='GT_dataset', dim=3, as_str=True)
-    plotly.offline.plot(figplotly, filename=os.path.join(save_model_path, 'Representation.html'), auto_open=False)
+### plotly embedding projector
+figplotly = plot_from_csv(metadata_csv, low_dim_names=['z0', 'z1', 'z2'], GT_col='GT_channel', dim=3, as_str=True)
+plotly.offline.plot(figplotly, filename=os.path.join(save_model_path, 'Representation.html'), auto_open=False)
 
-    ### Recon and Generation #####
-    single_reconstruciton(infer_dataloader, model, save_model_path, device, num_img=12, logger=logger)
+### Recon and Generation #####
+single_reconstruciton(infer_dataloader, model, save_model_path, device, num_img=12, logger=logger)
 
 '''
 ###############################

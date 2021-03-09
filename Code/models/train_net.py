@@ -40,6 +40,7 @@ from tensorboardX import SummaryWriter
 import matplotlib.pyplot as plt
 
 from util.helpers import plot_latent_space, show, EarlyStopping, save_brute, make_path
+from util.pytorch_msssim import msssim
 from .nn_modules import infoNCE_bound
 
 from scipy.optimize import linear_sum_assignment as linear_assignment
@@ -94,6 +95,83 @@ def scalar_loss(data, loss_recon, mu_z, logvar_z, beta):
 #########################################
 ##### train vaDE
 #########################################
+def pretrain_vaDE_model_SSIM(model, dataloader, pre_epoch=30, save_path='', device='cpu'):
+    print(os.path.join(save_path, 'pretrain_model.pk'))
+    if os.path.exists(os.path.join(save_path, 'pretrain_model.pk')):
+        model.load_state_dict(torch.load(os.path.join(save_path, 'pretrain_model.pk')))
+        return
+
+    opti = optim.Adam(model.parameters(), lr=0.0005, betas=(0.9, 0.999))
+    model.to(device)
+
+    print(f'Pretraining......on {device}')
+    epoch_bar = tqdm(range(pre_epoch))
+    for _ in epoch_bar:
+        L = ssim = l1_loss = 0
+        for x, y in dataloader:
+            x = x.to(device)
+
+            mu_logvar = model.encode(x)
+            z = model.mu_l(mu_logvar)
+            x_recon = model.decode(z)
+
+            x_recon = torch.sigmoid(x_recon)
+            msssim_similarity = msssim(x, x_recon, normalize='relu')
+            l1 = F.l1_loss(x_recon, x)
+            loss = (1 - msssim_similarity) + l1
+
+            ssim += msssim_similarity.item()
+            l1_loss += l1.item()
+
+            L += loss.detach().cpu().numpy()
+
+            opti.zero_grad()
+            loss.backward()
+            opti.step()
+
+        epoch_bar.write('\nL={:.4f} ssim={:.4f} L1={:.4f}\n'.format(L / len(dataloader), ssim / len(dataloader),
+                                                                    l1_loss / len(dataloader)))
+    # reset to save weight???? TODO: check
+    model.logvar_l.load_state_dict(model.mu_l.state_dict())
+
+    ### validate pretrained model
+    Z, Y = [], []
+    with torch.no_grad():
+        for x, y in dataloader:
+            x = x.to(device)
+
+            mu_logvar = model.encode(x)
+            z = model.mu_l(mu_logvar)
+            # assert F.mse_loss(mu_z, logvar_z) == 0
+            Z.append(z)
+            Y.append(y)
+
+    # convert to tensor
+    Z = torch.cat(Z, 0).detach().cpu().numpy()
+    Y = torch.cat(Y, 0).detach().numpy()
+
+    # select number of clusters
+    n_components = np.arange(1, 12)
+    models = [GaussianMixture(n, covariance_type='full', random_state=0).fit(Z) for n in n_components]
+    bic = [m.bic(Z) for m in models]
+    aic = [m.aic(Z) for m in models]
+    plt.plot(n_components, bic, label='BIC')
+    plt.plot(n_components, aic, label='AIC')
+    plt.legend(loc='best')
+    plt.xlabel('n_components')
+    plt.savefig(os.path.join(save_path, 'BIC_AIC.png'))
+
+    gmm = GaussianMixture(n_components=model.ydim, covariance_type='diag')
+    pre = gmm.fit_predict(Z)
+    print('Acc={:.4f}%'.format(cluster_acc(pre, Y)[0] * 100))
+
+    model.pi_.data = torch.from_numpy(gmm.weights_).cuda().float()
+    model.mu_c.data = torch.from_numpy(gmm.means_.T).cuda().float()
+    model.log_sigma2_c.data = torch.from_numpy(gmm.covariances_.T).cuda().float()
+
+    torch.save(model.state_dict(), os.path.join(save_path, 'pretrain_model.pk'))
+
+
 def pretrain_vaDE_model(model, dataloader, pre_epoch=30, save_path='', device='cpu'):
     print(os.path.join(save_path, 'pretrain_model.pk'))
     if os.path.exists(os.path.join(save_path, 'pretrain_model.pk')):
@@ -153,7 +231,6 @@ def pretrain_vaDE_model(model, dataloader, pre_epoch=30, save_path='', device='c
     plt.legend(loc='best')
     plt.xlabel('n_components')
     plt.savefig(os.path.join(save_path, 'BIC_AIC.png'))
-
 
     gmm = GaussianMixture(n_components=model.ydim, covariance_type='diag')
     pre = gmm.fit_predict(Z)

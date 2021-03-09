@@ -19,7 +19,7 @@ from torch.nn import functional as F
 ###### standard VAE
 ###########################
 class Encoder_256(nn.Module):
-    def __init__(self, out_size=256, input_channel=3, base_enc=32):
+    def __init__(self, out_size=256, input_channel=4, base_enc=32):
         super(Encoder_256, self).__init__()
         '''
         Down sampling
@@ -29,27 +29,37 @@ class Encoder_256(nn.Module):
         self.base_enc = base_enc
         self.input_channels = input_channel
 
-        # self.conv_enc = nn.Sequential(  # 256 x 256
-        #     Conv(self.input_channels, base_enc, 4, stride=2, padding=1),  # 128 x 128
-        #     Conv(base_enc, base_enc * 2, 4, stride=2, padding=1),  # 64x64
-        #     Conv(base_enc * 2, base_enc * 4, 4, stride=2, padding=1),  # 32x32
-        #     Conv(base_enc * 4, base_enc * 8, 4, stride=2, padding=1),  # 16x16
-        #     Conv(base_enc * 8, base_enc * 16, 4, stride=2, padding=1),  # 8x8
-        #     # Conv(base_enc * 16, base_enc * 16, 4, stride=2, padding=1),  # 4x4
-        #     # Conv(base_enc * 16, base_enc * 16, 4, stride=2, padding=1),  # 2x2
-        # )
-        self.conv_enc = nn.Sequential(  # 256 x 256
-            Conv(self.input_channels, base_enc, 4, stride=2, padding=1),  # 128 x 128
-            Conv(base_enc, base_enc, 4, stride=2, padding=1),  # 64x64
-            Conv(base_enc, base_enc, 4, stride=2, padding=1),  # 32x32
-            Conv(base_enc, base_enc, 4, stride=2, padding=1),  # 16x16
-            Conv(base_enc, base_enc, 4, stride=2, padding=1),  # 8x8x32
-        )
-        self.linear_enc = nn.Sequential(
-            # Linear_block(pow(2, self.input_channels - 1) * base_enc * 8, 1024),
-            Linear_block(pow(2, 3) * base_enc * 8, 1024),
-            Linear_block(1024, 256),
-        )
+        if input_channel == 4:
+            self.conv_enc = nn.Sequential(  # 256 x 256
+                Conv(self.input_channels, base_enc, 3, stride=2, padding=1),  # 128 x 128
+                Conv(base_enc, base_enc * 2, 3, stride=2, padding=1),  # 64x64
+                Conv(base_enc * 2, base_enc * 4, 3, stride=2, padding=1),  # 32x32
+                Conv(base_enc * 4, base_enc * 8, 3, stride=2, padding=1),  # 16x16
+                Conv(base_enc * 8, base_enc * 16, 3, stride=2, padding=1),  # 8x8
+                Conv(base_enc * 16, base_enc * 16, 3, stride=2, padding=1),  # 4x4
+                Conv(base_enc * 16, base_enc * 16, 3, stride=2, padding=1),  # 2x2
+            )
+            self.linear_enc = nn.Sequential(
+                # Linear_block(pow(2, self.input_channels - 1) * base_enc * 8, 1024),
+                # Linear_block(pow(2, 3) * base_enc * 8, 1024),
+                # Linear_block(1024, 256),
+                Linear_block(2 * 2 * 32 * 16, 1024),
+                Linear_block(1024, 256),
+            )
+        elif input_channel == 1:
+            self.conv_enc = nn.Sequential(  # 256 x 256
+                Conv(self.input_channels, base_enc, 3, stride=2, padding=1),  # 128 x 128
+                Conv(base_enc, base_enc, 3, stride=2, padding=1),  # 64x64
+                Conv(base_enc, base_enc, 3, stride=2, padding=1),  # 32x32
+                Conv(base_enc, base_enc, 3, stride=2, padding=1),  # 16x16x32
+                Conv(base_enc, base_enc, 3, stride=2, padding=1),  # 8x8x32
+                Conv(base_enc, base_enc, 3, stride=2, padding=1),  # 4x4x32
+                Conv(base_enc, base_enc, 3, stride=2, padding=1),  # 2x2x32
+            )
+            self.linear_enc = nn.Sequential(
+                Linear_block(2 * 2 * 32, 1024),
+                Linear_block(1024, 256),
+            )
 
     def forward(self, x):
         batch_size = x.size(0)
@@ -62,50 +72,56 @@ class Encoder_256(nn.Module):
 class Decoder_256(nn.Module):
     '''Downsampling block'''
 
-    def __init__(self, zdim=3, input_channel=3, base_dec=32, stride=2, padding=1):
+    def __init__(self, zdim=3, input_channel=4, base_dec=32, stride=2, padding=1):
         super(Decoder_256, self).__init__()
         self.base_dec = base_dec
         self.input_channels = input_channel
 
-        self.linear_dec = nn.Sequential(
-            Linear_block(zdim, 256),
-            Linear_block(256, 1024),
-            Linear_block(1024, pow(2, 3) * base_dec * 8),
-        )
-
-        self.conv_dec = nn.Sequential(
-            # ConvUpsampling(base_dec * 16, base_dec * 16, 4, stride=stride, padding=padding), # 2x2
-            # ConvUpsampling(base_dec * 16, base_dec * 16, 4, stride=stride, padding=padding), # 4x4
-            ConvUpsampling(base_dec, base_dec, 4, stride=stride, padding=padding),  # 8x8
-            ConvUpsampling(base_dec, base_dec, 4, stride=stride, padding=padding),  # 16x16
-            ConvUpsampling(base_dec, base_dec, 4, stride=stride, padding=padding),  # 32x32
-            ConvUpsampling(base_dec, base_dec, 4, stride=stride, padding=padding),  # 64x64
-            # for 4 channel
-            # ConvUpsampling(base_dec, base_dec, 4, stride=2, padding=1),  # 96
-            nn.Upsample(scale_factor=4, mode='bilinear', align_corners=True), # 128x128
-            nn.Conv2d(in_channels=base_dec, out_channels=input_channel, kernel_size=4, stride=2, padding=1),  # 256 x 256
-        )
-
-        # self.conv_dec = nn.Sequential(
-        #     # ConvUpsampling(base_dec * 16, base_dec * 16, 4, stride=stride, padding=padding), # 2x2
-        #     # ConvUpsampling(base_dec * 16, base_dec * 16, 4, stride=stride, padding=padding), # 4x4
-        #     ConvUpsampling(base_dec * 16, base_dec * 8, 4, stride=stride, padding=padding),  # 8x8
-        #     ConvUpsampling(base_dec * 8, base_dec * 4, 4, stride=stride, padding=padding),  # 16x16
-        #     ConvUpsampling(base_dec * 4, base_dec * 2, 4, stride=stride, padding=padding),  # 32x32
-        #     ConvUpsampling(base_dec * 2, base_dec, 4, stride=stride, padding=padding),  # 64x64
-        #     # for 4 channel
-        #     # ConvUpsampling(base_dec, base_dec, 4, stride=2, padding=1),  # 96
-        #     nn.Upsample(scale_factor=4, mode='bilinear', align_corners=True), # 128x128
-        #     nn.Conv2d(in_channels=base_dec, out_channels=input_channel, kernel_size=4, stride=2, padding=1),  # 256 x 256
-        # )
+        if input_channel == 1:
+            self.conv_dec = nn.Sequential(
+                ConvUpsampling(base_dec, base_dec, 3, stride=stride, padding=padding),  # 2x2x32
+                ConvUpsampling(base_dec, base_dec, 3, stride=stride, padding=padding),  # 4x4x32
+                ConvUpsampling(base_dec, base_dec, 3, stride=stride, padding=padding),  # 8x8x32
+                ConvUpsampling(base_dec, base_dec, 3, stride=stride, padding=padding),  # 16x16x32
+                ConvUpsampling(base_dec, base_dec, 3, stride=stride, padding=padding),  # 32x32x32
+                ConvUpsampling(base_dec, base_dec, 3, stride=stride, padding=padding),  # 64x64x32
+                nn.Upsample(scale_factor=4, mode='bilinear', align_corners=True), # 128x128
+                nn.Conv2d(in_channels=base_dec, out_channels=input_channel, kernel_size=3, stride=2, padding=1),  # 256 x 256 x 1
+            )
+            self.linear_dec = nn.Sequential(
+                Linear_block(zdim, 256),
+                Linear_block(256, 1024),
+                Linear_block(1024, 2 * 2 * 512),
+                # Linear_block(256, 2*2*32)
+            )
+        elif input_channel == 4:
+            self.conv_dec = nn.Sequential(
+                ConvUpsampling(base_dec * 16, base_dec * 16, 3, stride=stride, padding=padding), # 2x2
+                ConvUpsampling(base_dec * 16, base_dec * 16, 3, stride=stride, padding=padding), # 4x4
+                ConvUpsampling(base_dec * 16, base_dec * 8, 3, stride=stride, padding=padding),  # 8x8
+                ConvUpsampling(base_dec * 8, base_dec * 4, 3, stride=stride, padding=padding),  # 16x16
+                ConvUpsampling(base_dec * 4, base_dec * 2, 3, stride=stride, padding=padding),  # 32x32
+                ConvUpsampling(base_dec * 2, base_dec, 3, stride=stride, padding=padding),  # 64x64
+                nn.Upsample(scale_factor=4, mode='bilinear', align_corners=True), # 128x128
+                nn.Conv2d(in_channels=base_dec, out_channels=input_channel, kernel_size=4, stride=2, padding=1),  # 256 x 256
+            )
+            self.linear_dec = nn.Sequential(
+                Linear_block(zdim, 256),
+                Linear_block(256, 1024),
+                Linear_block(256, 2*2*32*16)
+            )
 
     def forward(self, z):
         batch_size = z.size(0)
         z = z.view((batch_size, -1))
         x = self.linear_dec(z)
-        edge_size = 8#2 ** ((self.input_channels - 1)) #// 2)
-        x = x.view((batch_size, self.base_dec, edge_size, edge_size))
+        edge_size = 2 #2 ** ((self.input_channels - 1)) #// 2)
+        if self.input_channels == 4:
+            x = x.view((batch_size, self.base_dec*16, edge_size, edge_size))
+        elif self.input_channels == 1:
+            x = x.view((batch_size, self.base_dec, edge_size, edge_size))
         x_recon = self.conv_dec(x)
+        # print(x_recon.shape)
         return x_recon
 
 
@@ -210,7 +226,7 @@ class ConvTranspose(nn.Module):
         super(ConvTranspose, self).__init__()
 
         self.conv = nn.Sequential(
-            nn.ConvTranspose2d(in_channels, out_channels, kernel_size, stride, padding),
+            nn.ConvTranspose2d(in_channels, out_channels, kernel_size, stride, padding, output_padding=1),
             nn.BatchNorm2d(out_channels),
             nn.LeakyReLU()
         )
@@ -228,7 +244,7 @@ class ConvUpsampling(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0):
         super(ConvUpsampling, self).__init__()
 
-        self.scale_factor = kernel_size
+        self.scale_factor = 4 #kernel_size
         self.conv = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding),
             nn.BatchNorm2d(out_channels),
@@ -237,6 +253,7 @@ class ConvUpsampling(nn.Module):
 
     def forward(self, x):
         x = F.interpolate(x, scale_factor=self.scale_factor, mode='bilinear')
+        x = x.clamp(min=0, max=255)
         return self.conv(x)
 
 
