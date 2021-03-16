@@ -15,7 +15,7 @@ import numpy as np
 from skimage import io
 
 #dataset_folder = '/Chaffer_Data/'
-dataset_folder = '/home/sachahai/Documents/VAE_manifold/DataSets/Synthetic_Data_1/'
+dataset_folder = '/home/sachahai/Documents/VAE_manifold/DataSets/Felix_Full_128/'
 #dataset_folder = '/home/sachahai/Documents/VAE_manifold/DataSets/Felix_Full_Complete/'
 
 all_class_subfolder = [f for f in os.listdir(dataset_folder) if not f.startswith('.')]

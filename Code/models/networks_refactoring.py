@@ -292,19 +292,15 @@ class EnhancedVAE(AbstractModel, pl.LightningModule):
         :param logvar_z:
         :return: the loss of beta VAEs
         """
-        # loss_recon = F.mse_loss(torch.sigmoid(x_recon), x)
         # x_recon = torch.sigmoid(x_recon)
-        # loss_recon = (1 - msssim(x, x_recon, normalize='relu')) + F.l1_loss(x_recon, x)
+
+        # loss_recon = (1 - msssim(x, x_recon, normalize='relu')) + F.l1_loss(x_recon, x, reduction='sum').div(x.size(0))
+        # print(msssim(x, x_recon, size_average=False))
         # loss_kl = kl_divergence(mu_z, logvar_z)
         # loss = loss_recon + self.beta * loss_kl
 
-        # x_recons = torch.sigmoid(x_recon)
-        # loss_recon = F.mse_loss(
-        #     x_recons, x, reduction='sum'
-        # ).div(x.size(0))
-        loss_recon = F.binary_cross_entropy_with_logits(x_recon, x)
-        loss_recon *= x.size(1) * x.size(2) * x.size(3)
-        loss_recon.div(x.size(0))
+        # loss_recon = F.mse_loss( x_recon, x, reduction='sum').div(x.size(0))
+        loss_recon = F.binary_cross_entropy_with_logits(x_recon, x, reduction='sum').div(x.size(0))
         loss_kl = kl_divergence(mu_z, logvar_z)
         loss = loss_recon + self.beta * loss_kl
 
@@ -320,6 +316,7 @@ class EnhancedVAE(AbstractModel, pl.LightningModule):
                                                      gamma=params['scheduler_gamma'])
 
         return {'optimizer': optimizer, 'lr_scheduler': scheduler}
+
 
 class betaVAE(AbstractModel, pl.LightningModule):
     def __init__(self, zdim=3, input_channels=3, input_size=64, beta=1, filepath=None):
@@ -556,7 +553,7 @@ class VaDE(AbstractModel, pl.LightningModule):
         ###########################
 
         self.encoder = Encoder_256(out_size=256, input_channel=input_channels) \
-            if input_channels != 3 else \
+            if input_size == 256 else \
             Encoder(out_size=256, input_channel=input_channels)
 
         self.mu_l = nn.Linear(256, zdim)
@@ -569,7 +566,7 @@ class VaDE(AbstractModel, pl.LightningModule):
         ##### Decoding layers #####
         ###########################
         self.decoder = Decoder_256(zdim=zdim, input_channel=input_channels) \
-            if input_channels != 3 else \
+            if input_size == 256 else \
             Decoder(zdim=zdim, input_channel=input_channels)
 
         ### weight initialization
@@ -633,8 +630,7 @@ class VaDE(AbstractModel, pl.LightningModule):
         gamma = p_c_z / torch.sum(p_c_z, dim=1, keepdim=True)  # NxK
 
         # adding min for loss to prevent log(0)
-        x_recon = torch.sigmoid(recon_x)
-        loss_recon = (1 - msssim(x, x_recon, normalize='relu')) + F.l1_loss(x_recon, x)
+        loss_recon = F.binary_cross_entropy_with_logits(recon_x, x, reduction='sum').div(x.size(0))
 
         logpzc = torch.sum(0.5 * gamma * torch.sum(self.zdim * math.log(2 * math.pi) + torch.log(lambda_tensor3) + \
                                                    torch.exp(z_log_var_t) / lambda_tensor3 + \

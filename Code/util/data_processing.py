@@ -228,7 +228,7 @@ class zPad_or_Rescale(object):
 
         if ((h > fixed_size[0]) or (w > fixed_size[1])):
             # Resize
-            img_resized = resize(img_arr, fixed_size, preserve_range=False, anti_aliasing=True)
+            img_resized = resize(img_arr, fixed_size, preserve_range=False, anti_aliasing=False)
             # anti-aliasing import before down sampling
         elif ((h <= fixed_size[0]) and (w <= fixed_size[1])):
             # ZeroPad
@@ -266,8 +266,24 @@ class zPad_or_Rescale_inference(object):
 
         if ((h > fixed_size[0]) or (w > fixed_size[1])):
             # Resize
-            img_resized = resize(img_arr, fixed_size, preserve_range=False, anti_aliasing=True)
+
             # anti-aliasing import before down sampling
+
+            # take the max
+            side_upper_bound = max(h, w)
+            pad_size = fixed_size[0]
+            for i in range(1, 10):
+                pad_size = i * fixed_size[0]
+                if pad_size >side_upper_bound:
+                    break
+
+            diff_h = pad_size - h
+            diff_w = pad_size - w
+            img_padded = pad(img_arr, ((int(np.round(diff_h / 2.)), diff_h - int(np.round(diff_h / 2.))),
+                                        (int(np.round(diff_w / 2.)), diff_w - int(np.round(diff_w / 2.))), (0, 0)))
+
+            img_resized = resize(img_padded, fixed_size, preserve_range=False, anti_aliasing=False)
+
         elif ((h <= fixed_size[0]) and (w <= fixed_size[1])):
             # ZeroPad
             diff_h = fixed_size[0] - h

@@ -91,8 +91,7 @@ class Decoder_256(nn.Module):
             self.linear_dec = nn.Sequential(
                 Linear_block(zdim, 256),
                 Linear_block(256, 1024),
-                Linear_block(1024, 2 * 2 * 512),
-                # Linear_block(256, 2*2*32)
+                Linear_block(1024, 2*2*32)
             )
         elif input_channel == 4:
             self.conv_dec = nn.Sequential(
@@ -108,7 +107,7 @@ class Decoder_256(nn.Module):
             self.linear_dec = nn.Sequential(
                 Linear_block(zdim, 256),
                 Linear_block(256, 1024),
-                Linear_block(256, 2*2*32*16)
+                Linear_block(1024, 2*2*32*16)
             )
 
     def forward(self, z):
@@ -144,7 +143,7 @@ class Encoder(nn.Module):
             Conv(base_enc * 8, base_enc * 16, 4, stride=2, padding=1),  # 2x2
         )
         self.linear_enc = nn.Sequential(
-            Linear_block(pow(2, self.input_channels - 1) * base_enc * 16, 1024),
+            Linear_block(pow(2, 2) * base_enc * 16, 1024),
             Linear_block(1024, 256),
         )
 
@@ -171,7 +170,7 @@ class Decoder(nn.Module):
         self.linear_dec = nn.Sequential(
             Linear_block(zdim, 256),
             Linear_block(256, 1024),
-            Linear_block(1024, pow(2, input_channel - 1) * base_dec * 16),
+            Linear_block(1024, pow(2, 2) * base_dec * 16),
         )
 
         self.conv_dec = nn.Sequential(
@@ -179,10 +178,9 @@ class Decoder(nn.Module):
             ConvUpsampling(base_dec * 8, base_dec * 4, 4, stride=stride, padding=padding),  # 8
             ConvUpsampling(base_dec * 4, base_dec * 2, 4, stride=stride, padding=padding),  # 16
             ConvUpsampling(base_dec * 2, base_dec, 4, stride=stride, padding=padding),  # 32
-            # for 4 channel
-            # ConvUpsampling(base_dec, base_dec, 4, stride=2, padding=1),  # 96
+            # ConvUpsampling(base_dec, base_dec, 4, stride=2, padding=1),  # 64
             nn.Upsample(scale_factor=4, mode='bilinear', align_corners=True),
-            nn.Conv2d(in_channels=base_dec, out_channels=input_channel, kernel_size=4, stride=2, padding=1),  # 192
+            nn.Conv2d(in_channels=base_dec, out_channels=input_channel, kernel_size=4, stride=2, padding=1),  # 128
         )
 
     def forward(self, z):
@@ -253,7 +251,6 @@ class ConvUpsampling(nn.Module):
 
     def forward(self, x):
         x = F.interpolate(x, scale_factor=self.scale_factor, mode='bilinear')
-        x = x.clamp(min=0, max=255)
         return self.conv(x)
 
 

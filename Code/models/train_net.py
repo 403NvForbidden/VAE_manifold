@@ -95,6 +95,48 @@ def scalar_loss(data, loss_recon, mu_z, logvar_z, beta):
 #########################################
 ##### train vaDE
 #########################################
+def pretrain_EnhancedVAE_model_SSIM(model, dataloader, pre_epoch=30, save_path='', device='cpu'):
+    print(os.path.join(save_path, 'pretrain_model.pk'))
+    if os.path.exists(os.path.join(save_path, 'pretrain_model.pk')):
+        model.load_state_dict(torch.load(os.path.join(save_path, 'pretrain_model.pk')))
+        print("loaded!!!")
+        return
+
+    opti = optim.Adam(model.parameters(), lr=0.0005, betas=(0.9, 0.999))
+    model.to(device)
+
+    print(f'Pretraining......on {device}')
+    epoch_bar = tqdm(range(pre_epoch))
+    for _ in epoch_bar:
+        L = ssim = l1_loss = 0
+        for x, _ in dataloader:
+            x = x.to(device)
+
+            x_recon, mu_z, logvar_z, z = model(x)
+            x_recon = torch.sigmoid(x_recon)
+
+            # loss_recon = F.binary_cross_entropy_with_logits(x_recon, x, reduction='sum').div(x.size(0))
+            msssim_similarity = msssim(x, x_recon, normalize='relu')
+            l1 = F.l1_loss(x_recon, x, reduction='sum').div(x.size(0)) # F.mse_loss(x_recon, x)
+            loss = (1 - msssim_similarity) + l1 # 0.00005 * l1
+
+            ssim += msssim_similarity.item()
+            l1_loss += l1.item()
+
+            L += loss.detach().cpu().numpy()
+
+            opti.zero_grad()
+            loss.backward()
+            opti.step()
+
+        epoch_bar.write('\nL={:.4f} ssim={:.4f} L1={:.4f}\n'.format(L / len(dataloader), ssim / len(dataloader),
+                                                                    l1_loss / len(dataloader)))
+    # reset to save weight???? TODO: check
+    # model.logvar_l.load_state_dict(model.mu_l.state_dict())
+    torch.save(model.state_dict(), os.path.join(save_path, 'pretrain_model.pk'))
+
+
+
 def pretrain_vaDE_model_SSIM(model, dataloader, pre_epoch=30, save_path='', device='cpu'):
     print(os.path.join(save_path, 'pretrain_model.pk'))
     if os.path.exists(os.path.join(save_path, 'pretrain_model.pk')):
@@ -117,7 +159,7 @@ def pretrain_vaDE_model_SSIM(model, dataloader, pre_epoch=30, save_path='', devi
 
             x_recon = torch.sigmoid(x_recon)
             msssim_similarity = msssim(x, x_recon, normalize='relu')
-            l1 = F.l1_loss(x_recon, x)
+            l1 = F.l1_loss(x_recon, x, reduction='sum').div(x.size(0))
             loss = (1 - msssim_similarity) + l1
 
             ssim += msssim_similarity.item()
