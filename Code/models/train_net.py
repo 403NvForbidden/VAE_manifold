@@ -188,6 +188,7 @@ def pretrain_vaDE_model_SSIM(model, dataloader, pre_epoch=30, save_path='', devi
             Z.append(z)
             Y.append(y)
 
+    torch.save(model.state_dict(), os.path.join(save_path, 'pretrain_model.pk'))
     # convert to tensor
     Z = torch.cat(Z, 0).detach().cpu().numpy()
     Y = torch.cat(Y, 0).detach().numpy()

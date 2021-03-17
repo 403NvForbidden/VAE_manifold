@@ -17,7 +17,7 @@ from torchsummary import summary
 
 from models.networks_refactoring import betaVAE, Skip_VAE, VAE2, VaDE
 from models.infoMAX_VAE import CNN_128_VAE
-from util.Process_Mnist import get_MNIST_dataloader
+from util.Process_benchmarkDataset import get_MNIST_dataloader
 from util.data_processing import get_train_val_dataloader, imshow_tensor, get_inference_dataset
 from models.train_net import train_VAE_model, train_2stage_VAE_model, train_vaDE_model
 from util.helpers import plot_singleVAE_result, meta_MNIST, plot_train_result_GMM

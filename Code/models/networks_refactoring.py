@@ -644,7 +644,7 @@ class VaDE(AbstractModel, pl.LightningModule):
         # Normalise by same number of elements as in reconstruction
         loss = loss_recon + KL_loss
 
-        return {'loss': loss, 'recon_loss': loss_recon, 'KLD': KL_loss, 'gamma': gamma}
+        return {'loss': loss, 'recon_loss': loss_recon, 'KLD': KL_loss}#, 'gamma': gamma}
 
     # ### @override
     # def objective_func(self, x, recon_x, z, z_mean, z_log_var):

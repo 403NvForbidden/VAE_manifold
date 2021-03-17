@@ -42,17 +42,17 @@ from torchvision import transforms, datasets
 from torch import cuda, optim
 from torch.autograd import Variable
 
-from util.helpers import save_brute, load_brute
-from models.train_net import train_Simple_VAE
+#from util.helpers import save_brute, load_brute
+# from models.train_net import train_Simple_VAE
 # from models.networks_refactoring import Simple_VAE
-from util.data_processing import imshow_tensor
-from human_guidance.feedback_helpers import latent_to_index, sample_latent, show_images_grid, show_density, \
+# from util.data_processing import imshow_tensor
+from feedback_helpers import latent_to_index, sample_latent, show_images_grid, show_density, \
     DSpritesDataset, save_latent_code, plot_train_history
 
 ###############################################
 ### Load DSprites Dataset and Inspect it
 ###############################################
-path_to_dsprites = 'human_guidance/dsprites_ndarray_co1sh3sc6or40x32y32_64x64.npz'
+path_to_dsprites = 'dsprites_ndarray_co1sh3sc6or40x32y32_64x64.npz'
 full_dataset = np.load(path_to_dsprites, allow_pickle=True, encoding='latin1')
 
 imgs = full_dataset['imgs']
@@ -60,6 +60,22 @@ GT_factors = full_dataset['latents_values']
 GT_class = full_dataset['latents_classes']
 # Associate a unique ID with each datasample
 Unique_index = np.arange(imgs.shape[0])
+
+
+posx_mask = [GT_class[i, -2] in range(13, 18) for i in range(GT_class.shape[0])]  # Select only square shape
+posy_mask = [GT_class[i, -1] in range(13, 18) for i in range(GT_class.shape[0])] # Select only no rotation
+final_mask = [np.all(tup) for tup in zip(posx_mask, posy_mask)]
+
+sub_sample1 = GT_class[final_mask]
+GT_factors = GT_factors[final_mask]
+GT_class = GT_class[final_mask]
+Unique_index = Unique_index[final_mask]
+
+col = ['GT_color', 'GT_label', 'GT_scale', 'GT_orientation', 'GT_posX', 'GT_posY']
+metadata = pd.DataFrame(GT_factors, columns=col)
+
+metadata['Unique_ID'] = Unique_index
+
 
 # Sample latents randomly
 latents_sampled = sample_latent(size=5000)
@@ -83,6 +99,12 @@ show_images_grid(imgs_sampled)
 shape_mask = GT_class[:, 1] == 0  # Select only square shape
 rotation_mask = [GT_class[i, 3] in [0] for i in range(GT_class.shape[0])]  # Select only no rotation
 final_mask = [np.all(tup) for tup in zip(shape_mask, rotation_mask)]
+sub_sample1 = GT_class[final_mask]
+
+### Select all square, all scale, all X-Y pos, but NO rotation
+posx_mask = [GT_class[i, -2] in range(13, 18) for i in range(GT_class.shape[0])]  # Select only square shape
+posy_mask = [GT_class[i, -1] in range(13, 18) for i in range(GT_class.shape[0])] # Select only no rotation
+final_mask = [np.all(tup) for tup in zip(posx_mask, posy_mask)]
 sub_sample1 = GT_class[final_mask]
 
 # %%

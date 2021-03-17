@@ -113,8 +113,9 @@ def get_raw_data(dataloader, MetaData_csv):
     rawdata_frame.Unique_ID = list(itertools.chain.from_iterable(id_list))
     rawdata_frame = rawdata_frame.sort_values(by=['Unique_ID'])
 
-    assert np.all(
-        rawdata_frame.Unique_ID.values == MetaData_csv.Unique_ID.values), "Inference dataset doesn't match with csv metadata"
+    MetaData_csv['Unique_ID'] = MetaData_csv['Unique_ID'].astype(str)
+    rawdata_frame['Unique_ID'] = rawdata_frame['Unique_ID'].astype(str)
+    assert np.all(np.unique(rawdata_frame.Unique_ID.values) == np.unique(MetaData_csv.Unique_ID.values)), "Inference dataset doesn't match with csv metadata"
     # align with metadata
     MetaData_csv = MetaData_csv.join(rawdata_frame.set_index('Unique_ID'), on='Unique_ID')
     imgs = MetaData_csv[cols].values
@@ -172,7 +173,6 @@ def metadata_latent_space(model, dataloader, device, GT_csv_path, save_csv=False
 
     ###### Matching samples to metadata info #####
     #################################################
-
     unique_ids = list(itertools.chain.from_iterable(id_list))
 
     ###### Store raw data in a separate data frame #####
@@ -190,11 +190,14 @@ def metadata_latent_space(model, dataloader, device, GT_csv_path, save_csv=False
     # true_label = np.concatenate(labels_list,axis=0)
 
     temp_matching_df = pd.DataFrame(z_points, columns=[f'z{n}' for n in range(model.zdim)])
+    print(len(unique_ids),len(temp_matching_df) )
     temp_matching_df['Unique_ID'] = unique_ids
+    temp_matching_df['Unique_ID'] = temp_matching_df['Unique_ID'].astype(str)
     temp_matching_df = temp_matching_df.sort_values(by=['Unique_ID'])
 
     ##### Load Ground Truth information about the dataset #####
     MetaData_csv = pd.read_csv(GT_csv_path).sort_values(by=['Unique_ID'])
+    MetaData_csv['Unique_ID'] = MetaData_csv['Unique_ID'].astype(str)
     ##### Match latent code information with ground truth info #####
     # assert np.all(temp_matching_df.Unique_ID.values == MetaData_csv.Unique_ID.values), "Inference dataset doesn't match with csv metadata"
     MetaData_csv = pd.merge(MetaData_csv, temp_matching_df.set_index('Unique_ID'), how='outer', on=["Unique_ID"])

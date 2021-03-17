@@ -18,6 +18,7 @@ from models.networks_refactoring import betaVAE, VaDE, EnhancedVAE
 from models.train_net import VAEXperiment, pretrain_vaDE_model, pretrain_vaDE_model_SSIM, \
     pretrain_EnhancedVAE_model_SSIM
 from quantitative_metrics.performance_metrics_single import compute_perf_metrics
+from util.Process_benchmarkDataset import get_dsprites_train_loader, get_dsprites_inference_loader
 from util.config import args, dataset_lookUp, device
 from util.data_processing import get_train_val_dataloader, get_inference_dataset, imshow_tensor
 from util.helpers import metadata_latent_space, plot_from_csv, get_raw_data, single_reconstruciton
@@ -27,10 +28,10 @@ from timeit import default_timer as timer
 # %% config of the experimental parameters
 ##########################################################
 # specific argument for this model
-args.add_argument('--model', default='pretrainFelix_VaDE_SSIM+l1_BCE_4c_64')
+args.add_argument('--model', default='pretrainDsprite_VaDE')
 args.add_argument('--beta', type=float, default=1)
 args.add_argument('--pretrained', dest='weight_path', type=str,
-                  default='')
+                  default='/mnt/Linux_Storage/outputs/pretrainDsprite_VaDE/logs/last.ckpt')
 args = args.parse_args()
 # TODO: overwrite the parameters
 
@@ -47,8 +48,7 @@ else:
 ##########################################################
 # %% Train
 ##########################################################
-train_loader, valid_loader = get_train_val_dataloader(dataset_path, input_size=args.input_size,
-                                                      batchsize=args.batch_size, test_split=0.05)
+if args.train: train_loader, valid_loader = get_dsprites_train_loader(batch_size=args.batch_size, val_split=0.05)
 
 # model = EnhancedVAE(zdim=args.hidden_dim, input_channels=args.input_channel, input_size=args.input_size, beta=args.beta)
 model = VaDE(zdim=args.hidden_dim, ydim=4, input_channels=args.input_channel, input_size=args.input_size)
@@ -60,7 +60,7 @@ Experiment = VAEXperiment(model, {
 }, log_path=save_model_path)
 
 ### pretrain
-pretrain_vaDE_model_SSIM(model, train_loader, pre_epoch=100, save_path=save_model_path, device=device)
+if args.train: pretrain_vaDE_model_SSIM(model, train_loader, pre_epoch=40, save_path=save_model_path, device=device)
 # pretrain_EnhancedVAE_model_SSIM(model, train_loader, pre_epoch=15, save_path=save_model_path, device=device)
 
 Experiment.load_weights(args.weight_path)
@@ -90,7 +90,8 @@ if args.train and args.weight_path == '':
 ## step 1 ##
 ## transform the imgs in the dataset to latent dimensions
 # prepare the inference dataset
-_, infer_dataloader = get_inference_dataset(dataset_path, batchsize=512, input_size=args.input_size)
+_, infer_dataloader = get_dsprites_inference_loader(batch_size=512)
+
 
 try:
     metadata_csv = pd.read_csv(os.path.join(save_model_path, 'embeded_data.csv'), index_col=False)
@@ -116,13 +117,26 @@ except:
     logger.experiment.add_embedding(embeddings, label_list, label_img=imgs[:, 0:3, :, :])
 
     ### plotly embedding projector
-    figplotly = plot_from_csv(metadata_csv, low_dim_names=['z0', 'z1', 'z2'], GT_col='GT_class', dim=3, as_str=True)
+    figplotly = plot_from_csv(metadata_csv, low_dim_names=['z0', 'z1', 'z2'], GT_col='GT_label', dim=3, as_str=True)
     plotly.offline.plot(figplotly, filename=os.path.join(save_model_path, 'Representation.html'), auto_open=False)
 
     ### Recon and Generation #####
     single_reconstruciton(infer_dataloader, model, save_model_path, device, num_img=12, logger=logger)
 
 
+embeddings = metadata_csv[[col for col in metadata_csv.columns if 'z' in col]].values
+label_list = metadata_csv.GT_label.astype(str).to_list()
+imgs = get_raw_data(infer_dataloader, metadata_csv)
+if imgs.shape[-1] != 16:
+    imgs = torch.Tensor(
+        [np.transpose(resize(img.permute(1, 2, 0), (25, 25), preserve_range=False, anti_aliasing=True)) for img in
+         imgs])
+# resize these images
+# if imgs.shape[-1] != 64:
+#     imgs = torch.Tensor(
+#         [np.transpose(resize(img.permute(1, 2, 0), (64, 64), preserve_range=False, anti_aliasing=True)) for img in
+#          imgs])
+logger.experiment.add_embedding(embeddings, label_list, label_img=imgs[:, 0:3, :, :])
 '''
 ###############################
 # %% Run performance matrics ###

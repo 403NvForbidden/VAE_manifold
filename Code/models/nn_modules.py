@@ -102,7 +102,7 @@ class Decoder_256(nn.Module):
                 ConvUpsampling(base_dec * 4, base_dec * 2, 3, stride=stride, padding=padding),  # 32x32
                 ConvUpsampling(base_dec * 2, base_dec, 3, stride=stride, padding=padding),  # 64x64
                 nn.Upsample(scale_factor=4, mode='bilinear', align_corners=True), # 128x128
-                nn.Conv2d(in_channels=base_dec, out_channels=input_channel, kernel_size=4, stride=2, padding=1),  # 256 x 256
+                nn.Conv2d(in_channels=base_dec, out_channels=input_channel, kernel_size=3, stride=2, padding=1),  # 256 x 256
             )
             self.linear_dec = nn.Sequential(
                 Linear_block(zdim, 256),
@@ -136,11 +136,11 @@ class Encoder(nn.Module):
         self.input_channels = input_channel
 
         self.conv_enc = nn.Sequential(
-            Conv(self.input_channels, base_enc, 4, stride=2, padding=1),  # stride 2, resolution is splitted by half
-            Conv(base_enc, base_enc * 2, 4, stride=2, padding=1),  # 16x16
-            Conv(base_enc * 2, base_enc * 4, 4, stride=2, padding=1),  # 8x8
-            Conv(base_enc * 4, base_enc * 8, 4, stride=2, padding=1),  # 4x4
-            Conv(base_enc * 8, base_enc * 16, 4, stride=2, padding=1),  # 2x2
+            Conv(self.input_channels, base_enc, 3, stride=2, padding=1),  # stride 2, resolution is splitted by half
+            Conv(base_enc, base_enc * 2, 3, stride=2, padding=1),  # 16x16
+            Conv(base_enc * 2, base_enc * 4, 3, stride=2, padding=1),  # 8x8
+            Conv(base_enc * 4, base_enc * 8, 3, stride=2, padding=1),  # 4x4
+            Conv(base_enc * 8, base_enc * 16, 3, stride=2, padding=1),  # 2x2
         )
         self.linear_enc = nn.Sequential(
             Linear_block(pow(2, 2) * base_enc * 16, 1024),
@@ -174,13 +174,13 @@ class Decoder(nn.Module):
         )
 
         self.conv_dec = nn.Sequential(
-            ConvUpsampling(base_dec * 16, base_dec * 8, 4, stride=stride, padding=padding),  # 4
-            ConvUpsampling(base_dec * 8, base_dec * 4, 4, stride=stride, padding=padding),  # 8
-            ConvUpsampling(base_dec * 4, base_dec * 2, 4, stride=stride, padding=padding),  # 16
-            ConvUpsampling(base_dec * 2, base_dec, 4, stride=stride, padding=padding),  # 32
+            ConvUpsampling(base_dec * 16, base_dec * 8, 3, stride=stride, padding=padding),  # 4
+            ConvUpsampling(base_dec * 8, base_dec * 4, 3, stride=stride, padding=padding),  # 8
+            ConvUpsampling(base_dec * 4, base_dec * 2, 3, stride=stride, padding=padding),  # 16
+            ConvUpsampling(base_dec * 2, base_dec, 3, stride=stride, padding=padding),  # 32
             # ConvUpsampling(base_dec, base_dec, 4, stride=2, padding=1),  # 64
             nn.Upsample(scale_factor=4, mode='bilinear', align_corners=True),
-            nn.Conv2d(in_channels=base_dec, out_channels=input_channel, kernel_size=4, stride=2, padding=1),  # 128
+            nn.Conv2d(in_channels=base_dec, out_channels=input_channel, kernel_size=3, stride=2, padding=1),  # 128
         )
 
     def forward(self, z):
@@ -192,8 +192,8 @@ class Decoder(nn.Module):
         ### p(x|z) reconstruction
         z = z.view((batch_size, -1))
         x = self.linear_dec(z)
-        edge_size = 2 ** ((self.input_channels - 1) // 2)
-        x = x.view((batch_size, self.base_dec * 16, edge_size, edge_size))
+        # edge_size = 2 ** ((self.input_channels - 1) // 2)
+        x = x.view((batch_size, self.base_dec * 16, 2, 2))
         x_recon = self.conv_dec(x)
         return x_recon
 
