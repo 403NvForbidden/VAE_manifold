@@ -14,21 +14,24 @@ from skimage.transform import resize, rotate, rescale
 import torchvision
 import numpy as np
 
-from models.networks_refactoring import betaVAE, VaDE, EnhancedVAE
+from models.networks_refactoring import betaVAE, VaDE, EnhancedVAE, infoMaxVAE, twoStageVaDE
 from models.train_net import VAEXperiment, pretrain_vaDE_model, pretrain_vaDE_model_SSIM, \
-    pretrain_EnhancedVAE_model_SSIM
+    pretrain_EnhancedVAE_model_SSIM, pretrain_2stageVaDE_model_SSIM
 from quantitative_metrics.performance_metrics_single import compute_perf_metrics
 from util.config import args, dataset_lookUp, device
 from util.data_processing import get_train_val_dataloader, get_inference_dataset, imshow_tensor
-from util.helpers import metadata_latent_space, plot_from_csv, get_raw_data, single_reconstruciton
+from util.helpers import metadata_latent_space, plot_from_csv, get_raw_data, single_reconstruciton, double_reconstruciton
 from timeit import default_timer as timer
 
 ##########################################################
 # %% config of the experimental parameters
 ##########################################################
 # specific argument for this model
-args.add_argument('--model', default='pretrainFelix_VaDE_SSIM+l1_BCE_4c_64')
+args.add_argument('--model', default='pretrainFelix_twoStageVaDE_ONLY_4c_64_2')
+args.add_argument('--zdim1', dest="hidden_dim_aux", type=float, default=100)
+args.add_argument('--alpha', type=float, default=10)
 args.add_argument('--beta', type=float, default=1)
+args.add_argument('--gamma', type=float, default=10)
 args.add_argument('--pretrained', dest='weight_path', type=str,
                   default='')
 args = args.parse_args()
@@ -50,8 +53,11 @@ else:
 train_loader, valid_loader = get_train_val_dataloader(dataset_path, input_size=args.input_size,
                                                       batchsize=args.batch_size, test_split=0.05)
 
-# model = EnhancedVAE(zdim=args.hidden_dim, input_channels=args.input_channel, input_size=args.input_size, beta=args.beta)
-model = VaDE(zdim=args.hidden_dim, ydim=4, input_channels=args.input_channel, input_size=args.input_size)
+# model = infoMaxVAE(zdim=args.hidden_dim, input_channels=args.input_channel, input_size=args.input_size, beta=args.beta)
+# model = VaDE(zdim=args.hidden_dim, ydim=4, input_channels=args.input_channel, input_size=args.input_size)
+model = twoStageVaDE(zdim_1=args.hidden_dim_aux, zdim_2=args.hidden_dim, input_channels=args.input_channel,
+                    input_size=args.input_size, alpha=args.alpha,
+                    beta=args.beta, gamma=args.gamma, ydim=3)
 
 Experiment = VAEXperiment(model, {
     "lr": args.learning_rate,
@@ -60,8 +66,9 @@ Experiment = VAEXperiment(model, {
 }, log_path=save_model_path)
 
 ### pretrain
-pretrain_vaDE_model_SSIM(model, train_loader, pre_epoch=100, save_path=save_model_path, device=device)
+# pretrain_vaDE_model_SSIM(model, train_loader, pre_epoch=100, save_path=save_model_path, device=device)
 # pretrain_EnhancedVAE_model_SSIM(model, train_loader, pre_epoch=15, save_path=save_model_path, device=device)
+pretrain_2stageVaDE_model_SSIM(model, train_loader, pre_epoch=80, save_path=save_model_path, device=device)
 
 Experiment.load_weights(args.weight_path)
 
@@ -77,11 +84,12 @@ checkpoint_callback = ModelCheckpoint(
     # save_top_k=1,
     # mode='min',
 )
-if args.train and args.weight_path == '':
-    trainer = pl.Trainer(logger=logger, max_epochs=args.epochs, auto_scale_batch_size='binsearch', auto_lr_find=True,
-                         gpus=(1 if device.type == 'cuda' else 0),  # checkpoint_callback=[checkpoint_callback],
-                         profiler='simple', callbacks=[checkpoint_callback])
-    trainer.fit(Experiment, train_loader, valid_loader)
+
+# if args.train and args.weight_path == '':
+#     trainer = pl.Trainer(logger=logger, max_epochs=args.epochs, auto_scale_batch_size='binsearch', auto_lr_find=True,
+#                          gpus=(1 if device.type == 'cuda' else 0),  # checkpoint_callback=[checkpoint_callback],
+#                          profiler='simple', callbacks=[checkpoint_callback])
+#     trainer.fit(Experiment, train_loader, valid_loader)
 
 ##########################################################
 # %% Evaluate
@@ -109,10 +117,10 @@ except:
     label_list = metadata_csv.GT_label.astype(str).to_list()
     imgs = get_raw_data(infer_dataloader, metadata_csv)
     # resize these images
-    # if imgs.shape[-1] != 64:
-    #     imgs = torch.Tensor(
-    #         [np.transpose(resize(img.permute(1, 2, 0), (64, 64), preserve_range=False, anti_aliasing=True)) for img in
-    #          imgs])
+    if imgs.shape[-1] != 64:
+        imgs = torch.Tensor(
+            [np.transpose(resize(img.permute(1, 2, 0), (20, 20), preserve_range=False, anti_aliasing=True)) for img in
+             imgs])
     logger.experiment.add_embedding(embeddings, label_list, label_img=imgs[:, 0:3, :, :])
 
     ### plotly embedding projector
@@ -120,8 +128,7 @@ except:
     plotly.offline.plot(figplotly, filename=os.path.join(save_model_path, 'Representation.html'), auto_open=False)
 
     ### Recon and Generation #####
-    single_reconstruciton(infer_dataloader, model, save_model_path, device, num_img=12, logger=logger)
-
+    double_reconstruciton(infer_dataloader, model, save_model_path, device, num_img=12, logger=logger)
 
 '''
 ###############################

@@ -95,6 +95,90 @@ def scalar_loss(data, loss_recon, mu_z, logvar_z, beta):
 #########################################
 ##### train vaDE
 #########################################
+def pretrain_2stageVaDE_model_SSIM(model, dataloader, pre_epoch=30, save_path='', device='cpu'):
+    print(os.path.join(save_path, 'pretrain_model.pk'))
+    if os.path.exists(os.path.join(save_path, 'pretrain_model.pk')):
+        model.load_state_dict(torch.load(os.path.join(save_path, 'pretrain_model.pk')))
+        return
+
+    opti = optim.Adam([
+            {'params': model.encoder.parameters()},
+            {'params': model.mu_logvar_gen_1.parameters()},
+            {'params': model.mu_logvar_gen_2.parameters()},
+            {'params': model.decoder_1.parameters()},
+            {'params': model.decoder_2.parameters()},
+        ],
+            lr=5e-4, betas=(0.9, 0.999))
+
+    model.to(device)
+    print(f'Pretraining......on {device}')
+    epoch_bar = tqdm(range(pre_epoch))
+    for _ in epoch_bar:
+        L = ssim = l1_loss = 0
+        for x, y in dataloader:
+            x = x.to(device)
+
+            x_recon_hi, _, _, z_1, x_recon_lo, _, _, z_2 = model(x)
+
+            x_recon_hi = torch.sigmoid(x_recon_hi)
+            x_recon_lo = torch.sigmoid(x_recon_lo)
+
+            msssim_similarity = msssim(x, x_recon_hi, normalize='relu') + msssim(x, x_recon_lo, normalize='relu')
+            l1 = F.l1_loss(x_recon_hi, x, reduction='sum').div(x.size(0)) + F.l1_loss(x_recon_lo, x, reduction='sum').div(x.size(0))
+            loss = (2 - msssim_similarity) + l1
+
+            ssim += msssim_similarity.item()
+            l1_loss += l1.item()
+
+            L += loss.detach().cpu().numpy()
+
+            opti.zero_grad()
+            loss.backward()
+            opti.step()
+
+        epoch_bar.write('\nL={:.4f} ssim={:.4f} L1={:.4f}\n'.format(L / len(dataloader), ssim / len(dataloader),
+                                                                    l1_loss / len(dataloader)))
+    # reset to save weight???? TODO: check
+    # model.logvar_l.load_state_dict(model.mu_l.state_dict())
+
+    ### validate pretrained model
+    Z, Y = [], []
+    with torch.no_grad():
+        for x, y in dataloader:
+            x = x.to(device)
+
+            _, _, _, _, _, _, _, z_2 = model(x)
+            # assert F.mse_loss(mu_z, logvar_z) == 0
+            Z.append(z_2)
+            Y.append(y)
+
+    torch.save(model.state_dict(), os.path.join(save_path, 'pretrain_model.pk'))
+    # convert to tensor
+    Z = torch.cat(Z, 0).detach().cpu().numpy()
+    Y = torch.cat(Y, 0).detach().numpy()
+
+    # select number of clusters
+    n_components = np.arange(1, 12)
+    models = [GaussianMixture(n, covariance_type='full', random_state=0).fit(Z) for n in n_components]
+    bic = [m.bic(Z) for m in models]
+    aic = [m.aic(Z) for m in models]
+    plt.plot(n_components, bic, label='BIC')
+    plt.plot(n_components, aic, label='AIC')
+    plt.legend(loc='best')
+    plt.xlabel('n_components')
+    plt.savefig(os.path.join(save_path, 'BIC_AIC.png'))
+
+    gmm = GaussianMixture(n_components=model.ydim, covariance_type='diag')
+    pre = gmm.fit_predict(Z)
+    print('Acc={:.4f}%'.format(cluster_acc(pre, Y)[0] * 100))
+
+    model.pi_.data = torch.from_numpy(gmm.weights_).cuda().float()
+    model.mu_c.data = torch.from_numpy(gmm.means_.T).cuda().float()
+    model.log_sigma2_c.data = torch.from_numpy(gmm.covariances_.T).cuda().float()
+
+    torch.save(model.state_dict(), os.path.join(save_path, 'pretrain_model.pk'))
+
+
 def pretrain_EnhancedVAE_model_SSIM(model, dataloader, pre_epoch=30, save_path='', device='cpu'):
     print(os.path.join(save_path, 'pretrain_model.pk'))
     if os.path.exists(os.path.join(save_path, 'pretrain_model.pk')):
@@ -284,119 +368,6 @@ def pretrain_vaDE_model(model, dataloader, pre_epoch=30, save_path='', device='c
     model.log_sigma2_c.data = torch.from_numpy(gmm.covariances_.T).cuda().float()
 
     torch.save(model.state_dict(), os.path.join(save_path, 'pretrain_model.pk'))
-
-
-def train_vaDE_epoch(model, data_loader, optimizer, epoch, device):
-    start = timer()
-    model.train()
-    loss_iter, kl_loss_iter, recon_loss_iter = [], [], []
-
-    for batch_idx, (x, _) in enumerate(data_loader):
-        x = x.to(device)
-        recon_x, mu, logvar, z = model(x)
-        loss, loss_recon, loss_kl, _ = model.objective_func(x, recon_x, z, mu, logvar)
-
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-
-        loss_iter.append(loss.item())
-        kl_loss_iter.append(loss_kl.detach().cpu().numpy())
-        recon_loss_iter.append(loss_recon.detach().cpu().numpy())
-
-        if batch_idx % 10 == 0:
-            print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
-                epoch, batch_idx * len(x), len(data_loader.dataset),
-                       100. * batch_idx / len(data_loader),
-                loss_iter[-1]), end='\r')
-
-    if (epoch % 10 == 0) or (epoch == 1):
-        print('==========> Epoch: {} ==========> Average loss: {:.4f}'.format(epoch, np.mean(loss_iter)))
-        print(f'{timer() - start:.2f} seconds elapsed in epoch.')
-        print(f'KL loss : {np.mean(kl_loss_iter):.2f}, Recon Loss : {np.mean(recon_loss_iter)}')
-        # writer.add_scalar()
-
-    return np.mean(loss_iter), np.mean(kl_loss_iter), np.mean(recon_loss_iter)
-
-
-def test_vaDE_epoch(model, val_loader, epoch, device):
-    start = timer()
-    model.eval()
-    loss_iter, kl_loss_iter, recon_loss_iter, cluster_accuracy = [], [], [], []
-    with torch.no_grad():
-        Y, Y_pred = [], []
-        for batch_idx, (x, labels) in enumerate(val_loader):
-            x = x.to(device)
-
-            recon_x, mu, logvar, z = model.forward(x)
-
-            loss, loss_recon, loss_kl, gamma = model.objective_func(x, recon_x, z, mu, logvar)
-
-            # prediction
-            gamma = gamma.data.cpu().numpy()
-            Y.append(labels.numpy())
-            Y_pred.append(np.argmax(gamma, axis=1))
-
-            loss_iter.append(loss.item())
-            kl_loss_iter.append(loss_kl.detach().cpu().numpy())
-            recon_loss_iter.append(loss_recon.detach().cpu().numpy())
-
-        Y = np.concatenate(Y)
-        Y_pred = np.concatenate(Y_pred)
-        cluster_accuracy.append(cluster_acc(Y_pred, Y)[0] * 100)
-
-        if (epoch % 10 == 0) or (epoch == 1):
-            print('---------val-----------')
-            # print('==========> Epoch: {} ==========> Average loss: {:.4f}'.format(epoch, np.mean(loss_iter)))
-            print(f'{timer() - start:.2f} seconds elapsed in epoch.')
-            print(f'KL loss : {np.mean(kl_loss_iter):.2f}, Recon Loss : {np.mean(recon_loss_iter)}')
-            print(f"Clustering Accuracy {cluster_accuracy[-1]:.2f}")
-
-    return np.mean(loss_iter), np.mean(kl_loss_iter), np.mean(recon_loss_iter), np.mean(cluster_accuracy)
-
-
-def train_vaDE_model(num_epochs, model, optimizer, train_loader, valid_loader, save_path='', device='cpu'):
-    # Number of epochs already trained (if pre trained)
-    try:
-        print(f'VAE1, VAE2 has been trained for: {model.epochs} epochs.\n')
-    except:
-        model.epochs = 0
-        print(f'Starting Training from Scratch.\n')
-
-    overall_start = timer()
-    best_epoch = 0
-    history = []
-
-    ### Pretrain
-    pretrain_vaDE_model(model, train_loader, save_path=save_path, device=device)
-    # writer = SummaryWriter(save_path + 'logs')
-
-    ### start trianning epochs
-    lr_s = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.9)
-    epoch_bar = tqdm(range(num_epochs))
-    for epoch in epoch_bar:
-        ### train
-        train_loss, train_kl_loss, train_recon_loss = train_vaDE_epoch(model, train_loader, optimizer, epoch, device)
-        ### test
-        val_loss, val_kl_loss, val_recon_loss, clutering_acc = test_vaDE_epoch(model, train_loader, epoch, device)
-
-        lr_s.step()
-        # keep record
-        history.append(
-            [train_loss, train_kl_loss, train_recon_loss, val_loss, val_kl_loss, val_recon_loss, clutering_acc])
-
-    ### save model
-    # save_brute(model, save_path + 'model.pth')
-    torch.save(model.state_dict(), save_path + 'model.pth')
-
-    history = pd.DataFrame(
-        history,
-        columns=['train_loss', 'train_kl_loss', 'train_recon_loss', 'val_loss', 'val_kl_loss', 'val_recon_loss',
-                 'clutering_acc']
-    )
-
-    return model, history
-
 
 #########################################
 ##### 2 stage VAE training ##############
@@ -912,9 +883,6 @@ class VAEXperiment(pl.LightningModule):
         self.curr_device = None
         self.log_path = log_path
         # create log path
-        # if not os.path.isdir(log_path):
-        #     print(f'creating path:=======>{log_path}')
-        #     os.mkdir(log_path)
         make_path(log_path)
 
     def parameter_histogram(self):

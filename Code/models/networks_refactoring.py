@@ -212,6 +212,207 @@ class twoStageVAE(AbstractModel, pl.LightningModule):
             # {'optimizer': optimizer_VAE_2, 'lr_scheduler': scheduler_VAE_1},
         )
 
+class twoStageVaDE(AbstractModel, pl.LightningModule):
+    def __init__(self, zdim_1=100, zdim_2=3, input_channels=3, input_size=64, alpha=1, beta=1, gamma=100, ydim=3,
+                 filepath=None):
+        super().__init__(filepath=filepath)
+        """
+        param :
+            zdim (int) : dimension of the latent space
+            beta (float) : weight coefficient for DL divergence, when beta=1 is Valina VAE
+            Modulate the complexity of the model with parameter 'base_enc' and 'base_dec'
+        """
+        self.zdim_aux = zdim_1
+        self.zdim = zdim_2
+        self.ydim = ydim
+        self.beta = beta
+        self.alpha = alpha
+        self.gamma = gamma
+        self.input_channels = input_channels
+        self.input_size = input_size
+        self.z1 = None
+        self.z2 = None
+        # temp variable that saved the list of last step losses of the model
+        self.history = []
+        self.loss_dict = {}
+
+        self.MI_estimator_1 = MLP_MI_estimator(input_dim=input_size * input_size * input_channels, zdim=zdim_1)
+        self.MI_estimator_2 = MLP_MI_estimator(input_dim=input_size * input_size * input_channels, zdim=zdim_2)
+
+        ### initialise GMM parameters
+        # theta p
+        self.pi_ = nn.Parameter(torch.FloatTensor(ydim, ).fill_(1) / ydim, requires_grad=True)
+        self.mu_c = nn.Parameter(torch.FloatTensor(self.zdim, ydim).fill_(0), requires_grad=True)
+        # lambda p
+        self.log_sigma2_c = nn.Parameter(torch.FloatTensor(self.zdim, ydim).fill_(0), requires_grad=True)
+
+        ##### Encoding layers #####
+        self.encoder = Encoder(out_size=256, input_channel=input_channels)
+
+        # inference mean and std
+        self.mu_logvar_gen_1 = nn.Linear(256, self.zdim_aux * 2)  # 256 -> 6
+        self.mu_logvar_gen_2 = nn.Linear(256, self.zdim * 2)
+
+        # to constrain logvar in a reasonable range
+        self.stabilize_exp = nn.Hardtanh(min_val=-6., max_val=2.)  # linear between min and max
+
+        ##### Decoding layers #####
+        self.decoder_1 = Decoder(zdim=zdim_1, input_channel=input_channels)
+        self.decoder_2 = Decoder(zdim=zdim_2, input_channel=input_channels)
+
+        # run weight initialization TODO: make this abstract class
+        weight_initialization(self.modules())
+
+    def encode(self, img):
+        return self.encoder(img)
+
+    def inferece_aux(self, x):
+        mu_logvar_1 = self.mu_logvar_gen_1(x)
+        mu_z_1, logvar_z_1 = mu_logvar_1.view(-1, self.zdim_aux, 2).unbind(-1)
+        logvar_z_1 = self.stabilize_exp(logvar_z_1)
+        z_1 = reparameterize(mu_z_1, logvar_z_1, self.training)
+        return z_1, mu_z_1, logvar_z_1
+
+    def inference(self, x):
+        # for lower VAE
+        mu_logvar_2 = self.mu_logvar_gen_2(x)
+        mu_z_2, logvar_z_2 = mu_logvar_2.view(-1, self.zdim, 2).unbind(-1)
+        logvar_z_2 = self.stabilize_exp(logvar_z_2)
+        z_2 = reparameterize(mu_z_2, logvar_z_2, self.training)
+        return z_2, mu_z_2, logvar_z_2
+
+    def decode_aux(self, z_aux):
+        return self.decoder_1(z_aux)
+
+    def decode(self, z):
+        return self.decoder_2(z)
+
+    def forward(self, img, **kwargs):
+        x_1 = self.encode(img)
+        x_2 = x_1.clone()  # copy for VAE2
+
+        z_2, mu_z_2, logvar_z_2 = self.inference(x_2)
+        z_1, mu_z_1, logvar_z_1 = self.inferece_aux(x_1)
+
+        x_recon_lo = self.decode(z_2)
+        x_recon_hi = self.decode_aux(z_1)
+
+        return x_recon_hi, mu_z_1, logvar_z_1, z_1.squeeze(), x_recon_lo, mu_z_2, logvar_z_2, z_2.squeeze()
+
+    def step(self, img) -> dict:
+        x_recon_hi, mu_z_1, logvar_z_1, z_1, x_recon_lo, mu_z_2, logvar_z_2, z_2 = self.forward(img)
+        self.z1 = z_1
+        self.z2 = z_2
+        return self.objective_func(img, x_recon_hi, mu_z_1, logvar_z_1, z_1, x_recon_lo, mu_z_2, logvar_z_2, z_2)
+
+    def objective_func(self, x, x_recon_hi, mu_z_1, logvar_z_1, z_1, x_recon_lo, mu_z_2, logvar_z_2, z_2, *args,
+                       **kwargs) -> dict:
+        """
+        :param x:
+        :param x_recon:
+        :param mu_z:
+        :param logvar_z:
+        :return: the loss of beta VAEs
+        """
+        # loss for VAE1
+        loss_recon_1 = F.mse_loss(torch.sigmoid(x_recon_hi), x)
+        loss_1, loss_kl_1 = scalar_loss(x, loss_recon_1, mu_z_1, logvar_z_1, self.beta)
+        MI_1 = self.MI_estimator_1(x, z_1)
+
+        # loss for VAE2
+        MI_2 = self.MI_estimator_2(x, z_2)
+
+        Z = z_2.unsqueeze(2).expand(z_2.size()[0], z_2.size()[1], self.ydim)  # NxDxK
+        z_mean_t = mu_z_2.unsqueeze(2).expand(mu_z_2.size()[0], mu_z_2.size()[1], self.ydim)
+        z_log_var_t = logvar_z_2.unsqueeze(2).expand(logvar_z_2.size()[0], logvar_z_2.size()[1], self.ydim)
+        u_tensor3 = self.mu_c.unsqueeze(0).expand(z_2.size()[0], self.mu_c.size()[0], self.mu_c.size()[1])  # NxDxK
+        lambda_tensor3 = self.log_sigma2_c.unsqueeze(0).expand(z_2.size()[0], self.log_sigma2_c.size()[0],
+                                                               self.log_sigma2_c.size()[1])
+        theta_tensor2 = self.pi_.unsqueeze(0).expand(z_2.size()[0], self.ydim)  # NxK
+
+        p_c_z = torch.exp(torch.log(theta_tensor2) - torch.sum(0.5 * torch.log(2 * math.pi * lambda_tensor3) + \
+                                                               (Z - u_tensor3) ** 2 / (2 * lambda_tensor3),
+                                                               dim=1)) + 1e-9  # NxK
+        gamma = p_c_z / torch.sum(p_c_z, dim=1, keepdim=True)  # NxK
+
+        # adding min for loss to prevent log(0)
+        loss_recon_2 = F.mse_loss(torch.sigmoid(x_recon_lo), x, reduction='sum').div(x.size(0)) # F.binary_cross_entropy_with_logits(x_recon_lo, x, reduction='sum').div(x.size(0))
+
+        logpzc = torch.sum(0.5 * gamma * torch.sum(self.zdim * math.log(2 * math.pi) + torch.log(lambda_tensor3) + \
+                                                   torch.exp(z_log_var_t) / lambda_tensor3 + \
+                                                   (z_mean_t - u_tensor3) ** 2 / lambda_tensor3, dim=1),
+                           dim=-1)
+        qentropy = -0.5 * torch.sum(1 + logvar_z_2 + self.zdim * math.log(2 * math.pi), -1)
+        logpc = -torch.sum(torch.log(theta_tensor2) * gamma, -1)
+        logqcx = torch.sum(torch.log(gamma) * gamma, -1)
+
+        loss_kl_2 = torch.mean(logpzc + qentropy + logpc + logqcx)
+        loss_2 = loss_recon_2 + self.beta * loss_kl_2
+        # Normalise by same number of elements as in reconstruction
+
+
+
+        ## adding MI regularizer
+        loss = (loss_1 - self.alpha * MI_1) + self.gamma * (loss_2 - self.alpha * MI_2)
+        return {'loss': loss, 'MI_loss_1': -MI_1, 'MI_loss_2': -MI_2, 'recon_loss_1': loss_recon_1, 'KLD_1': loss_kl_1,
+                'recon_loss_2': loss_recon_2, "KLD_2": loss_kl_2}
+
+    def training_step(self, batch, batch_idx, optimizer_idx=0, *args, **kwargs):
+        img, labels = batch
+        self.curr_device = img.device
+        # VAE 1 only step once
+        if optimizer_idx == 0:
+            self.loss_dict = self.step(img)
+            return self.loss_dict['loss']
+        elif optimizer_idx == 1:
+            self.loss_dict['MI_loss_1'] = -self.MI_estimator_1(img, self.z1)
+            return self.loss_dict['MI_loss_1']
+        elif optimizer_idx == 2:
+            # detach and add to to list
+            temp_dict = {}
+            for k, v in self.loss_dict.items():
+                temp_dict[k] = v.clone().data.cpu()
+            self.history.append(temp_dict)
+
+            self.loss_dict['MI_loss_2'] = -self.MI_estimator_2(img, self.z2)
+            return self.loss_dict['MI_loss_2']
+
+    def backward(self, loss: Tensor, optimizer: Optimizer, optimizer_idx: int, *args, **kwargs) -> None:
+        loss.backward(retain_graph=True)
+
+    def configure_optimizers(self, params):
+
+        optimizer_VAE_1 = optim.Adam([
+            {'params': self.encoder.parameters()},
+            {'params': self.mu_logvar_gen_1.parameters()},
+            {'params': self.mu_logvar_gen_2.parameters()},
+            {'params': self.decoder_1.parameters()},
+            {'params': self.decoder_2.parameters()},
+        ],
+            lr=params['lr'], betas=(0.9, 0.999),
+            weight_decay=params['weight_decay'])
+
+        optimizer_MI = optim.Adam([{'params': self.MI_estimator_1.parameters()}],
+                                  lr=params['lr'], betas=(0.9, 0.999),
+                                  weight_decay=params['weight_decay'])
+
+        optimizer_MI_2 = optim.Adam(self.MI_estimator_2.parameters(),
+                                    lr=params['lr'], betas=(0.9, 0.999),
+                                    weight_decay=params['weight_decay'])
+
+        scheduler_VAE_1 = optim.lr_scheduler.ExponentialLR(optimizer_VAE_1, gamma=params['scheduler_gamma'])
+        # scheduler_VAE_2 = optim.lr_scheduler.ExponentialLR(optimizer_VAE_2, gamma=params['scheduler_gamma'])
+        scheduler_MI_1 = optim.lr_scheduler.ExponentialLR(optimizer_MI, gamma=params['scheduler_gamma'])
+        scheduler_MI_2 = optim.lr_scheduler.ExponentialLR(optimizer_MI_2, gamma=params['scheduler_gamma'])
+
+        return (
+            {'optimizer': optimizer_VAE_1, 'lr_scheduler': scheduler_VAE_1},
+            {'optimizer': optimizer_MI, 'lr_scheduler': scheduler_MI_1},
+            {'optimizer': optimizer_MI_2, 'lr_scheduler': scheduler_MI_2},
+            # {'optimizer': optimizer_VAE_2, 'lr_scheduler': scheduler_VAE_1},
+        )
+
+
 
 class EnhancedVAE(AbstractModel, pl.LightningModule):
     def __init__(self, zdim=3, input_channels=3, input_size=64, beta=1, filepath=None):
@@ -403,8 +604,13 @@ class betaVAE(AbstractModel, pl.LightningModule):
         #     x_recons, x, reduction='sum'
         # ).div(batch_size)
 
-        loss_recon = F.mse_loss(torch.sigmoid(x_recon), x)
-        loss, loss_kl = scalar_loss(x, loss_recon, mu_z, logvar_z, self.beta)
+        loss_recon = F.binary_cross_entropy_with_logits(x_recon, x, reduction='sum').div(x.size(0))
+        # loss_recon = F.mse_loss(torch.sigmoid(x_recon), x)
+        # loss, loss_kl = scalar_loss(x, loss_recon, mu_z, logvar_z, self.beta)
+
+        loss_kl = kl_divergence(mu_z, logvar_z)
+        loss = loss_recon + self.beta * loss_kl
+
         # if self.loss_type == 'H':  # https://openreview.net/forum?id=Sy2fzU9gl
         #     loss = recons_loss + self.beta * kld_weight * kld_loss
         # elif self.loss_type == 'B':  # https://arxiv.org/pdf/1804.03599.pdf
@@ -478,9 +684,9 @@ class infoMaxVAE(AbstractModel, pl.LightningModule):
         :param logvar_z:
         :return: the loss of beta VAEs
         """
-        loss_recon = F.mse_loss(torch.sigmoid(x_recon), x)
-
+        loss_recon = F.binary_cross_entropy_with_logits(x_recon, x)
         loss, loss_kl = scalar_loss(x, loss_recon, mu_z, logvar_z, self.beta)
+
         MI_loss = -self.MI_estimator(x, z)
         ## adding MI regularizer
         loss += self.alpha * MI_loss
@@ -644,7 +850,7 @@ class VaDE(AbstractModel, pl.LightningModule):
         # Normalise by same number of elements as in reconstruction
         loss = loss_recon + KL_loss
 
-        return {'loss': loss, 'recon_loss': loss_recon, 'KLD': KL_loss}#, 'gamma': gamma}
+        return {'loss': loss, 'recon_loss': loss_recon, 'KLD': KL_loss}  # , 'gamma': gamma}
 
     # ### @override
     # def objective_func(self, x, recon_x, z, z_mean, z_log_var):
