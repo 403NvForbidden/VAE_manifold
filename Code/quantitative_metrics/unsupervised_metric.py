@@ -28,6 +28,8 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
 from sklearn import metrics
 from scipy.spatial import distance
+
+from util.Process_benchmarkDataset import get_dsprites_inference_loader
 from util.data_processing import get_inference_dataset
 import itertools
 import plotly.express as px
@@ -76,7 +78,11 @@ def unsup_metric_and_local_Q(metadata_csv, low_dim_names=['x_coord', 'y_coord', 
 
         batch_size = 512
         input_size = 64  # TO CHANGE DEPENDING ON THE DATASET ################
-        _, dataloader = get_inference_dataset(path_to_raw_data, batch_size, input_size, droplast=False)
+
+        if feature_size == 64*64:
+            _, dataloader = get_dsprites_inference_loader(batch_size=512, shuffle=True)
+        else:
+            _, dataloader = get_inference_dataset(path_to_raw_data, batch_size, input_size, droplast=False)
 
         for i, (data, labels, file_names) in enumerate(dataloader):
             # Extract unique cell id from file_names
@@ -101,6 +107,9 @@ def unsup_metric_and_local_Q(metadata_csv, low_dim_names=['x_coord', 'y_coord', 
 
         # Managed the fact that UMAP / tSNE might not contain all the single cells for some reason...
         true_size = len(rawdata_frame)
+
+        MetaData_csv['Unique_ID'] = MetaData_csv['Unique_ID'].astype(str)
+        rawdata_frame['Unique_ID'] = rawdata_frame['Unique_ID'].astype(str)
         rawdata_frame = rawdata_frame.join(MetaData_csv.set_index('Unique_ID'), on='Unique_ID')
         MetaData_csv = rawdata_frame
         MetaData_csv.dropna(subset=[low_dim_names[0]], inplace=True)

@@ -24,9 +24,9 @@ from util.helpers import metadata_latent_space, plot_from_csv, get_raw_data, sin
 # specific argument for this model
 args.add_argument('--model', default='infoMaxVAE')
 args.add_argument('--alpha', type=float, default=1)
-args.add_argument('--beta', type=float, default=10)
+args.add_argument('--beta', type=float, default=1)
 args.add_argument('--pretrained', dest='weight_path', type=str,
-                  default='../outputs/infoMaxVAE_2021-02-18-01:21/logs/last.ckpt')
+                  default='')
 args = args.parse_args()
 # TODO: overwrite the parameters
 
@@ -118,28 +118,30 @@ params_preferences = {
     'global_saving_path': save_model_path + '/',  # Different for each model, this one is update during optimization
 
     ### Unsupervised metrics
-    'save_unsupervised_metric': False,
+    'save_unsupervised_metric': True,
     'only_local_Q': False,
     'kt': 300,
     'ks': 500,
 
     ### Mutual Information
-    'save_mine_metric': False,
+    'save_mine_metric': True,
     'batch_size': 256,
     'bound_type': 'interpolated',
     'alpha_logit': -4.6,  # result in alpha = 0.01
     'epochs': 10,
 
     ### Classifier accuracy
-    'save_classifier_metric': False,
+    'save_classifier_metric': True,
     'num_iteration': 3,
 
     ### BackBone Metric
-    'save_backbone_metric': False,
+    'save_backbone_metric': True,
 
     ### Disentanglement Metric
-    'save_disentanglement_metric': False,
+    'save_disentanglement_metric': True,
     'features': dataset_lookUp[args.dataset]['feat'],
 }
 compute_perf_metrics(metadata_csv, params_preferences, logger)
+# finally close the logger
 logger.close()
+

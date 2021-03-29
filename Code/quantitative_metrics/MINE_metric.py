@@ -19,6 +19,8 @@ from torch import nn
 from torch.nn import functional as F
 from torch.nn.init import xavier_normal_
 from torch import cuda
+
+from util.Process_benchmarkDataset import get_dsprites_inference_loader
 from util.data_processing import get_inference_dataset
 import torch.optim as optim
 import pandas as pd
@@ -233,10 +235,12 @@ def train_MINE(MINE, path_to_csv, low_dim_names, epochs, infer_dataloader, bound
     else:
         Metadata_csv = path_to_csv
 
-    optimizer = optim.Adam(MINE.parameters(), lr=0.0005)
+    Metadata_csv['Unique_ID'] = Metadata_csv['Unique_ID'].astype(str)
+
+    optimizer = optim.Adam(MINE.parameters(), lr=0.001)
     if bound_type == 'interpolated':
         assert baseline != None, "please provide a valid NN to represent the baseline a(y)"
-        optimizer = optim.Adam(list(MINE.parameters()) + list(baseline.parameters()), lr=0.0005)
+        optimizer = optim.Adam(list(MINE.parameters()) + list(baseline.parameters()), lr=0.001)
 
     decayRate = 0.2
     # lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer=optimizer, step_size=80, gamma=decayRate)
@@ -314,7 +318,7 @@ def train_MINE(MINE, path_to_csv, low_dim_names, epochs, infer_dataloader, bound
 
 
 def compute_MI(data_csv, low_dim_names=['x_coord', 'y_coord', 'z_coord'], path_to_raw_data='DataSets/Synthetic_Data_1',
-               save_path=None, batch_size=512, alpha_logit=-5., bound_type='infoNCE', epochs=300, logger=None):
+               save_path=None, batch_size=512, alpha_logit=-5., bound_type='infoNCE', epochs=300, logger=None, feature_size=64*64*3):
     '''Compute MI (MINE framework) between input data and latent representation.
     Projection coordinates need to be store in the csv file under the columns 'low_dim_names'
     Raw data (image) are loaded by batch from 'path_to_raw_data'
@@ -333,9 +337,13 @@ def compute_MI(data_csv, low_dim_names=['x_coord', 'y_coord', 'z_coord'], path_t
     batch_size = batch_size
     input_size = 64  # CHANGE DEPENDING THE DATASET ############
     epochs = epochs
-    _, infer_dataloader = get_inference_dataset(path_to_raw_data, batch_size, input_size, shuffle=True, droplast=True)
 
-    MINEnet = MINE(input_size * input_size * 3, zdim=len(low_dim_names))  # CHANGE DEPENDING ON DATASET ###########
+    if feature_size == 64 * 64:
+        _, infer_dataloader = get_dsprites_inference_loader(batch_size=512, shuffle=True)
+    else:
+        _, infer_dataloader = get_inference_dataset(path_to_raw_data, batch_size, input_size, shuffle=True, droplast=True)
+
+    MINEnet = MINE(feature_size, zdim=len(low_dim_names))  # CHANGE DEPENDING ON DATASET ###########
     MINEnet.to(device)
 
     baseline = None

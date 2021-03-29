@@ -95,6 +95,56 @@ def scalar_loss(data, loss_recon, mu_z, logvar_z, beta):
 #########################################
 ##### train vaDE
 #########################################
+def pretrain_2stageVAEmodel_SSIM(model, dataloader, pre_epoch=30, save_path='', device='cpu'):
+    print(os.path.join(save_path, 'pretrain_model.pk'))
+    if os.path.exists(os.path.join(save_path, 'pretrain_model.pk')):
+        model.load_state_dict(torch.load(os.path.join(save_path, 'pretrain_model.pk')))
+        print("pretrained-weight loaded!!!")
+        return
+
+    opti = optim.Adam([
+        {'params': model.encoder.parameters()},
+        {'params': model.mu_logvar_gen_1.parameters()},
+        {'params': model.mu_logvar_gen_2.parameters()},
+        {'params': model.decoder_1.parameters()},
+        {'params': model.decoder_2.parameters()},
+    ],
+        lr=1e-3, betas=(0.9, 0.999))
+    model.to(device)
+
+    print(f'Pretraining......on {device}')
+    epoch_bar = tqdm(range(pre_epoch))
+    for _ in epoch_bar:
+        L = ssim = l1_loss = 0
+        for x, y in dataloader:
+            x = x.to(device)
+
+            x_recon_hi, _, _, z_1, x_recon_lo, _, _, z_2 = model(x)
+
+            x_recon_hi = torch.sigmoid(x_recon_hi)
+            x_recon_lo = torch.sigmoid(x_recon_lo)
+
+            msssim_similarity = msssim(x, x_recon_hi, normalize='relu') + msssim(x, x_recon_lo, normalize='relu')
+            l1 = F.l1_loss(x_recon_hi, x, reduction='sum').div(x.size(0)) + F.l1_loss(x_recon_lo, x,
+                                                                                      reduction='sum').div(x.size(0))
+            loss = (2 - msssim_similarity) + l1
+
+            ssim += msssim_similarity.item()
+            l1_loss += l1.item()
+
+            L += loss.detach().cpu().numpy()
+
+            opti.zero_grad()
+            loss.backward()
+            opti.step()
+
+        epoch_bar.write('\nL={:.4f} ssim={:.4f} L1={:.4f}\n'.format(L / len(dataloader), ssim / len(dataloader),
+                                                                    l1_loss / len(dataloader)))
+    # reset to save weight???? TODO: check
+    # model.logvar_l.load_state_dict(model.mu_l.state_dict())
+    torch.save(model.state_dict(), os.path.join(save_path, 'pretrain_model.pk'))
+
+
 def pretrain_2stageVaDE_model_SSIM(model, dataloader, pre_epoch=30, save_path='', device='cpu'):
     print(os.path.join(save_path, 'pretrain_model.pk'))
     if os.path.exists(os.path.join(save_path, 'pretrain_model.pk')):
@@ -102,13 +152,13 @@ def pretrain_2stageVaDE_model_SSIM(model, dataloader, pre_epoch=30, save_path=''
         return
 
     opti = optim.Adam([
-            {'params': model.encoder.parameters()},
-            {'params': model.mu_logvar_gen_1.parameters()},
-            {'params': model.mu_logvar_gen_2.parameters()},
-            {'params': model.decoder_1.parameters()},
-            {'params': model.decoder_2.parameters()},
-        ],
-            lr=5e-4, betas=(0.9, 0.999))
+        {'params': model.encoder.parameters()},
+        {'params': model.mu_logvar_gen_1.parameters()},
+        {'params': model.mu_logvar_gen_2.parameters()},
+        {'params': model.decoder_1.parameters()},
+        {'params': model.decoder_2.parameters()},
+    ],
+        lr=5e-4, betas=(0.9, 0.999))
 
     model.to(device)
     print(f'Pretraining......on {device}')
@@ -124,7 +174,8 @@ def pretrain_2stageVaDE_model_SSIM(model, dataloader, pre_epoch=30, save_path=''
             x_recon_lo = torch.sigmoid(x_recon_lo)
 
             msssim_similarity = msssim(x, x_recon_hi, normalize='relu') + msssim(x, x_recon_lo, normalize='relu')
-            l1 = F.l1_loss(x_recon_hi, x, reduction='sum').div(x.size(0)) + F.l1_loss(x_recon_lo, x, reduction='sum').div(x.size(0))
+            l1 = F.l1_loss(x_recon_hi, x, reduction='sum').div(x.size(0)) + F.l1_loss(x_recon_lo, x,
+                                                                                      reduction='sum').div(x.size(0))
             loss = (2 - msssim_similarity) + l1
 
             ssim += msssim_similarity.item()
@@ -201,8 +252,8 @@ def pretrain_EnhancedVAE_model_SSIM(model, dataloader, pre_epoch=30, save_path='
 
             # loss_recon = F.binary_cross_entropy_with_logits(x_recon, x, reduction='sum').div(x.size(0))
             msssim_similarity = msssim(x, x_recon, normalize='relu')
-            l1 = F.l1_loss(x_recon, x, reduction='sum').div(x.size(0)) # F.mse_loss(x_recon, x)
-            loss = (1 - msssim_similarity) + l1 # 0.00005 * l1
+            l1 = F.l1_loss(x_recon, x, reduction='sum').div(x.size(0))  # F.mse_loss(x_recon, x)
+            loss = (1 - msssim_similarity) + l1  # 0.00005 * l1
 
             ssim += msssim_similarity.item()
             l1_loss += l1.item()
@@ -218,7 +269,6 @@ def pretrain_EnhancedVAE_model_SSIM(model, dataloader, pre_epoch=30, save_path='
     # reset to save weight???? TODO: check
     # model.logvar_l.load_state_dict(model.mu_l.state_dict())
     torch.save(model.state_dict(), os.path.join(save_path, 'pretrain_model.pk'))
-
 
 
 def pretrain_vaDE_model_SSIM(model, dataloader, pre_epoch=30, save_path='', device='cpu'):
@@ -368,6 +418,7 @@ def pretrain_vaDE_model(model, dataloader, pre_epoch=30, save_path='', device='c
     model.log_sigma2_c.data = torch.from_numpy(gmm.covariances_.T).cuda().float()
 
     torch.save(model.state_dict(), os.path.join(save_path, 'pretrain_model.pk'))
+
 
 #########################################
 ##### 2 stage VAE training ##############

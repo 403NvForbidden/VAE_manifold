@@ -64,7 +64,7 @@ def compute_perf_metrics(data_source, params_preferences, logger=None):
     ##############################################
     ########## Unsupervised Metrics ##############
     ##############################################
-    try:
+    # try:
         if params_preferences['save_unsupervised_metric'] != False:
             save_path = os.path.join(params_preferences['global_saving_path'], "unsup_metric")
             make_path(save_path)
@@ -93,32 +93,33 @@ def compute_perf_metrics(data_source, params_preferences, logger=None):
             print(f'Trustworthiness AUC : {trust_AUC}')
             print(f'Continuity AUC : {cont_AUC}')
             print(f'LCMC AUC : {lcmc_AUC}')
-    except:
-        warnings.warn("Unsupervised Metrics FAILED")
+    # except:
+    #     warnings.warn("Unsupervised Metrics FAILED")
     ##############################################
     ########## Mutual Information ##############
     ##############################################
-    try:
+    # try:
         if params_preferences['save_mine_metric'] != False:
             save_path = os.path.join(params_preferences['global_saving_path'], "MI_metric")
             make_path(save_path)
 
-            print('#######################################')
-            print('###### Computing Mutual Information')
-            print('#######################################')
+            print('##########################################')
+            print('###### Computing Mutual Information ######')
+            print('##########################################')
             MI_score = compute_MI(MetaData_df, low_dim_names=params_preferences['low_dim_names'],
                                   path_to_raw_data=params_preferences['path_to_raw_data'], save_path=save_path,
                                   batch_size=params_preferences['batch_size'],
                                   alpha_logit=params_preferences['alpha_logit'],
                                   bound_type=params_preferences['bound_type'], epochs=params_preferences['epochs'],
+                                  feature_size=params_preferences['feature_size'],
                                   logger=logger)
 
             MI_score_df = pd.DataFrame({'MI_score': MI_score}, index=[0])
             if save_path != '': MI_score_df.to_csv(f'{save_path}/MI_score.csv', index=False)
 
             print(f'Mutual Information : {MI_score}')
-    except:
-        warnings.warn("MI failed")
+    # except:
+    #     warnings.warn("MI failed")
     ##############################################
     ########## Classifier accuracy ##############
     ##############################################
@@ -228,7 +229,7 @@ def compute_perf_metrics(data_source, params_preferences, logger=None):
     ##############################################
     try:
         # Only BBBC dataset and sprite dataset has a ground truth for disentanglement
-        if params_preferences['save_disentanglement_metric'] and params_preferences['dataset_tag'] == 1:
+        if params_preferences['save_disentanglement_metric']:
             save_path = os.path.join(params_preferences['global_saving_path'], "disentanglement_metric")
             make_path(save_path)
 

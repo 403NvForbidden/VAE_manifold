@@ -190,7 +190,6 @@ def metadata_latent_space(model, dataloader, device, GT_csv_path, save_csv=False
     # true_label = np.concatenate(labels_list,axis=0)
 
     temp_matching_df = pd.DataFrame(z_points, columns=[f'z{n}' for n in range(model.zdim)])
-    print(len(unique_ids),len(temp_matching_df) )
     temp_matching_df['Unique_ID'] = unique_ids
     temp_matching_df['Unique_ID'] = temp_matching_df['Unique_ID'].astype(str)
     temp_matching_df = temp_matching_df.sort_values(by=['Unique_ID'])

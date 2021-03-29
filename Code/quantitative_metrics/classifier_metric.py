@@ -289,7 +289,7 @@ def classifier_performance(path_to_csv, low_dim_names=['x_coord', 'y_coord', 'z_
         if logger:
             logger.experiment.add_figure(tag="Metrics 1", figure=fig, close=True)
 
-        return None, test_acc, None  # the last time
+        return test_acc  # the last time
 
     #################################
     ####### Metric two ##############
@@ -336,7 +336,7 @@ def classifier_performance(path_to_csv, low_dim_names=['x_coord', 'y_coord', 'z_
         if logger:
             logger.experiment.add_figure(tag="Metrics 2", figure=fig, close=True)
 
-        return None, test_acc, None  # the last time
+        return test_acc  # the last time
 
     #################################
     ####### Metric three ##############
@@ -390,7 +390,7 @@ def classifier_performance(path_to_csv, low_dim_names=['x_coord', 'y_coord', 'z_
         if logger:
             logger.experiment.add_figure(tag="Metrics 3", figure=fig, close=True)
 
-        return None, test_acc, None  # the last time
+        return test_acc  # the last time
 
 ############################################
 ##### Old Functions

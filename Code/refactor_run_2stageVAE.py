@@ -11,8 +11,8 @@ from pytorch_lightning import loggers as pl_loggers
 from pytorch_lightning.callbacks import ModelCheckpoint
 import plotly.offline
 
-from models.networks_refactoring import twoStageVAE
-from models.train_net import VAEXperiment
+from models.networks_refactoring import twoStageInfoMaxVAE, twoStageVaDE, twoStageBetaVAE
+from models.train_net import VAEXperiment, pretrain_2stageVaDE_model_SSIM, pretrain_2stageVAEmodel_SSIM
 from quantitative_metrics.performance_metrics_single import compute_perf_metrics
 from quantitative_metrics.unsupervised_metric import save_representation_plot
 from util.config import args, dataset_lookUp, device
@@ -25,13 +25,13 @@ from torchsummary import summary
 # specific argument for this model
 from util.helpers import metadata_latent_space, plot_from_csv, get_raw_data, double_reconstruciton
 
-args.add_argument('--model', default='twoStageVAE')
+args.add_argument('--model', default='twoStageInfoMaxVAE_1')
 args.add_argument('--zdim1', dest="hidden_dim_aux", type=float, default=100)
-args.add_argument('--alpha', type=float, default=10)
+args.add_argument('--alpha', type=float, default=1)
 args.add_argument('--beta', type=float, default=1)
-args.add_argument('--gamma', type=float, default=10)
+args.add_argument('--gamma', type=float, default=1)
 args.add_argument('--pretrained', dest='weight_path', type=str,
-                  default='')
+                  default='/mnt/Linux_Storage/outputs/1_experiment/twoStageInfoMaxVAE_1/logs/last.ckpt')
 args = args.parse_args()
 # TODO: overwrite the parameters
 
@@ -41,7 +41,7 @@ GT_path = os.path.join(args.input_path, dataset_lookUp[args.dataset]['meta'])
 # if in training model, create new folder,otherwise use a existing parent directory of the pretrained weights
 if args.train and args.weight_path == '':
     save_model_path = os.path.join(args.output_path,
-                                   args.model + "_" + str(datetime.datetime.now().strftime("%Y-%m-%d-%H:%M")))
+                                   args.model) # + "_" + str(datetime.datetime.now().strftime("%Y-%m-%d-%H:%M")))
 else:
     save_model_path = ('/').join(args.weight_path.split('/')[:-2])
 
@@ -51,7 +51,14 @@ else:
 train_loader, valid_loader = get_train_val_dataloader(dataset_path, input_size=args.input_size,
                                                       batchsize=args.batch_size // 2, test_split=0.05)
 
-model = twoStageVAE(zdim_1=args.hidden_dim_aux, zdim_2=args.hidden_dim, input_channels=args.input_channel,
+# model = twoStageVAE(zdim_1=args.hidden_dim_aux, zdim_2=args.hidden_dim, input_channels=args.input_channel,
+#                     input_size=args.input_size, alpha=args.alpha,
+#                     beta=args.beta, gamma=args.gamma)
+# model = twoStageVaDE(zdim_1=args.hidden_dim_aux, zdim_2=args.hidden_dim, input_channels=args.input_channel,
+#                     input_size=args.input_size, alpha=args.alpha,
+#                     beta=args.beta, gamma=args.gamma, ydim=6)
+
+model = twoStageInfoMaxVAE(zdim_1=args.hidden_dim_aux, zdim_2=args.hidden_dim, input_channels=args.input_channel,
                     input_size=args.input_size, alpha=args.alpha,
                     beta=args.beta, gamma=args.gamma)
 
@@ -60,6 +67,10 @@ Experiment = VAEXperiment(model, {
     "weight_decay": args.weight_decay,
     "scheduler_gamma": args.scheduler_gamma
 }, log_path=save_model_path)
+
+
+pretrain_2stageVAEmodel_SSIM(model, train_loader, pre_epoch=30, save_path=save_model_path, device=device)
+
 Experiment.load_weights(args.weight_path)
 
 # define the logger to log training output, the default is using tensorBoard
@@ -88,16 +99,18 @@ if args.train and args.weight_path == '':
 ## step 1 ##
 ## transform the imgs in the dataset to latent dimensions
 # prepare the inference dataset
-infer_data, infer_dataloader = get_inference_dataset(dataset_path, batchsize=args.batch_size,
+_, infer_dataloader = get_inference_dataset(dataset_path, batchsize=args.batch_size,
                                                      input_size=args.input_size)
 
 try:
     metadata_csv = pd.read_csv(os.path.join(save_model_path, 'embeded_data.csv'), index_col=False)
+    metadata_csv.dropna(inplace=True)
 except:
     ## running for the first time
     metadata_csv = metadata_latent_space(model, dataloader=infer_dataloader, device=device,
                                          GT_csv_path=GT_path, save_csv=True, with_rawdata=False,
                                          csv_path=os.path.join(save_model_path, 'embeded_data.csv'))
+    metadata_csv.dropna(inplace=True)
     ###########################
     ### embedding projector ###
     #####################v#####
@@ -125,7 +138,7 @@ params_preferences = {
     'global_saving_path': save_model_path + '/',  # Different for each model, this one is update during optimization
 
     ### Unsupervised metrics
-    'save_unsupervised_metric': True,
+    'save_unsupervised_metric': False,
     'only_local_Q': False,
     'kt': 300,
     'ks': 500,
@@ -138,14 +151,14 @@ params_preferences = {
     'epochs': 10,
 
     ### Classifier accuracy
-    'save_classifier_metric': True,
+    'save_classifier_metric': False,
     'num_iteration': 3,
 
     ### BackBone Metric
-    'save_backbone_metric': True,
+    'save_backbone_metric': False,
 
     ### Disentanglement Metric
-    'save_disentanglement_metric': True,
+    'save_disentanglement_metric': False,
     'features': dataset_lookUp[args.dataset]['feat'],
 }
 compute_perf_metrics(metadata_csv, params_preferences, logger)

@@ -23,10 +23,10 @@ from timeit import default_timer as timer
 # %% config of the experimental parameters
 ##########################################################
 # specific argument for this model
-args.add_argument('--model', default='TEST_betaVAE')
+args.add_argument('--model', default='twostageInfoMaxVAE')
 args.add_argument('--beta', type=float, default=1)
 args.add_argument('--pretrained', dest='weight_path', type=str,
-                  default='/mnt/Linux_Storage/outputs/TEST_betaVAE_2021-03-03-21:03/logs/last.ckpt')
+                  default='')
 args = args.parse_args()
 # TODO: overwrite the parameters
 
@@ -117,13 +117,13 @@ params_preferences = {
     'global_saving_path': save_model_path + '/',  # Different for each model, this one is update during optimization
 
     ### Unsupervised metrics
-    'save_unsupervised_metric': False,
+    'save_unsupervised_metric': True,
     'only_local_Q': False,
-    'kt': 100,
-    'ks': 300,
+    'kt': 300,
+    'ks': 500,
 
     ### Mutual Information
-    'save_mine_metric': False,
+    'save_mine_metric': True,
     'batch_size': 256,
     'bound_type': 'interpolated',
     'alpha_logit': -4.6,  # result in alpha = 0.01
@@ -134,10 +134,10 @@ params_preferences = {
     'num_iteration': 3,
 
     ### BackBone Metric
-    'save_backbone_metric': False,
+    'save_backbone_metric': True,
 
     ### Disentanglement Metric
-    'save_disentanglement_metric': False,
+    'save_disentanglement_metric': True,
     'features': dataset_lookUp[args.dataset]['feat'],
 }
 compute_perf_metrics(metadata_csv, params_preferences, logger)
