@@ -146,7 +146,7 @@ except:
 params_preferences = {
     'feature_size': args.input_size ** 2 * args.input_channel,
     'path_to_raw_data': dataset_path,
-    'feature_size': 64*64*4,
+    # 'feature_size': 64*64*4,
     # 'path_to_raw_data': '../DataSets/Selected_Hovarth',
     'dataset_tag': 1,  # 1:BBBC 2:Horvath 3:Chaffer
     'low_dim_names': ['z0', 'z1', 'z2'],

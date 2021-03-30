@@ -25,13 +25,13 @@ from torchsummary import summary
 # specific argument for this model
 from util.helpers import metadata_latent_space, plot_from_csv, get_raw_data, double_reconstruciton
 
-args.add_argument('--model', default='twoStageInfoMaxVAE_1')
+args.add_argument('--model', default='twoStageInfoMaxVaDE_2')
 args.add_argument('--zdim1', dest="hidden_dim_aux", type=float, default=100)
 args.add_argument('--alpha', type=float, default=1)
 args.add_argument('--beta', type=float, default=1)
 args.add_argument('--gamma', type=float, default=1)
 args.add_argument('--pretrained', dest='weight_path', type=str,
-                  default='/mnt/Linux_Storage/outputs/1_experiment/twoStageInfoMaxVAE_1/logs/last.ckpt')
+                  default='/mnt/Linux_Storage/outputs/1_experiment/pretrian_twoStageVADE_6/logs/last.ckpt')
 args = args.parse_args()
 # TODO: overwrite the parameters
 
@@ -54,13 +54,13 @@ train_loader, valid_loader = get_train_val_dataloader(dataset_path, input_size=a
 # model = twoStageVAE(zdim_1=args.hidden_dim_aux, zdim_2=args.hidden_dim, input_channels=args.input_channel,
 #                     input_size=args.input_size, alpha=args.alpha,
 #                     beta=args.beta, gamma=args.gamma)
-# model = twoStageVaDE(zdim_1=args.hidden_dim_aux, zdim_2=args.hidden_dim, input_channels=args.input_channel,
-#                     input_size=args.input_size, alpha=args.alpha,
-#                     beta=args.beta, gamma=args.gamma, ydim=6)
-
-model = twoStageInfoMaxVAE(zdim_1=args.hidden_dim_aux, zdim_2=args.hidden_dim, input_channels=args.input_channel,
+model = twoStageVaDE(zdim_1=args.hidden_dim_aux, zdim_2=args.hidden_dim, input_channels=args.input_channel,
                     input_size=args.input_size, alpha=args.alpha,
-                    beta=args.beta, gamma=args.gamma)
+                    beta=args.beta, gamma=args.gamma, ydim=6)
+
+# model = twoStageInfoMaxVAE(zdim_1=args.hidden_dim_aux, zdim_2=args.hidden_dim, input_channels=args.input_channel,
+#                     input_size=args.input_size, alpha=args.alpha,
+#                     beta=args.beta, gamma=args.gamma)
 
 Experiment = VAEXperiment(model, {
     "lr": args.learning_rate,
@@ -69,9 +69,10 @@ Experiment = VAEXperiment(model, {
 }, log_path=save_model_path)
 
 
-pretrain_2stageVAEmodel_SSIM(model, train_loader, pre_epoch=30, save_path=save_model_path, device=device)
+# pretrain_2stageVAEmodel_SSIM(model, train_loader, pre_epoch=30, save_path=save_model_path, device=device)
+pretrain_2stageVaDE_model_SSIM(model, train_loader, pre_epoch=30, save_path=save_model_path, device=device)
 
-Experiment.load_weights(args.weight_path)
+# Experiment.load_weights(args.weight_path)
 
 # define the logger to log training output, the default is using tensorBoard
 logger = pl_loggers.TensorBoardLogger(f'{save_model_path}/logs/', name=args.model)
@@ -144,14 +145,14 @@ params_preferences = {
     'ks': 500,
 
     ### Mutual Information
-    'save_mine_metric': True,
+    'save_mine_metric': False,
     'batch_size': 256,
     'bound_type': 'interpolated',
     'alpha_logit': -4.6,  # result in alpha = 0.01
     'epochs': 10,
 
     ### Classifier accuracy
-    'save_classifier_metric': False,
+    'save_classifier_metric': True,
     'num_iteration': 3,
 
     ### BackBone Metric
