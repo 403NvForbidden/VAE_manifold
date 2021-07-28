@@ -11,8 +11,37 @@ import torch
 from torch import cuda
 from torch.autograd import Variable
 
+from util.Process_benchmarkDataset import get_dsprites_inference_loader
 from util.data_processing import get_inference_dataset
 from util.helpers import load_brute
+import torch
+from pytorch_lightning import loggers as pl_loggers
+from pytorch_lightning.callbacks import ModelCheckpoint
+import plotly.offline
+
+from models.networks_refactoring import twoStageInfoMaxVAE, twoStageVaDE, twoStageBetaVAE
+from models.train_net import VAEXperiment, pretrain_2stageVaDE_model_SSIM, pretrain_2stageVAEmodel_SSIM
+from quantitative_metrics.classifier_metric import dsprite_classifier_performance
+from quantitative_metrics.performance_metrics_single import compute_perf_metrics
+from quantitative_metrics.unsupervised_metric import save_representation_plot
+from util.config import args, dataset_lookUp, device
+from util.data_processing import get_train_val_dataloader, get_inference_dataset
+from torchsummary import summary
+
+##########################################################
+# %% config of the experimental parameters
+##########################################################
+# specific argument for this model
+from util.helpers import metadata_latent_space, plot_from_csv, get_raw_data, double_reconstruciton
+
+args.add_argument('--model', default='twoStageInfoMaxVaDE')
+args.add_argument('--zdim1', dest="hidden_dim_aux", type=float, default=100)
+args.add_argument('--alpha', type=float, default=1)
+args.add_argument('--beta', type=float, default=1)
+args.add_argument('--gamma', type=float, default=1)
+args.add_argument('--pretrained', dest='weight_path', type=str,
+                  default='/mnt/Linux_Storage/outputs/2_dsprite/pretrainDsprite_twoStageVaDE/logs/last.ckpt')
+args = args.parse_args()
 
 ##########################################################
 # %% DataLoader and Co
@@ -22,33 +51,42 @@ outdir = '../outputs/'
 print(os.listdir())
 ### META of dataset
 datadir_BBBC = datadir + 'Synthetic_Data_1'
-datadir_Horvarth = datadir + 'Peter_Horvath_Subsample'
-datadir_Chaffer = datadir + 'Chaffer_Data'
 dataset_path = datadir_BBBC
 
-model_name = 'Model_name_string'
-path_to_GT = datadir + 'MetaData1_GT_link_CP.csv'
-model_path = outdir + '2stage_infoMaxVAE_2020-09-17-23:21_100'
+save_model_path = ('/').join(args.weight_path.split('/')[:-2])
 
 n = 10  # figure with 15x15 digits
 digit_size = 64
 
 ### reload model
-VAE_2 = load_brute(model_path + '/VAE_1.pth')
-VAE_2.eval()
-
+model = twoStageBetaVAE(zdim_1=args.hidden_dim_aux, zdim_2=args.hidden_dim, input_channels=args.input_channel,
+                    input_size=args.input_size, alpha=args.alpha,
+                    beta=args.beta, gamma=args.gamma)
+# model.load_state_dict(torch.load(args.weight_path))
+Experiment = VAEXperiment(model, {
+    "lr": args.learning_rate,
+    "weight_decay": args.weight_decay,
+    "scheduler_gamma": args.scheduler_gamma
+}, log_path=save_model_path)
+Experiment.load_weights(args.weight_path)
+# weight loaded
+print("weight loaded")
 ### META of training deivice
 device = torch.device('cpu' if not cuda.is_available() else 'cuda')
-print(f'\tTrain on: {device}\t')
+model.to(device)
+########################### load data ###########################
+# BBBC
+# _, infer_dataloader = get_inference_dataset(dataset_path, 2, digit_size, shuffle=True, droplast=False)
+# dsprite
+# _, infer_dataloader = get_dsprites_inference_loader(batch_size=2, shuffle=True)
 
-### load data
-_, infer_dataloader = get_inference_dataset(dataset_path, 2, digit_size, shuffle=True, droplast=False)
-data, _, _ = next(iter(infer_dataloader))
+# data, _, _ = next(iter(infer_dataloader))
 # start and end images
-data = Variable(data, requires_grad=False).to(device)
+data = np.load('/mnt/Linux_Storage/outputs/2_dsprite/rotation.npy')
+data = Variable(torch.tensor(data, dtype=torch.float), requires_grad=False).to(device)
 
 ### Encoder images
-latentStart, latentEnd = VAE_2.encode(data)
+latentStart, latentEnd = model.encode_2(data)
 # images back to CPU
 startImage, endImage = data.detach().cpu()
 
@@ -70,9 +108,10 @@ for alpha in alphaValues:
     raw_images.append(blendImage)
 
 list_Z = Variable(torch.stack([x for x in list_Z], dim=0), requires_grad=False).to(device)
-recon = VAE_2.decode(list_Z)
-reconstructions = torch.sigmoid(torch.squeeze(recon)).detach().cpu().permute(0, 2, 3, 1)
+recon = model.decode_aux(list_Z)
+reconstructions = torch.sigmoid(recon).detach().cpu().permute(0, 2, 3, 1)
 reconstructions = np.asarray(reconstructions)
+
 # ### RGB channel
 # img_grid = make_grid(recon[:, :3, :, :], nrow=n, padding=12, pad_value=1)
 #
@@ -101,6 +140,7 @@ for i in range(len(reconstructions)):
     resultLatent = reconstructedImage if resultLatent is None else np.hstack([resultLatent, reconstructedImage])
     result = np.vstack([resultImage, resultLatent])
 
+cv2.imwrite("/mnt/Linux_Storage/outputs/2_dsprite/rotation_interpolation.jpg", result)
 cv2.imshow("Interpolation in Image Space vs Latent Space", result)
 cv2.waitKey()
 cv2.destroyAllWindows()

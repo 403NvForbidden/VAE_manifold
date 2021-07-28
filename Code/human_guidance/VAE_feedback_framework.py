@@ -33,6 +33,7 @@ import pandas as pd
 import datetime
 import torch
 import matplotlib.pyplot as plt
+import matplotlib
 import plotly.express as px
 import plotly.graph_objects as go
 import plotly.offline
@@ -41,6 +42,7 @@ from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms, datasets
 from torch import cuda, optim
 from torch.autograd import Variable
+from PIL import Image
 
 #from util.helpers import save_brute, load_brute
 # from models.train_net import train_Simple_VAE
@@ -98,14 +100,29 @@ show_images_grid(imgs_sampled)
 ### Select all square, all scale, all X-Y pos, but NO rotation
 shape_mask = GT_class[:, 1] == 0  # Select only square shape
 rotation_mask = [GT_class[i, 3] in [0] for i in range(GT_class.shape[0])]  # Select only no rotation
-final_mask = [np.all(tup) for tup in zip(shape_mask, rotation_mask)]
 sub_sample1 = GT_class[final_mask]
+sub_sample1 = np.array([sub_sample1[1], sub_sample1[-2]])
+indices_sampled = latent_to_index(sub_sample1)
+imgs_sampled = imgs[indices_sampled]
+imgs_sampled = np.expand_dims(imgs_sampled, axis=1)
+np.save('/mnt/Linux_Storage/outputs/2_dsprite/size.npy', imgs_sampled)
+
+shape_mask = GT_class[:, 1] == 2  # Select only square shape
+size_mask = GT_class[:, 2] == 5
+final_mask = [np.all(tup) for tup in zip(shape_mask, size_mask)]
+sub_sample2 = GT_class[final_mask]
+sub_sample2 = np.array([sub_sample2[1], sub_sample2[-100]])
+indices_sampled = latent_to_index(sub_sample2)
+imgs_sampled = imgs[indices_sampled]
+imgs_sampled = np.expand_dims(imgs_sampled, axis=1)
+np.save('/mnt/Linux_Storage/outputs/2_dsprite/rotation.npy', imgs_sampled)
 
 ### Select all square, all scale, all X-Y pos, but NO rotation
 posx_mask = [GT_class[i, -2] in range(13, 18) for i in range(GT_class.shape[0])]  # Select only square shape
 posy_mask = [GT_class[i, -1] in range(13, 18) for i in range(GT_class.shape[0])] # Select only no rotation
 final_mask = [np.all(tup) for tup in zip(posx_mask, posy_mask)]
 sub_sample1 = GT_class[final_mask]
+
 
 # %%
 ############ STUDY CASE 1 ###############

@@ -8,12 +8,12 @@ import torch
 from torch import cuda
 
 args = argparse.ArgumentParser()
-args.add_argument('--dataset', default='Felix_Full_64',
+args.add_argument('--dataset', default='Dsprite',
                   choices=['BBBC', 'MNIST', 'Dsprite', 'Felix_FC', 'Felix_Channelwise'])
 args.add_argument('--in', dest="input_path", default='/home/sachahai/Documents/VAE_manifold/DataSets/')
 args.add_argument('--out', dest="output_path", default='/mnt/Linux_Storage/outputs/1_experiment')
 args.add_argument('--input_size', type=int, default=64)
-args.add_argument('--input_channel', type=int, default=4)
+args.add_argument('--input_channel', type=int, default=1)
 args.add_argument('-z', dest='hidden_dim', type=int, default=3)
 args.add_argument('-l', dest='learning_rate', type=float, default=1e-4)
 args.add_argument('--batch', dest='batch_size', type=int, default=64)

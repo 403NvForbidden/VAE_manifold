@@ -121,7 +121,7 @@ def compute_perf_metrics(data_source, params_preferences, logger=None):
     # except:
     #     warnings.warn("MI failed")
     ##############################################
-    ########## Classifier accuracy ##############
+    ########## Classifier accuracy ###############
     ##############################################
     try:
         if params_preferences['save_classifier_metric'] != False:
@@ -131,7 +131,11 @@ def compute_perf_metrics(data_source, params_preferences, logger=None):
             print('#######################################')
             print('###### Computing Classifier accuracy')
             print('#######################################')
-
+            test_accuracies_m1 = classifier_performance(MetaData_df,
+                                                        low_dim_names=params_preferences['low_dim_names'],
+                                                        Metrics=[True, False, False],
+                                                        num_iteration=params_preferences['num_iteration'],
+                                                        logger=logger)
             # BBBC dataset has 3 different classifier metrics.
             if params_preferences['dataset_tag'] == 1:
                 print('Metric 1...')
@@ -191,7 +195,6 @@ def compute_perf_metrics(data_source, params_preferences, logger=None):
                                                                       num_iteration=params_preferences['num_iteration'],
                                                                       num_class=12, class_to_ignore='None',
                                                                       imbalanced_data=True)
-
                 mean_acc_m1 = np.mean(test_accuracies_m1)
                 std_acc_m1 = np.std(test_accuracies_m1)
 

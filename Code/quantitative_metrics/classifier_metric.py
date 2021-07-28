@@ -202,6 +202,55 @@ class Dataset_from_csv(Dataset):
 
         return sample, label
 
+def dsprite_classifier_performance(path_to_csv, low_dim_names=['x_coord', 'y_coord', 'z_coord'],
+                           num_iteration=3, num_class=3):
+    if isinstance(path_to_csv, str):
+        latentCode_frame = pd.read_csv(path_to_csv)
+    else:
+        latentCode_frame = path_to_csv
+
+    latentCode_frame['GT_label'] = pd.to_numeric(latentCode_frame['GT_label'])
+    latentCode_frame['GT_label'] = latentCode_frame['GT_label'].astype(int)
+    latentCode_frame['GT_label'] = latentCode_frame['GT_label'].subtract(1)
+
+    ##Make a half / half train test split that have the same percentage of classes as original dataset
+    labels = latentCode_frame['GT_label'].values
+    train_test_split = StratifiedShuffleSplit(n_splits=num_iteration, test_size=0.2,
+                                              random_state=12)  # Change n_splits if want to have several run
+
+    model_1 = Classifier_Net(zdim=len(low_dim_names), num_of_class=num_class).to(device)
+
+    train_acc = []
+    test_acc = []
+    perclass_te_acc = []
+    test_predicted = []
+    test_labels = []
+    # For statistical relevance, make several train-test split
+    for train_index, test_index in train_test_split.split(np.zeros((len(latentCode_frame), 3)), labels):
+        dataset_train = latentCode_frame.iloc[train_index]
+        dataset_test = latentCode_frame.iloc[test_index]
+        dataset_train.reset_index(inplace=True)
+        dataset_test.reset_index(inplace=True)
+
+        # Built train and test dataset/dataloader
+        tr_dataset = Dataset_from_csv(dataset_train, 'GT_label', low_dim_names=low_dim_names)
+        tr_dataloader = DataLoader(tr_dataset, batch_size=256, shuffle=True)
+        te_dataset = Dataset_from_csv(dataset_test, 'GT_label', low_dim_names=low_dim_names)
+        te_dataloader = DataLoader(te_dataset, batch_size=256, shuffle=True)
+
+        # train on train_dataloader
+        train_net(model_1, 20, tr_dataloader, num_class=num_class)
+
+        # train and test accuracy
+        # train_result, _, _ = perf_eval(model_1, tr_dataloader)
+        # train_acc.append(train_result)
+        test_result, predicted, labels = perf_eval(model_1, te_dataloader)
+        test_acc.append(test_result)
+
+    # fig = plot_confusion_matrix_from_data(np.array(labels), np.array(predicted), cmap='PuRd')
+    mean_acc = np.mean(test_acc)
+    std_acc = np.std(test_acc)
+    return test_acc, mean_acc, std_acc  # the last time
 
 def classifier_performance(path_to_csv, low_dim_names=['x_coord', 'y_coord', 'z_coord'], Metrics=[True, False, False],
                            num_iteration=5, num_class=6, class_to_ignore=7, imbalanced_data=False, logger=None):

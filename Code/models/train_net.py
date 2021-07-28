@@ -146,8 +146,8 @@ def pretrain_2stageVAEmodel_SSIM(model, dataloader, pre_epoch=30, save_path='', 
 
 
 def pretrain_2stageVaDE_model_SSIM(model, dataloader, pre_epoch=30, save_path='', device='cpu'):
-    print(os.path.join(save_path, 'pretrain_model.pk'))
     if os.path.exists(os.path.join(save_path, 'pretrain_model.pk')):
+        print(os.path.join(save_path, 'pretrain_model.pk'))
         model.load_state_dict(torch.load(os.path.join(save_path, 'pretrain_model.pk')))
         return
 

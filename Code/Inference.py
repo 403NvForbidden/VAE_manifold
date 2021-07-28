@@ -68,6 +68,8 @@ print(f'\tTrain on: {device}\t')
 # %% Visualize latent space and save it
 ##########################################################
 # display manifold of the images
+n = 15  # figure with 15x15 digits
+digit_size = 64
 figure = np.zeros((digit_size * n, digit_size * n, 3))
 VAE_2.eval()
 # linearly spaced coordinates on the unit square were transformed through the inverse CDF (ppf) of the Gaussian

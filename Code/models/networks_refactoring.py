@@ -256,6 +256,14 @@ class twoStageBetaVAE(AbstractModel, pl.LightningModule):
     def encode(self, img):
         return self.encoder(img)
 
+    def encode_2(self, img):
+        x = self.encode(img)
+        mu_logvar_1 = self.mu_logvar_gen_1(x)
+        mu_z_1, logvar_z_1 = mu_logvar_1.view(-1, self.zdim_aux, 2).unbind(-1)
+        logvar_z_1 = self.stabilize_exp(logvar_z_1)
+        z_1 = reparameterize(mu_z_1, logvar_z_1, self.training)
+        return z_1
+
     def inferece_aux(self, x):
         mu_logvar_1 = self.mu_logvar_gen_1(x)
         mu_z_1, logvar_z_1 = mu_logvar_1.view(-1, self.zdim_aux, 2).unbind(-1)
