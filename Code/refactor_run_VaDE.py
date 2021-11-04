@@ -22,7 +22,7 @@ from util.helpers import metadata_latent_space, plot_from_csv, get_raw_data, sin
 # %% config of the experimental parameters
 ##########################################################
 # specific argument for this model
-args.add_argument('--model', default='VADE')
+args.add_argument('--model', default='zzzzzzz')
 args.add_argument('--pretrained', dest='weight_path', type=str,
                   default='')
 args = args.parse_args()
@@ -43,7 +43,7 @@ else:
 ##########################################################
 ### pretrain model
 train_loader, valid_loader = get_train_val_dataloader(dataset_path, input_size=args.input_size,
-                                                      batchsize=args.batch_size, test_split=0.05)
+                                                      batchsize=args.batch_size, test_split=0.5)
 
 # Note that y dim is predefined by pretrain
 model = VaDE(zdim=args.hidden_dim, ydim=6, input_channels=args.input_channel, input_size=args.input_size)
@@ -55,10 +55,10 @@ Experiment = VAEXperiment(model, {
 }, log_path=save_model_path)
 Experiment.load_weights(args.weight_path)
 
-pretrain_vaDE_model(model, train_loader, pre_epoch=10, save_path=save_model_path, device=device)
+# pretrain_vaDE_model(model, train_loader, pre_epoch=30, save_path=save_model_path, device=device)
 
 # define the logger to log training output, the default is using tensorBoard
-logger = pl_loggers.TensorBoardLogger(f'{save_model_path}/logs/', name=args.model)
+logger = pl_loggers.TensorBoardLogger(f'/mnt/Linux_Storage/outputs/1_experiment/zzzzzzz/logs/', name=args.model)
 
 # TODO: add the meaning of each arguments of Trainer
 checkpoint_callback = ModelCheckpoint(
@@ -85,8 +85,19 @@ if args.train and args.weight_path == '':
 # prepare the inference dataset
 infer_data, infer_dataloader = get_inference_dataset(dataset_path, batchsize=512, input_size=args.input_size)
 
+# metadata_csv = pd.read_csv(os.path.join(save_model_path, 'embeded_data.csv'), index_col=False)
+metadata_csv = pd.read_csv("/mnt/Linux_Storage/outputs/1_experiment/zzzz.csv", index_col=False)
+embeddings = metadata_csv[[col for col in metadata_csv.columns if 'z' in col]].values
+label_list = metadata_csv.GT_label.astype(str).to_list()
+imgs = get_raw_data(infer_dataloader, metadata_csv)
+logger.experiment.add_embedding(embeddings, label_list, label_img=imgs)
 try:
-    metadata_csv = pd.read_csv(os.path.join(save_model_path, 'embeded_data.csv'), index_col=False)
+    # metadata_csv = pd.read_csv(os.path.join(save_model_path, 'embeded_data.csv'), index_col=False)
+    metadata_csv = pd.read_csv("/mnt/Linux_Storage/outputs/1_experiment/zzzz.csv", index_col=False)
+    embeddings = metadata_csv[[col for col in metadata_csv.columns if 'z' in col]].values
+    label_list = metadata_csv.GT_label.astype(str).to_list()
+    imgs = get_raw_data(infer_dataloader, metadata_csv)
+    logger.experiment.add_embedding(embeddings, label_list, label_img=imgs)
 except:
     ## running for the first time
     metadata_csv = metadata_latent_space(model, dataloader=infer_dataloader, device=device,

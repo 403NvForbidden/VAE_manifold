@@ -29,10 +29,13 @@ from skimage import io
 import os
 import shutil
 
-CPpath = 'DataSets/CellProfiler_Outputs/'
+# %%
+CPpath = 'DataSets//'
 CPQuantitativeFiles ='Quantitative_Outputs/'
-CPcsv = '200515_Horvath_Simple_AnalysisSplitCellBodies.csv'
+CPcsv = '10728_GZIF12_FIXED_dataset_parsed_embedding_categ_cell_ID.csv'
+df = pd.read_csv()
 
+# %%
 # Extraction of info from CellProfiler MetaData
 
 fields = ['ImageNumber','ObjectNumber','Metadata_Site','Metadata_Well','AreaShape_Center_X','AreaShape_Center_Y']

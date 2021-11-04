@@ -20,7 +20,7 @@ import warnings
 
 import torch
 from torchvision import datasets, transforms
-from torch.utils.data import DataLoader, SubsetRandomSampler
+from torch.utils.data import DataLoader, SubsetRandomSampler, Subset
 
 from skimage import io
 from skimage.util import img_as_float, pad
@@ -33,9 +33,59 @@ import numpy as np
 import random
 from copy import copy
 
+
 ###############################
 #### DataLoader ###############
 ###############################
+# Training dataloader
+def get_weighted_train_val_dataloader(root_dir, input_size, batchsize, test_split=0.2):
+    """
+    From a unique folder that contains the whole dataset, divided in different subfolders
+    related to class identity, return a train and validation dataloader that can be used
+    to train a VAE network.
+    Note that a stratified splitting is performed, ensuring that class proportion is maintained
+    is both sets.
+
+    Params :
+        - root_dir : path to the folder containing the dataset
+        - input_size : imgs will all be input_size x input_size (rescale or pad)
+        - test_split : Proportion of sample (0-1) that will be part of validation set
+    """
+    trsfm = image_tranforms(input_size)
+    dataset = datasets.DatasetFolder(root=root_dir, loader=load_from_path(),
+                                     extensions=('.png', '.jpg', '.tif', '.tiff'), transform=trsfm)
+    targets = dataset.targets
+    # targets_class, targets_count = np.unique(np.array(dataset.targets), return_counts=True)
+    targets_class_0 = [y for y in targets if y == 0]
+    targets_class_1 = [y for y in targets if y == 1]
+    # Stratify splitting
+    train_idx, _ = train_test_split(targets_class_0,
+                                    test_size=0.95,
+                                    shuffle=True, random_state=0)
+
+    train_sampler = SubsetRandomSampler(train_idx + targets_class_1)
+    # valid_sampler = SubsetRandomSampler(valid_idx)
+
+    dataset_train = Subset(dataset, train_idx + targets_class_1)
+    # dataset_valid = copy(dataset)  # To enable different transforms
+    # dataset_valid.transform = transforms.Compose([
+    #     zPad_or_Rescale(input_size),
+    #     transforms.ToTensor(),
+    #     Double_to_Float()])
+    dataset_train.transform = trsfm
+    # Use the following lines to NOT use data augmentation
+    # dataset_train.transform = transforms.Compose([
+    #     zPad_or_Rescale(input_size),
+    #     transforms.ToTensor(),
+    #     Double_to_Float()])
+    # Create DataIterator, yield batch of img and label easily and in time, to not load full heavy set
+    # Dataloader iterators
+    train_loader = DataLoader(dataset_train, batch_size=batchsize, sampler=train_sampler, drop_last=True,
+                              num_workers=12)
+    # valid_loader = DataLoader(dataset_valid, batch_size=batchsize, sampler=valid_sampler, drop_last=True, num_workers=12)
+
+    return train_loader, None
+
 
 # Training dataloader
 def get_train_val_dataloader(root_dir, input_size, batchsize, test_split=0.2):
@@ -79,8 +129,10 @@ def get_train_val_dataloader(root_dir, input_size, batchsize, test_split=0.2):
     #     Double_to_Float()])
     # Create DataIterator, yield batch of img and label easily and in time, to not load full heavy set
     # Dataloader iterators
-    train_loader = DataLoader(dataset_train, batch_size=batchsize, sampler=train_sampler, drop_last=True, num_workers=12)
-    valid_loader = DataLoader(dataset_valid, batch_size=batchsize, sampler=valid_sampler, drop_last=True, num_workers=12)
+    train_loader = DataLoader(dataset_train, batch_size=batchsize, sampler=train_sampler, drop_last=True,
+                              num_workers=12)
+    valid_loader = DataLoader(dataset_valid, batch_size=batchsize, sampler=valid_sampler, drop_last=True,
+                              num_workers=12)
 
     return train_loader, valid_loader
 
@@ -124,7 +176,7 @@ class load_from_path(object):
     Samples are returned as ndarray, float64 0-1"""
 
     def __call__(self, path):
-        sample = io.imread(path, plugin='tifffile')  # load H x W x C tiff files
+        sample = io.imread(path)#[:, :, [0, 2, 3]]  # load H x W x C tiff files
         # Single cell image are in uint8, 0-255
         sample = img_as_float(sample)  # float64 0 - 1.0
         return sample
@@ -137,7 +189,7 @@ class keep_Metadata_from_path(object):
     Samples are returned as ndarray, float64 0-1"""
 
     def __call__(self, path):
-        sample = io.imread(path, plugin='tifffile')  # load H x W x C tiff files
+        sample = io.imread(path)#[:, :, [0, 2, 3]]  # load H x W x C tiff files
         sample = img_as_float(sample)  # float64 0 - 1.0
         # Extract the unique cell id from the file name
         file_name = path.split('/')
@@ -172,7 +224,6 @@ class My_ID_Collator(object):
 ##############################################
 #### Imgs Transformation / Augmentation ##
 ##############################################
-
 def image_tranforms(input_size):
     """
     Basic preprocessing that will be apply on data throughout dataloader.
@@ -274,13 +325,13 @@ class zPad_or_Rescale_inference(object):
             pad_size = fixed_size[0]
             for i in range(1, 10):
                 pad_size = i * fixed_size[0]
-                if pad_size >side_upper_bound:
+                if pad_size > side_upper_bound:
                     break
 
             diff_h = pad_size - h
             diff_w = pad_size - w
             img_padded = pad(img_arr, ((int(np.round(diff_h / 2.)), diff_h - int(np.round(diff_h / 2.))),
-                                        (int(np.round(diff_w / 2.)), diff_w - int(np.round(diff_w / 2.))), (0, 0)))
+                                       (int(np.round(diff_w / 2.)), diff_w - int(np.round(diff_w / 2.))), (0, 0)))
 
             img_resized = resize(img_padded, fixed_size, preserve_range=False, anti_aliasing=False)
 

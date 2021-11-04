@@ -36,7 +36,6 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torch import cuda
 from torchvision.utils import save_image, make_grid
-from tensorboardX import SummaryWriter
 import matplotlib.pyplot as plt
 
 from util.helpers import plot_latent_space, show, EarlyStopping, save_brute, make_path

@@ -16,8 +16,9 @@ from skimage import io
 
 #dataset_folder = '/Chaffer_Data/'
 # dataset_folder = '/home/sachahai/Documents/VAE_manifold/DataSets/Felix_Full_128/'
-dataset_folder = '/home/sachahai/Documents/VAE_manifold/DataSets/Synthetic_Data_1/'
+# dataset_folder = '/home/sachahai/Documents/VAE_manifold/DataSets/Synthetic_Data_1/'
 #dataset_folder = '/home/sachahai/Documents/VAE_manifold/DataSets/Felix_Full_Complete/'
+dataset_folder = '/home/sachahai/Documents/VAE_manifold/DataSets/4Channel_TIFs'
 
 all_class_subfolder = [f for f in os.listdir(dataset_folder) if not f.startswith('.')]
 #Store shape -> Tuple
@@ -44,7 +45,7 @@ plt.xlabel('#pixels')
 plt.ylabel('frequencies')
 plt.title(f"Single cell image size distribution of Felix dataset, over {len(shapes)} images")
 plt.axvline(median,ls='--',label='median')
-plt.axvline(64,lw=2,color='r',label=f'FIXED SIZE {len([shapex[0] for shapex in shapes if shapex[0] < 64]) / len(shapes):.2f}%')
+plt.axvline(128,lw=2,color='r',label=f'FIXED SIZE {len([shapex[0] for shapex in shapes if shapex[0] < 128]) / len(shapes):.2f}%')
 plt.legend()
 plt.show()
 #plt.savefig(os.path.join(dataset_folder, 'dataset2_distribution.png'))

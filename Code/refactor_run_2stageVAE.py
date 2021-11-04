@@ -18,7 +18,7 @@ from quantitative_metrics.classifier_metric import dsprite_classifier_performanc
 from quantitative_metrics.performance_metrics_single import compute_perf_metrics
 from quantitative_metrics.unsupervised_metric import save_representation_plot
 from util.config import args, dataset_lookUp, device
-from util.data_processing import get_train_val_dataloader, get_inference_dataset
+from util.data_processing import get_train_val_dataloader, get_inference_dataset, get_weighted_train_val_dataloader
 from torchsummary import summary
 
 ##########################################################
@@ -27,13 +27,14 @@ from torchsummary import summary
 # specific argument for this model
 from util.helpers import metadata_latent_space, plot_from_csv, get_raw_data, double_reconstruciton
 
-args.add_argument('--model', default='twoStageInfoMaxVaDE')
+args.add_argument('--model', default='twoStageInfoVaDE_downsampled_134')
 args.add_argument('--zdim1', dest="hidden_dim_aux", type=float, default=100)
-args.add_argument('--alpha', type=float, default=1)
-args.add_argument('--beta', type=float, default=1)
-args.add_argument('--gamma', type=float, default=1)
+args.add_argument('--alpha', type=float, default=10)
+args.add_argument('--beta', type=float, default=10)
+args.add_argument('--gamma', type=float, default=10)
+args.add_argument('--num_pretrain', type=int, default=30)
 args.add_argument('--pretrained', dest='weight_path', type=str,
-                  default='/mnt/Linux_Storage/outputs/2_dsprite/pretrainDsprite_infoMaxVAE/logs/last.ckpt')
+                  default='')
 args = args.parse_args()
 # TODO: overwrite the parameters
 
@@ -43,22 +44,22 @@ GT_path = os.path.join(args.input_path, dataset_lookUp[args.dataset]['meta'])
 # if in training model, create new folder,otherwise use a existing parent directory of the pretrained weights
 if args.train and args.weight_path == '':
     save_model_path = os.path.join(args.output_path,
-                                   args.model) # + "_" + str(datetime.datetime.now().strftime("%Y-%m-%d-%H:%M")))
+                                   args.model)  # + "_" + str(datetime.datetime.now().strftime("%Y-%m-%d-%H:%M")))
 else:
-    save_model_path = ('/').join(args.weight_path.split('/')[:-2])
+    save_model_path = ('/').join(args.weight_path.split('/')[:-1])
 
 ##########################################################
 # %% Train
 ##########################################################
-train_loader, valid_loader = get_train_val_dataloader(dataset_path, input_size=args.input_size,
-                                                      batchsize=args.batch_size // 2, test_split=0.05)
+train_loader, valid_loader = get_weighted_train_val_dataloader(dataset_path, input_size=args.input_size,
+                                                      batchsize=args.batch_size, test_split=0.5)
 
 # model = twoStageVAE(zdim_1=args.hidden_dim_aux, zdim_2=args.hidden_dim, input_channels=args.input_channel,
 #                     input_size=args.input_size, alpha=args.alpha,
 #                     beta=args.beta, gamma=args.gamma)
 model = twoStageVaDE(zdim_1=args.hidden_dim_aux, zdim_2=args.hidden_dim, input_channels=args.input_channel,
-                    input_size=args.input_size, alpha=args.alpha,
-                    beta=args.beta, gamma=args.gamma, ydim=6)
+                     input_size=args.input_size, alpha=args.alpha,
+                     beta=args.beta, gamma=args.gamma, ydim=8)
 
 # model = twoStageInfoMaxVAE(zdim_1=args.hidden_dim_aux, zdim_2=args.hidden_dim, input_channels=args.input_channel,
 #                     input_size=args.input_size, alpha=args.alpha,
@@ -70,9 +71,8 @@ Experiment = VAEXperiment(model, {
     "scheduler_gamma": args.scheduler_gamma
 }, log_path=save_model_path)
 
-
 # pretrain_2stageVAEmodel_SSIM(model, train_loader, pre_epoch=30, save_path=save_model_path, device=device)
-pretrain_2stageVaDE_model_SSIM(model, train_loader, pre_epoch=30, save_path=save_model_path, device=device)
+pretrain_2stageVaDE_model_SSIM(model, train_loader, pre_epoch=args.num_pretrain, save_path=save_model_path, device=device)
 
 Experiment.load_weights(args.weight_path)
 
@@ -88,22 +88,21 @@ checkpoint_callback = ModelCheckpoint(
     # save_top_k=1,
     # mode='min',
 )
-if args.train and args.weight_path == '':
+if args.train or args.weight_path == '':
     trainer = pl.Trainer(logger=logger, max_epochs=args.epochs, auto_scale_batch_size='binsearch', auto_lr_find=True,
                          gpus=(1 if device.type == 'cuda' else 0),  # checkpoint_callback=False,
                          check_val_every_n_epoch=2, profiler='simple', callbacks=[checkpoint_callback])
     # call tune to find the batch size
     # trainer.tune(Experiment, train_loader)
-    trainer.fit(Experiment, train_loader, valid_loader)
+    trainer.fit(Experiment, train_loader, None)
 ##########################################################
 # %% Evaluate
 ##########################################################
 ## step 1 ##
 ## transform the imgs in the dataset to latent dimensions
 # prepare the inference dataset
-
 _, infer_dataloader = get_inference_dataset(dataset_path, batchsize=args.batch_size,
-                                                     input_size=args.input_size)
+                                            input_size=args.input_size)
 
 try:
     metadata_csv = pd.read_csv(os.path.join(save_model_path, 'embeded_data.csv'), index_col=False)
@@ -129,10 +128,6 @@ except:
 
     double_reconstruciton(infer_dataloader, model, save_model_path, device, num_img=12, logger=logger)
 
-test_acc, mean_acc, std_acc  = dsprite_classifier_performance(metadata_csv, low_dim_names=['z0', 'z1', 'z2'])
-print(test_acc)
-accuracy_df = pd.DataFrame({'test_accuracies_': test_acc, 'mean_acc': mean_acc, 'std_acc_m1': std_acc})
-accuracy_df.to_csv(os.path.join(save_model_path, 'classifier_acc_score.csv'), index=False)
 ###############################
 # %% Run performance matrics ###
 ###############################

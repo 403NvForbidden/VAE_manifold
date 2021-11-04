@@ -23,8 +23,8 @@ from timeit import default_timer as timer
 # %% config of the experimental parameters
 ##########################################################
 # specific argument for this model
-args.add_argument('--model', default='twostageInfoMaxVAE')
-args.add_argument('--beta', type=float, default=1)
+args.add_argument('--model', default='betaVAE')
+args.add_argument('--beta', type=float, default=10)
 args.add_argument('--pretrained', dest='weight_path', type=str,
                   default='')
 args = args.parse_args()
@@ -108,38 +108,38 @@ except:
 ###############################
 # %% Run performance matrics ###
 ###############################
-params_preferences = {
-    'feature_size': args.input_size ** 2 * args.input_channel,
-    'path_to_raw_data': dataset_path,
-    # 'path_to_raw_data': '../DataSets/Selected_Hovarth',
-    'dataset_tag': 1,  # 1:BBBC 2:Horvath 3:Chaffer
-    'low_dim_names': ['z0', 'z1', 'z2'],
-    'global_saving_path': save_model_path + '/',  # Different for each model, this one is update during optimization
-
-    ### Unsupervised metrics
-    'save_unsupervised_metric': True,
-    'only_local_Q': False,
-    'kt': 300,
-    'ks': 500,
-
-    ### Mutual Information
-    'save_mine_metric': True,
-    'batch_size': 256,
-    'bound_type': 'interpolated',
-    'alpha_logit': -4.6,  # result in alpha = 0.01
-    'epochs': 10,
-
-    ### Classifier accuracy
-    'save_classifier_metric': True,
-    'num_iteration': 3,
-
-    ### BackBone Metric
-    'save_backbone_metric': True,
-
-    ### Disentanglement Metric
-    'save_disentanglement_metric': True,
-    'features': dataset_lookUp[args.dataset]['feat'],
-}
-compute_perf_metrics(metadata_csv, params_preferences, logger)
-# finally close the logger
-logger.close()
+# params_preferences = {
+#     'feature_size': args.input_size ** 2 * args.input_channel,
+#     'path_to_raw_data': dataset_path,
+#     # 'path_to_raw_data': '../DataSets/Selected_Hovarth',
+#     'dataset_tag': 1,  # 1:BBBC 2:Horvath 3:Chaffer
+#     'low_dim_names': ['z0', 'z1', 'z2'],
+#     'global_saving_path': save_model_path + '/',  # Different for each model, this one is update during optimization
+#
+#     ### Unsupervised metrics
+#     'save_unsupervised_metric': True,
+#     'only_local_Q': False,
+#     'kt': 300,
+#     'ks': 500,
+#
+#     ### Mutual Information
+#     'save_mine_metric': True,
+#     'batch_size': 256,
+#     'bound_type': 'interpolated',
+#     'alpha_logit': -4.6,  # result in alpha = 0.01
+#     'epochs': 10,
+#
+#     ### Classifier accuracy
+#     'save_classifier_metric': True,
+#     'num_iteration': 3,
+#
+#     ### BackBone Metric
+#     'save_backbone_metric': True,
+#
+#     ### Disentanglement Metric
+#     'save_disentanglement_metric': True,
+#     'features': dataset_lookUp[args.dataset]['feat'],
+# }
+# compute_perf_metrics(metadata_csv, params_preferences, logger)
+# # finally close the logger
+# logger.close()
