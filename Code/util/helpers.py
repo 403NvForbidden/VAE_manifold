@@ -37,15 +37,14 @@ from torch import cuda
 from torchvision.utils import save_image, make_grid
 
 
-def make_path(path):
+def make_path(path, msg=None):
     if not path == '' and not os.path.isdir(path):
         try:
             os.mkdir(path)
+            if msg: print(msg)
             print(f'created path:=======>{path}')
         except FileExistsError as e:
-            warnings.warn(f'CANNOT create path {path}')
-            pass
-
+            warnings.warn(f'CANNOT create path {path}, because {e}')
 
 ##############################################
 ######## Match Latent Code and Ground Truth
@@ -115,7 +114,7 @@ def get_raw_data(dataloader, MetaData_csv):
 
     MetaData_csv['Unique_ID'] = MetaData_csv['Unique_ID'].astype(str)
     rawdata_frame['Unique_ID'] = rawdata_frame['Unique_ID'].astype(str)
-    # assert np.all(np.unique(rawdata_frame.Unique_ID.values) == np.unique(MetaData_csv.Unique_ID.values)), "Inference dataset doesn't match with csv metadata"
+    assert np.all(np.unique(rawdata_frame.Unique_ID.values) == np.unique(MetaData_csv.Unique_ID.values)), "Inference dataset doesn't match with csv metadata"
     # align with metadata
     MetaData_csv = MetaData_csv.join(rawdata_frame.set_index('Unique_ID'), on='Unique_ID')
     imgs = MetaData_csv[cols].values

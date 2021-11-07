@@ -52,7 +52,8 @@ else:
 ##########################################################
 # %% Train
 ##########################################################
-if args.train: train_loader, valid_loader = get_dsprites_train_loader(batch_size=args.batch_size, val_split=0.05)
+if args.train:
+    train_loader, valid_loader = get_dsprites_train_loader(batch_size=args.batch_size, val_split=0.05)
 
 # model = infoMaxVAE(zdim=args.hidden_dim, input_channels=args.input_channel, input_size=args.input_size,
 #                    alpha=args.alpha,

@@ -60,8 +60,8 @@ digit_size = 64
 
 ### reload model
 model = twoStageBetaVAE(zdim_1=args.hidden_dim_aux, zdim_2=args.hidden_dim, input_channels=args.input_channel,
-                    input_size=args.input_size, alpha=args.alpha,
-                    beta=args.beta, gamma=args.gamma)
+                        input_size=args.input_size, alpha=args.alpha,
+                        beta=args.beta, gamma=args.gamma)
 # model.load_state_dict(torch.load(args.weight_path))
 Experiment = VAEXperiment(model, {
     "lr": args.learning_rate,
