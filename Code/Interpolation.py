@@ -123,13 +123,10 @@ resultImage = None
 # for j in range()
 for i in range(len(reconstructions)):
     interpolatedImage = raw_images[i] * 255
-    # interpolatedImage = cv2.resize(interpolatedImage, (50, 50))
     interpolatedImage = np.transpose(interpolatedImage.astype(np.uint8), (1, 2, 0))
     resultImage = interpolatedImage if resultImage is None else np.hstack([resultImage, interpolatedImage])
 
     reconstructedImage = reconstructions[i] * 255.
-    # reconstructedImage = reconstructedImage.reshape([28, 28])
-    # reconstructedImage = cv2.resize(reconstructedImage, (50, 50))
     reconstructedImage = reconstructedImage.astype(np.uint8)
     resultLatent = reconstructedImage if resultLatent is None else np.hstack([resultLatent, reconstructedImage])
     result = np.vstack([resultImage, resultLatent])

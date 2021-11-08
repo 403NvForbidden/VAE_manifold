@@ -1,0 +1,119 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Tue Mar  9 09:15:28 2021
+
+@author: sachahai
+"""
+
+# @Author: Sacha Haidinger <sachahai>
+# @Date:   202                                                                                                                                                                                                                                                                                                                                                                                                                        0-06-07T21:34:58+10:00
+# @Email:  sacha.haidinger@epfl.ch
+# @Project: Learning methods for Cell Profiling
+# @Last modified by:   sachahai
+# @Last modified time: 2020-08-23T19:02:47+10:00
+import os
+import shutil
+import numpy as np
+import pandas as pd 
+import matplotlib.pyplot as plt
+from glob import glob
+import warnings
+
+from skimage import io
+
+id = "Ecad" # "Zeb1" 
+### Path to CellProfiler Outputs
+root = '/mnt/Linux_Storage/VAE-Manifold/Raw Datasets/Felix_honours_data'
+
+path_to_CP = os.path.join(root, f'200405 F1 SULF1_{id.upper()} n1/DAPI_Phall_Sulf1_{id}/per_cell_cropped_images')#'200405 F1 SULF1_ZEB1 n1/DAPI_Phall_Sulf1_Zeb1/per_cell_cropped_images/')
+
+GT_csv = os.path.join(root, f'200405 F1 SULF1_{id.upper()} n1/DAPI_Phall_Sulf1_{id}/Quantitative_Data/200405_DAPI_Phall_SULF1_{id.upper()}_Quantitative_DataCell_Bodies.csv')# '200405 F1 SULF1_ZEB1 n1/DAPI_Phall_Sulf1_Zeb1/Quantitative_Data/200404_DAPI_Phall_SULF1_ZEB1_Quantitative_DataCell_Bodies.csv')
+
+# Extraction of useful information from CellProfiler MetaData
+fields = ['ImageNumber','ObjectNumber','Metadata_Coverslip','Neighbors_PercentTouching_Adjacent','AreaShape_Center_X','AreaShape_Center_Y'] # 'Metadata_Channel'
+CP_df = pd.read_csv(GT_csv, usecols=fields)
+
+path_to_save = "/home/sachahai/Documents/VAE_manifold/DataSets"
+
+# %%
+### Path to SAVING folder. Will contains 8 subfolders corresponding to the 8
+# discrete class of the dataset.
+
+
+save_folder = os.path.join(path_to_save, 'Felix_channelwise')
+
+list_folder = ['Class_'+str(i) for i in range(1,5)] #Will consider ONLY Cluster 1 to 6
+'''
+for folder in list_folder:
+    saving_folder = os.path.join(save_folder, folder)
+    if os.path.exists(saving_folder):
+        shutil.rmtree(saving_folder)
+    os.makedirs(saving_folder)
+'''
+
+### Add new needed column in GT csv file
+# Unique_ID : cell file name   ,  GT_label : # link to the class
+df_c = {
+ "AreaShape_Center_X": [],
+ "AreaShape_Center_Y": [], 
+ "Unique_ID": [],	
+ "GT_label": [],
+ "GT_channel": []
+ }
+for c in range(1, 5):
+    for index, row in CP_df.iterrows():
+        #if row.Neighbors_PercentTouching_Adjacent == 100:
+        #print(row.ImageNumber)
+        img_c1_path = os.path.join(path_to_CP, f"200405_Coverslip{int(row.Metadata_Coverslip)}_XY{int(row.ImageNumber):02d}_Channel{c}/Cell_Bodies_{int(row.ObjectNumber)}.png")
+        img = io.imread(img_c1_path)
+        # img_c1 = io.imread(img_c1_path)
+        # img_c2 = io.imread(img_c1_path.replace('Channel1', 'Channel2'))
+        # img_c3 = io.imread(img_c1_path.replace('Channel1', 'Channel3'))
+        # img_c4 = io.imread(img_c1_path.replace('Channel1', 'Channel4'))
+        #except:
+         #   continue
+        
+        #if not(img_c1.shape==img_c2.shape==img_c3.shape==img_c4.shape):
+        #    warnings.warn(f"channel size not matching: {row}")
+        #    continue    
+        # final_img = np.stack([img_c1,img_c2,img_c3,img_c4],axis=-1)
+        file_name_save = f'Coverslip{int(row.Metadata_Coverslip)}_XY{int(row.ImageNumber)}_{int(row.ObjectNumber)}_c{c}' + '.tiff'
+        df_c['Unique_ID'].append(file_name_save)
+        df_c['GT_label'].append(row.Neighbors_PercentTouching_Adjacent)
+        df_c['AreaShape_Center_X'].append(row.AreaShape_Center_X)
+        df_c['AreaShape_Center_Y'].append(row.AreaShape_Center_Y)
+        df_c['GT_channel'].append(c)
+        
+        save_to = os.path.join(save_folder, f'Class_{c}', file_name_save)
+        io.imsave(save_to, img, plugin='tifffile')
+
+df_c = pd.DataFrame(df_c)
+
+df_c['GT_dataset'] = id.upper()
+df_c.to_csv(os.path.join(save_folder, f'MetaData_Channelwise_{id}_Felix_GT_link_CP.csv'), index=False)
+
+df_tmp = pd.read_csv(os.path.join(save_folder, f'MetaData_Channelwise_Zeb1_Felix_GT_link_CP.csv'))
+CP_new = pd.concat([df_c, df_tmp])
+
+CP_new.to_csv(os.path.join(save_folder, 'MetaData_Channelwise_Felix_GT_link_CP.csv'), index=False)
+
+# 
+df = pd.read_csv("/home/sachahai/Documents/VAE_manifold/DataSets/MetaData_FC_Felix_GT_link_CP.csv")
+df.loc[df.GT_label == 100, 'GT_class'] = 0
+df.loc[df.GT_label <= 10, 'GT_class'] = 1
+df.loc[(10 < df.GT_label) & (df.GT_label < 100), 'GT_class'] = 2
+
+#df.loc[(df.GT_channel == 4) & (df.GT_dataset == 'ECAD'), "GT_channel"] = 5
+df.to_csv("/home/sachahai/Documents/VAE_manifold/DataSets/MetaData_FC_Felix_GT_link_CP.csv", index=False)
+'''
+CP_df = CP_df.drop(['ImageNumber', 'ObjectNumber', 'Metadata_Coverslip', 'Neighbors_PercentTouching_Adjacent'], axis = 1) 
+CP_df.to_csv(os.path.join(save_folder, 'MetaData_FC_ZEB1_Felix_GT_link_CP.csv'), index=False)
+
+CP_ecad_df = pd.read_csv(os.path.join(save_folder, 'MetaData_FC_Ecad_Felix_GT_link_CP.csv'))
+CP_ecad_df['GT_dataset'] = 'Ecad'
+CP_df['GT_dataset'] = 'ZEB1'
+
+CP_new = pd.concat([CP_ecad_df, CP_df])
+CP_new.to_csv(os.path.join(save_folder, 'MetaData_FC_Felix_GT_link_CP.csv'), index=False)
+'''
