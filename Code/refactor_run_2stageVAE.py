@@ -11,7 +11,7 @@ from pytorch_lightning import loggers as pl_loggers
 from pytorch_lightning.callbacks import ModelCheckpoint
 import plotly.offline
 
-from models.networks_refactoring import twoStageInfoMaxVAE, twoStageVaDE, twoStageBetaVAE
+from models.networks_refactoring import twoStageInfoMaxVAE, twoStageVaDE, twoStageBetaVAE, infoMaxVAE, VaDE
 from models.train_net import VAEXperiment, pretrain_2stageVaDE_model_SSIM, pretrain_2stageVAEmodel_SSIM
 from quantitative_metrics.classifier_metric import dsprite_classifier_performance
 from quantitative_metrics.performance_metrics_single import compute_perf_metrics
@@ -33,6 +33,7 @@ args.add_argument('--alpha', type=float, default=1)
 args.add_argument('--beta', type=float, default=1)
 args.add_argument('--gamma', type=float, default=1)
 args.add_argument('--num_pretrain', type=int, default=2)
+args.add_argument('--ydim', help="The number of Gaussian Models.", type=int, default=3)
 args.add_argument('--pretrained', dest='pretrained_path', help="Load Pretrained Model from path", type=str, default='')
 args = args.parse_args()
 
@@ -58,7 +59,11 @@ train_loader, valid_loader = get_train_val_dataloader(dataset_path, input_size=a
                                                       batchsize=args.batch_size, test_split=0.1)
 model = twoStageVaDE(zdim_1=args.hidden_dim_aux, zdim_2=args.hidden_dim, input_channels=args.input_channel,
                      input_size=args.input_size, alpha=args.alpha,
-                     beta=args.beta, gamma=args.gamma, ydim=8)
+                     beta=args.beta, gamma=args.gamma, ydim=args.ydim)
+# model = infoMaxVAE(zdim=args.hidden_dim, input_channels=args.input_channel, input_size=args.input_size,
+#                    alpha=args.alpha,
+#                    beta=args.beta)
+# model = VaDE(zdim=args.hidden_dim, dim=args.ydim, input_channels=args.input_channel, input_size=args.input_size)
 
 Experiment = VAEXperiment(model, {
     "lr": args.learning_rate,
@@ -69,9 +74,12 @@ Experiment = VAEXperiment(model, {
 logger = pl_loggers.TensorBoardLogger(f'{save_model_path}/logs/', name=args.model)
 
 print(args.train)
-if args.train and args.saved_model_path == '': pretrain_2stageVaDE_model_SSIM(model, train_loader, pre_epoch=args.num_pretrain,
-                                              save_path=save_model_path,
-                                              load_path=args.pretrained_path, logger=logger, device=device)
+if args.train and args.saved_model_path == '':
+    pretrain_2stageVaDE_model_SSIM(model, train_loader,
+                                   pre_epoch=args.num_pretrain,
+                                   save_path=save_model_path,
+                                   load_path=args.pretrained_path,
+                                   logger=logger, device=device)
 
 checkpoint_callback = ModelCheckpoint(
     # monitor='loss',
@@ -84,11 +92,11 @@ checkpoint_callback = ModelCheckpoint(
 
 if args.saved_model_path != '':
     print(
-        f"---------------Set up training Env -> Training from previous checkpoint {args.saved_model_path}!! ---------------")
+        f"--> Set up training Env -> Training from previous checkpoint {args.saved_model_path}!!")
     Experiment.load_weights(args.saved_model_path)
 
 if args.train:
-    print("---------------Set up training Env -> Training from SCRATCH!! ---------------")
+    print("--> Set up training Env -> Training from SCRATCH!!")
     trainer = pl.Trainer(logger=logger, max_epochs=args.epochs, auto_scale_batch_size='binsearch', auto_lr_find=True,
                          gpus=(1 if device.type == 'cuda' else 0),
                          check_val_every_n_epoch=2, profiler='simple', callbacks=[checkpoint_callback])
@@ -110,7 +118,7 @@ if args.eval:
                                                 input_size=args.input_size)
     if os.path.exists(os.path.join(save_model_path, 'embeded_data.csv')):
         print(
-            f"--------------Evaluating -> Directly loading csv files at {os.path.join(save_model_path, 'embeded_data.csv')}")
+            f"--> Evaluating -> Directly loading csv files at {os.path.join(save_model_path, 'embeded_data.csv')}")
         metadata_csv = pd.read_csv(os.path.join(save_model_path, 'embeded_data.csv'), index_col=False)
         metadata_csv.dropna(inplace=True)
     else:

@@ -34,6 +34,9 @@ from ._types_ import *
 
 
 def weight_initialization(modules):
+    """
+    Initialise layers
+    """
     ### weight initialization
     for m in modules:
         if isinstance(m, nn.Conv2d) or isinstance(m, nn.ConvTranspose2d):
@@ -760,8 +763,6 @@ class betaVAE(AbstractModel, pl.LightningModule):
         #     raise ValueError('Undefined loss type.')
 
         return {'loss': loss, 'recon_loss': loss_recon, 'KLD': loss_kl}
-        # TODO: sample function
-        # TODO: tensorboard add image follow this tutorial: https://learnopencv.com/tensorboard-with-pytorch-lightning/
 
     ### @override
     def configure_optimizers(self, params: dict) -> dict:

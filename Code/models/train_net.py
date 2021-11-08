@@ -185,7 +185,7 @@ def pretrain_2stageVaDE_model_SSIM(model, dataloader, pre_epoch=30, save_path=''
             loss.backward()
             opti.step()
 
-        logger.experiment.add_scalar('Loss/Pretrain', L / len(dataloader), epoch)
+        logger.experiment.add_scalar('Pretrain Loss', L / len(dataloader), epoch)
         epoch_bar.write('The pretraining loss: L={:.4f} ssim={:.4f} L1={:.4f}'.format(L / len(dataloader), ssim / len(dataloader),
                                                                     l1_loss / len(dataloader)))
     # reset to save weight???? TODO: check
