@@ -7,32 +7,19 @@
 import numpy as np
 import cv2, os
 
-import torch
-from torch import cuda
 from torch.autograd import Variable
 
-from util.Process_benchmarkDataset import get_dsprites_inference_loader
-from util.data_processing import get_inference_dataset
-from util.helpers import load_brute
 import torch
-from pytorch_lightning import loggers as pl_loggers
-from pytorch_lightning.callbacks import ModelCheckpoint
-import plotly.offline
 
-from models.networks_refactoring import twoStageInfoMaxVAE, twoStageVaDE, twoStageBetaVAE
-from models.train_net import VAEXperiment, pretrain_2stageVaDE_model_SSIM, pretrain_2stageVAEmodel_SSIM
-from quantitative_metrics.classifier_metric import dsprite_classifier_performance
-from quantitative_metrics.performance_metrics_single import compute_perf_metrics
-from quantitative_metrics.unsupervised_metric import save_representation_plot
-from util.config import args, dataset_lookUp, device
-from util.data_processing import get_train_val_dataloader, get_inference_dataset
-from torchsummary import summary
+from models.networks_refactoring import twoStageBetaVAE
+from models.train_net import VAEXperiment
+from config import args, dataset_lookUp, device
+from util.data_processing import get_inference_dataset
 
 ##########################################################
 # %% config of the experimental parameters
 ##########################################################
 # specific argument for this model
-from util.helpers import metadata_latent_space, plot_from_csv, get_raw_data, double_reconstruciton
 args.add_argument('--zdim1', dest="hidden_dim_aux", type=float, default=100)
 args.add_argument('--alpha', type=float, default=1)
 args.add_argument('--beta', type=float, default=1)

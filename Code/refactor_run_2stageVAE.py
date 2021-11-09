@@ -6,21 +6,16 @@ import os
 import pandas as pd
 
 import pytorch_lightning as pl
-import torch
 from pytorch_lightning import loggers as pl_loggers
 from pytorch_lightning.callbacks import ModelCheckpoint
 import plotly.offline
 
-from models.networks_refactoring import twoStageInfoMaxVAE, twoStageVaDE, twoStageBetaVAE, infoMaxVAE, VaDE
-from models.train_net import VAEXperiment, pretrain_2stageVaDE_model_SSIM, pretrain_2stageVAEmodel_SSIM
-from quantitative_metrics.classifier_metric import dsprite_classifier_performance
+from models.networks_refactoring import twoStageVaDE
+from models.train_net import VAEXperiment, pretrain_2stageVaDE_model_SSIM
 from quantitative_metrics.performance_metrics_single import compute_perf_metrics
-from quantitative_metrics.unsupervised_metric import save_representation_plot
-from util.config import args, dataset_lookUp, device
+from config import args, dataset_lookUp, device
 from util.data_processing import get_train_val_dataloader, get_inference_dataset
-from torchsummary import summary
-from util.helpers import metadata_latent_space, plot_from_csv, get_raw_data, double_reconstruciton, make_path
-from pprint import pprint
+from util.helpers import metadata_latent_space, plot_from_csv, get_raw_data, double_reconstruciton
 
 ##########################################################
 # %% config of the experimental parameters
@@ -29,6 +24,7 @@ from pprint import pprint
 args.add_argument('--model', type=str, help="The name of the model",
                   default="2StageVaDE " + str(datetime.datetime.now().strftime("%Y-%m-%d-%H:%M")))
 args.add_argument('--zdim1', dest="hidden_dim_aux", type=float, default=100)
+
 args.add_argument('--alpha', type=float, default=1)
 args.add_argument('--beta', type=float, default=1)
 args.add_argument('--gamma', type=float, default=1)
@@ -49,6 +45,7 @@ elif args.pretrained_path != '':
     save_model_path = args.pretrained_path
 
 print(f"your model will be saved at {save_model_path}")
+
 ##########################################################
 # %% Train
 ##########################################################
@@ -106,6 +103,7 @@ if args.train:
 print("============================================================")
 print("===================Finished training ======================")
 print("============================================================\n")
+
 ##########################################################
 # %% Evaluate
 ##########################################################
@@ -144,6 +142,7 @@ if args.eval:
 print("============================================================")
 print("=================== Finished Evaluating ====================")
 print("============================================================\n")
+
 ###############################
 # %% Run performance matrics ###
 ###############################
@@ -168,16 +167,16 @@ if args.benchmark:
         'alpha_logit': -4.6,  # result in alpha = 0.01
         'epochs': 10,
 
-        ### Classifier accuracy
-        'save_classifier_metric': True,
-        'num_iteration': 3,
+        # ### Classifier accuracy
+        # 'save_classifier_metric': True,
+        # 'num_iteration': 3,
 
         ### BackBone Metric
-        'save_backbone_metric': False,
+        # 'save_backbone_metric': False,
 
         ### Disentanglement Metric
-        'save_disentanglement_metric': False,
-        'features': dataset_lookUp[args.dataset]['feat'],
+        # 'save_disentanglement_metric': False,
+        # 'features': dataset_lookUp[args.dataset]['feat'],
     }
     compute_perf_metrics(metadata_csv, params_preferences, logger)
 logger.close()
